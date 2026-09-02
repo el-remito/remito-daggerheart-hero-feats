@@ -152,6 +152,50 @@ https://raw.githubusercontent.com/el-remito/remito-daggerheart-hero-feats/main/m
 
 Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.7.1).
 
+## Changelog
+
+### v1.3.0
+- **Curation tab** — a queue of every uncurated Feat beside a single-feat editor holding only the fields you actually set while sorting a catalog: Level, Category, Types, both descriptions, prerequisite Feats, Trait minimums and Category investment. The rarer ones (Hide from players, resource minimums, Class / Subclass, the raw expression) are one click away under **More fields**. The full description is shown next to the teaser box on purpose — reading the Feature is how the teaser gets written
+- **File saves immediately** — filing a Feat writes that one Feat straight to your world, so a long curation pass can never be lost and you never curate the same Feat twice. It writes *only* that Feat: sources, taxonomy and the point formula are still working copies and still need **Save**
+- **Choosing a Category no longer makes a Feat vanish mid-edit** — it stays in the queue, marked as no longer outstanding, until you File it. **Skip** moves on without saving and wraps around, so a Feat you passed over is reachable again
+- **Unsaved-changes prompt** — closing the Feat Registry with unsaved work now asks: Save, Discard, or Keep editing. Previously the window closed silently and the work was gone
+- **Reset no longer unregisters a dropped Feature** — *Reset this feat's metadata* and *Unregister* were one action, which deleted the registry entry either way. Harmless for a Feat that came from a compendium, since it is rediscovered on the next render, but for a Feature dragged in individually the entry **is** the registration, so a reset removed it from the module. The two are now separate verbs, and both confirm by name
+- **Filing a Feat no longer re-indexes every source pack** — the registry drops its pack cache only when the source list itself changed
+- **Downtime's default icon** is now `fa-fire-burner`. Worlds still carrying the seeded `fa-campground` are updated automatically; an icon you changed yourself is left alone
+
+### v1.2.0
+- **Statistics tab** — three panels that derive everything from the registry and your characters and store nothing:
+  - *Catalog shape* — a Category × Level heat grid with a Type toggle, plus curated / uncurated / hidden / standalone / unresolved counters. Clicking a cell opens the Feats tab filtered to exactly that cell
+  - *Coverage gaps* — Categories and Levels with nothing written for them, which requirement kinds the catalog leans on, which Traits your requirements actually ask for, and prerequisites pointing at a Feat that is no longer registered
+  - *Table adoption* — a per-character point ledger, most-taken Feats, and a recent-acquisitions log built from timestamps already stored
+- **Statistics can be switched off** — a world setting hides the tab entirely, in which case nothing is computed at all
+- **Fixed: "Other Feats or Features" showed raw UUIDs** — the named chips and the search are now the interface; the comma-separated list is still the source of truth but sits under a collapsed *Edit raw list*, and a dropped Feature now lands anywhere in the block rather than only on that hidden field
+- **Fixed:** Classes / Subclasses clipped into the requirement block above it
+
+### v1.1.1
+- **Prerequisite search** — *Other Feats or Features* gains a type-ahead over every Feature the registry knows about, so a prerequisite can be named without pasting a UUID
+- **Fixed:** the first *Investment in Category* row no longer reserves empty space for the connector it does not have; the count and remove controls now line up down the list
+- **Fixed:** requirement chips in the registry rendered flush against each other
+
+### v1.1.0
+- **General is a Category, not a Type** — a Type could never lift a Feat out of uncurated, so tagging something *General* left it tagged and still invisible to players. General is now a fixed Category that cannot be renamed or deleted. Existing worlds are migrated: General-typed uncategorised Feats are filed under it and the Type is stripped everywhere
+- **Re-sync** — per Feat or for the whole registry, rewrites each owner's copy from its source, keeping the item's identity and sheet position so nothing is revoked or reordered. Content *removed* from the source is genuinely removed rather than merged back in. Counts and confirms before writing
+- **Edited Features no longer show stale text** — the enriched-description cache is dropped when a Feature changes, and open catalogs re-render
+- **Investment in Category gains AND / OR** per row, with AND binding tighter — the same precedence as the expression grammar. A chain reports as one requirement, not one per row
+- **Consistent ordering everywhere** — General first then alphabetical for Categories, alphabetical for Types, across both filter rails, the curation dropdowns and the Taxonomy tab
+- **Requirement references render as named chips** that open their source item
+- **Only the Sources drop zone registers a Feat** — dropping a Feature while curating no longer adds a source behind your back
+- **Registry polish** — collapsible Category / Type rail sections, a persistent Sources search, a lazily loaded full-description panel beside the short-description field, and chips, classes and the tab badge repainting on edit instead of lagging a re-render behind
+- Adds a versioned migration runner: a migration that fails leaves the version alone and is retried on the next load rather than half-applying and being forgotten
+
+### v1.0.0
+- Initial release — Feature items become **Feats**: GM-curated abilities untied to any Domain, bought with Feat Points from a filterable catalog opened by a badge next to Level on the character sheet
+- **Feat Registry** — register a compendium, or drag in individual Features. Set Category, Level, Types, a short description, structured Requirements and a free-text expression escape hatch. Feature items are never modified, so locked compendia work untouched
+- **Feat Points** from a world formula (`@level`, `@tier`, `@prof`) plus a per-character GM adjustment
+- **Player catalog** with a filter rail, a *My Feats* tab, per-requirement pass/fail chips, and full descriptions loaded on demand
+- **GM controls** — grant free or charged, revoke, a point stepper, and a *Hide from players* flag for Feats that exist before the table should find them
+- An acquired Feat is embedded as an ordinary Feature and appears in the character sheet's **Features** tab, with its actions, effects and resources working normally
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

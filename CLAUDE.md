@@ -25,6 +25,11 @@ Two things *can* be checked outside Foundry, and should be after any change:
 
 Everything else is verified by driving the UI.
 
+Releasing: bump `version` in `module.json`, add a `## Changelog` entry at the bottom of
+`README.md` (newest first, `### vX.Y.Z`, user-facing wording — the convention shared with
+`daggerheart-languages` and `foundry-plot-board`), then commit and tag. The manifest and download
+URLs point at raw GitHub `main`, so **the push is the release**.
+
 ## Architecture
 
 ```
