@@ -6,7 +6,7 @@
  * below is a plain ES module path.
  */
 
-import { MODULE_ID, PREFIX, TEMPLATES, ACTOR_TYPES } from './scripts/constants.mjs';
+import { MODULE_ID, PREFIX, TEMPLATES, ACTOR_TYPES, SETTINGS } from './scripts/constants.mjs';
 import { registerSettings, registerRegistryMenu } from './scripts/settings.mjs';
 import { FeatRegistryConfig } from './scripts/apps/feat-registry-config.mjs';
 import { FeatCatalog, openCatalog, registerCatalogHooks } from './scripts/apps/feat-catalog.mjs';
@@ -48,6 +48,17 @@ Hooks.once('ready', async () => {
     // ApplicationV2 sheet never appears in the latter.
     for (const app of foundry.applications.instances.values()) {
       if (app.document?.id === actor.id) app.render(false);
+    }
+  });
+
+  // Toggling the Statistics tab has to reach a registry that is already open. This is
+  // a hook rather than the setting's own onChange: onChange is supplied at
+  // registration time, and wiring it there would make settings.mjs import from apps/,
+  // against the module's one-way import rule.
+  Hooks.on('updateSetting', setting => {
+    if (setting?.key !== `${MODULE_ID}.${SETTINGS.SHOW_STATS}`) return;
+    for (const app of foundry.applications.instances.values()) {
+      if (app instanceof FeatRegistryConfig) app.render();
     }
   });
 

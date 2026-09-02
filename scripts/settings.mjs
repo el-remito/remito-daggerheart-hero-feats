@@ -56,7 +56,7 @@ export function registerSettings() {
     default: 0
   });
 
-  // The one setting a GM may want to tweak without opening the registry app.
+  // The settings a GM may want to tweak without opening the registry app.
   game.settings.register(MODULE_ID, SETTINGS.POINT_FORMULA, {
     name: 'RDHF.settings.pointFormula.name',
     hint: 'RDHF.settings.pointFormula.hint',
@@ -64,6 +64,18 @@ export function registerSettings() {
     config: true,
     type: String,
     default: DEFAULT_POINT_FORMULA
+  });
+
+  // Whether the registry shows its Statistics tab. World-scoped, so only a GM can
+  // reach it in the first place. Nothing is computed while this is off — the tab is
+  // what triggers the actor scan.
+  game.settings.register(MODULE_ID, SETTINGS.SHOW_STATS, {
+    name: 'RDHF.settings.showStatistics.name',
+    hint: 'RDHF.settings.showStatistics.hint',
+    scope: 'world',
+    config: true,
+    type: Boolean,
+    default: true
   });
 }
 
@@ -143,6 +155,11 @@ export async function setTypes(types) {
 
 export function getPointFormula() {
   return game.settings.get(MODULE_ID, SETTINGS.POINT_FORMULA) || DEFAULT_POINT_FORMULA;
+}
+
+/** Whether the registry offers its Statistics tab. */
+export function getShowStatistics() {
+  return game.settings.get(MODULE_ID, SETTINGS.SHOW_STATS) !== false;
 }
 
 /**

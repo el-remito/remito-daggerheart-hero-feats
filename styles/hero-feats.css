@@ -744,6 +744,16 @@ details[open] > summary .rdhf-arrow {
     gap: 8px;
 }
 
+/* Every other block in the requirement fieldset is introduced by an h5.rdhf-sub, whose
+   10px top margin is what gives the form its vertical rhythm. Classes / Subclasses is
+   the one block with no heading — its labels sit inside the grid — so it clipped into
+   the reference block above it. Same 10px, so the spacing matches rather than being a
+   new arbitrary value. Scoped to the fieldset, and to a grid that FOLLOWS something:
+   the Level / Category grid opens .rdhf-reg-form itself and needs no gap above it. */
+.rdhf-fieldset > * + .rdhf-field-grid {
+    margin-top: 10px;
+}
+
 .rdhf-mini-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
@@ -1232,4 +1242,392 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-ink-muted);
     font-size: var(--font-size-12, 0.75rem);
     font-style: italic;
+}
+
+/* ── v1.2: Statistics ─────────────────────────────────────────────────────── */
+
+.rdhf-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rdhf-stats-heading {
+    margin: 16px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--rdhf-gold-soft);
+    font-family: var(--rdhf-heading);
+    font-size: var(--font-size-14, 0.875rem);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-stats-heading:first-child {
+    margin-top: 0;
+}
+
+.rdhf-stats-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin: 6px 0;
+    font-size: var(--font-size-12, 0.75rem);
+}
+
+/* ── Counters ─────────────────────────────────────────────────────────────── */
+
+.rdhf-counters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 6px;
+}
+
+.rdhf-counter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 6px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 4px;
+    background: var(--rdhf-panel-soft);
+    text-align: center;
+}
+
+.rdhf-counter strong {
+    font-family: var(--rdhf-heading);
+    font-size: var(--font-size-18, 1.125rem);
+    line-height: 1.1;
+}
+
+.rdhf-counter span {
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-counter.is-warn {
+    border-color: var(--rdhf-gold-soft);
+}
+
+.rdhf-counter.is-warn strong {
+    color: var(--rdhf-gold);
+}
+
+.rdhf-counter.is-bad {
+    border-color: color-mix(in srgb, var(--rdhf-unmet) 45%, transparent);
+}
+
+.rdhf-counter.is-bad strong {
+    color: var(--rdhf-unmet);
+}
+
+/* ── Axis switch ──────────────────────────────────────────────────────────── */
+
+.rdhf-axis-switch {
+    display: flex;
+    gap: 4px;
+    margin-top: 12px;
+}
+
+.rdhf-axis-btn {
+    padding: 2px 10px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--rdhf-ink-muted);
+    font-family: inherit;
+    font-size: var(--font-size-11, 0.7rem);
+    cursor: pointer;
+    width: auto;
+}
+
+.rdhf-axis-btn.is-active {
+    border-color: var(--rdhf-gold-soft);
+    background: var(--rdhf-gold-soft);
+    color: var(--rdhf-ink);
+}
+
+/* ── Heat grid ────────────────────────────────────────────────────────────── */
+
+/* A wide grid scrolls inside its own box rather than stretching the window. */
+.rdhf-heat-scroll {
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+
+.rdhf-heat-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-heat-table th,
+.rdhf-heat-table td {
+    border: 1px solid var(--rdhf-border);
+    padding: 0;
+    text-align: center;
+    font-weight: normal;
+}
+
+.rdhf-heat-table thead th,
+.rdhf-heat-table tfoot td,
+.rdhf-heat-table tfoot th {
+    padding: 3px 6px;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-heat-rowhead {
+    display: table-cell;
+    padding: 3px 8px 3px 6px !important;
+    text-align: left !important;
+    white-space: nowrap;
+}
+
+.rdhf-heat-rowhead i {
+    margin-right: 4px;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-heat-table tr.is-uncurated .rdhf-heat-rowhead {
+    font-style: italic;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-heat-corner {
+    border: none !important;
+}
+
+.rdhf-heat-total {
+    font-family: var(--rdhf-heading);
+    color: var(--rdhf-gold) !important;
+}
+
+/* The cell carries its own intensity as a bare number in --rdhf-heat, so the shading
+   is one calc() rather than a class per step. The count is always printed on top of
+   it: shade alone would be unreadable for anyone who cannot separate the steps, and
+   near-illegible at the pale end in either theme. */
+.rdhf-heat-cell {
+    background: color-mix(in srgb, var(--rdhf-gold) calc(var(--rdhf-heat, 0) * 0.6%), transparent);
+}
+
+.rdhf-heat-cell button {
+    width: 100%;
+    min-width: 30px;
+    padding: 3px 4px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.rdhf-heat-cell button:hover {
+    outline: 1px solid var(--rdhf-gold);
+    outline-offset: -1px;
+}
+
+.rdhf-heat-cell.is-empty {
+    background: transparent;
+}
+
+.rdhf-heat-cell.is-empty button {
+    color: var(--rdhf-ink-muted);
+    opacity: 0.45;
+}
+
+/* ── Gap list ─────────────────────────────────────────────────────────────── */
+
+.rdhf-gap-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-gap-list li {
+    margin: 0;
+}
+
+.rdhf-gap-list code {
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-gap-btn {
+    width: auto;
+    padding: 1px 7px;
+    border: 1px dashed var(--rdhf-border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--rdhf-ink-muted);
+    font-family: inherit;
+    font-size: var(--font-size-11, 0.7rem);
+    cursor: pointer;
+}
+
+.rdhf-gap-btn:hover {
+    border-color: var(--rdhf-gold);
+    color: var(--rdhf-gold);
+}
+
+/* ── Bars ─────────────────────────────────────────────────────────────────── */
+
+.rdhf-bars {
+    margin: 4px 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.rdhf-bar-row {
+    display: grid;
+    grid-template-columns: minmax(90px, 150px) minmax(0, 1fr) 34px;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-bar-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rdhf-bar {
+    display: block;
+    height: 10px;
+    border-radius: 5px;
+    background: var(--rdhf-panel-soft);
+    overflow: hidden;
+}
+
+.rdhf-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 5px;
+    background: var(--rdhf-gold);
+    opacity: 0.75;
+}
+
+.rdhf-bar-value {
+    text-align: right;
+    font-family: var(--rdhf-heading);
+    color: var(--rdhf-ink-muted);
+}
+
+/* ── Ledger ───────────────────────────────────────────────────────────────── */
+
+.rdhf-ledger-scroll {
+    overflow-x: auto;
+}
+
+.rdhf-ledger {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-ledger th,
+.rdhf-ledger td {
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--rdhf-border);
+    text-align: center;
+    font-weight: normal;
+}
+
+.rdhf-ledger thead th {
+    color: var(--rdhf-ink-muted);
+    white-space: nowrap;
+}
+
+.rdhf-ledger-who {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    text-align: left !important;
+    white-space: nowrap;
+}
+
+.rdhf-ledger tr.is-bad td,
+.rdhf-ledger tr.is-bad th {
+    color: var(--rdhf-unmet);
+}
+
+/* ── Recent acquisitions ──────────────────────────────────────────────────── */
+
+.rdhf-recent {
+    margin: 4px 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-recent li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--rdhf-border);
+}
+
+.rdhf-recent-who {
+    min-width: 90px;
+    color: var(--rdhf-gold);
+}
+
+.rdhf-recent-what {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rdhf-recent-when {
+    color: var(--rdhf-ink-muted);
+    white-space: nowrap;
+}
+
+/* ── The reference block: chips and search first, raw UUIDs last ──────────── */
+
+.rdhf-ref-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+/* The raw comma-separated list is still the source of truth, but a UUID tells the GM
+   nothing, so it is collapsed behind a summary and the named chips carry the meaning. */
+.rdhf-ref-raw {
+    margin-top: 6px;
+}
+
+.rdhf-ref-raw > summary {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+    cursor: pointer;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-ref-raw > summary:hover {
+    color: var(--rdhf-gold);
+}
+
+.rdhf-ref-raw input {
+    margin-top: 3px;
 }

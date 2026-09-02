@@ -18,7 +18,8 @@ export const SETTINGS = {
   TYPES: 'types',
   POINT_FORMULA: 'pointFormula',
   MENU: 'registryMenu',
-  MIGRATION: 'migration'
+  MIGRATION: 'migration',
+  SHOW_STATS: 'showStatistics'
 };
 
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */

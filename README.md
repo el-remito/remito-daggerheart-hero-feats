@@ -43,8 +43,9 @@ Requirements can demand any combination of:
 - minimum **Hit Points, Stress, Hope or Evasion** — compared against the character's *maximum*, not
   their current value
 - minimum **Traits**
-- other **Feats or Features** the character must already have — search for one by name, drag it onto
-  the field, or type its name or UUID
+- other **Feats or Features** the character must already have — search for one by name, or drag it
+  onto the block. Each one becomes a named chip you can click to open it; the raw comma-separated
+  list is still there under **Edit raw list** if you want to type a plain Feature name
 - a **Class or Subclass** (multiclass counts)
 
 There is also an optional advanced expression field combining atoms with `AND` / `OR`, for example
@@ -76,6 +77,27 @@ Opening a character's catalog as GM adds a **grant** button on every Feat (ignor
 and asks whether to grant it for free or to charge a Feat Point) and a **revoke** button on
 acquired ones (deletes the granted item and refunds the point). A free grant is chipped **Granted**
 rather than **Acquired**, so it is clear at a glance which Feats were paid for.
+
+### Statistics
+
+The registry's fifth tab answers "is what I am building actually balanced?" — the question a list
+of three hundred Feats cannot answer by scrolling.
+
+- A **Category × Level grid**, shaded by how crowded each cell is, with a switch to show Types
+  instead. Click any cell to jump to the Feats tab filtered to exactly it — including empty cells,
+  which is usually the point.
+- **Coverage gaps**: Categories and Levels you have not written for, and prerequisites pointing at
+  a Feat that is no longer registered.
+- **Trait demand** — how many Feats gate on each Trait. A catalog that leans hard on one Trait
+  leaves characters built any other way with little to buy, and that is invisible when you are
+  reading Feats one at a time.
+- **Table adoption**: a point ledger per character, the most-taken Feats, and a log of recent
+  acquisitions.
+
+Everything on the tab is worked out on the spot from the registry and your characters' sheets —
+nothing is stored, and the figures reflect edits you have not saved yet. It costs nothing while
+you are not looking at it, and **Show the Statistics tab** in the module settings removes it
+entirely if you would rather not have it.
 
 ## For players
 

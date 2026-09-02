@@ -36,14 +36,16 @@ scripts/
     registry.mjs            compendium pack indexing, feat records, GM mutations
     actor-state.mjs         the ONLY place actor flags are touched; snapshot, grant, revoke, points
     resync.mjs              pushing an edited source Feature back to the copies characters own
+    analytics.mjs           the ONLY actor read for statistics; gathers the acquisition ledger
     migrations.mjs          one-way world data migrations, run once each by the GM on ready
   logic/                    PURE — plain values in, plain values out
     requirements.mjs        structured checks + the AND/OR expression grammar
     points.mjs              total / spent / remaining
     filters.mjs             catalog filter predicate and sort comparators
+    statistics.mjs          catalog-shape, coverage-gap and adoption derivation
   apps/
     feat-catalog.mjs        player + GM catalog (one instance per actor, tracked in openCatalogs)
-    feat-registry-config.mjs  GM registry, registered via registerMenu
+    feat-registry-config.mjs  GM registry (5 tabs), registered via registerMenu
   badge/badge.mjs           renderActorSheetV2 injection next to Level
 ```
 
@@ -154,6 +156,12 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 
 ## Patterns worth preserving
 
+- **The rail's filter controls render their own state.** `filterCategories` / `filterTypes` carry a
+  `checked` flag and the level inputs carry values. Until the statistics grid could set a filter
+  programmatically this was invisible — filters were only ever set by clicking those same boxes, and
+  `_onClearRegFilters` resets them by writing the DOM rather than re-rendering. Switching tabs *does*
+  re-render, so without it a filter set from a grid cell would apply with an untouched rail
+  contradicting the visible row count.
 - **Filtering never re-renders.** `FeatCatalog._applyFilters` toggles `hidden` on each row's `<li>`
   in place. A re-render on every keystroke steals focus from the search box. Row state lives
   entirely in `data-*` attributes so the filter pass needs no context object.
@@ -199,6 +207,22 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 ## Known scope simplifications
 
 - Feat cost is a flat 1 Feat Point; there is no per-feat cost field.
+- The Statistics tab **derives everything and stores nothing** — no setting, no flag, no migration.
+  It reads the registry app's *working copy*, so a Category assigned a moment ago is reflected
+  before Save, and it is computed **only while that tab is open**: the Feats tab re-renders on every
+  source add, feat drop and taxonomy edit, and scanning every actor each time would be waste.
+  `SETTINGS.SHOW_STATS` hides the tab entirely, in which case nothing is computed at all. The
+  re-render on toggling that setting rides a core `updateSetting` hook in `hero-feats.mjs` rather
+  than the setting's own `onChange`, because `onChange` is given at registration time and wiring it
+  there would make `settings.mjs` import from `apps/`.
+- Statistics scope decisions worth not re-litigating: the ledger lists **only characters who own at
+  least one Feat** (so a character sitting on unspent points but no Feats does not appear), and
+  there is deliberately **no never-taken list** — at a few hundred feats it is the catalog again,
+  and it conflates "not reached yet", "nobody qualifies" and "actually passed over". Separating the
+  third needs the same feat × character eligibility pass as the deferred reachability audit.
+- The heat grid shades against **its own busiest cell**, not a figure shared between grids: a shared
+  maximum flattens a catalog with one crowded Category into near-identical squares. The count is
+  always printed on top of the shade, never conveyed by shade alone.
 - Two things are withheld from players, and `listFeats` applies both: uncurated feats (no Category)
   and feats the GM flagged `hidden`. A GM who registers a large pack and forgets to curate will see
   an empty player catalog — the Feats tab badge counts them. Both are overridden by `keepUuids`,

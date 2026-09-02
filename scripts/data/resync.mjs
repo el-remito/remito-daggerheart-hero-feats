@@ -17,15 +17,10 @@
  * invalidation below are registered in the catalog app, which may import downwards.
  */
 
-import { MODULE_ID, ACTOR_TYPES, ITEM_TYPES } from '../constants.mjs';
+import { MODULE_ID, ITEM_TYPES } from '../constants.mjs';
 import { getRegistry } from '../settings.mjs';
 import { invalidateDescription, invalidatePackCache, resolveQuietly } from './registry.mjs';
-import { acquisitionOf, getState } from './actor-state.mjs';
-
-/** Every player character in the world. */
-function characters() {
-  return game.actors?.filter(a => a.type === ACTOR_TYPES.PC) ?? [];
-}
+import { acquisitionOf, characters, getState } from './actor-state.mjs';
 
 /**
  * How much work a re-sync would be, without doing any of it. Feeds the confirmation

@@ -27,6 +27,11 @@ import { getPointFormula, getCategories, getRegistry, taxonomyLabel } from '../s
 import { normalizeFeat } from './registry.mjs';
 import { computePool } from '../logic/points.mjs';
 
+/** Every player character in the world. The one definition, shared by every caller. */
+export function characters() {
+  return game.actors?.filter(a => a.type === ACTOR_TYPES.PC) ?? [];
+}
+
 /* ── Flag access ───────────────────────────────────────────────────────────── */
 
 const BLANK_STATE = { acquired: [], pointAdjustment: 0 };

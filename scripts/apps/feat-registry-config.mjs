@@ -26,7 +26,8 @@ import {
   setTypes,
   getPointFormula,
   taxonomyLabel,
-  isFixedCategory
+  isFixedCategory,
+  getShowStatistics
 } from '../settings.mjs';
 import {
   loadAllSourceFeatures,
@@ -38,6 +39,12 @@ import {
   resolveQuietly
 } from '../data/registry.mjs';
 import { countAffected, resyncAll, resyncFeat } from '../data/resync.mjs';
+import { gatherLedger } from '../data/analytics.mjs';
+import {
+  buildAdoptionStats,
+  buildCatalogStats,
+  UNCURATED_ROW
+} from '../logic/statistics.mjs';
 import { ATOMS, blankRequirements } from '../logic/requirements.mjs';
 import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/filters.mjs';
 
@@ -45,6 +52,9 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 /** Longest the requirement-reference search drops down before it stops listing. */
 const MAX_REFERENCE_RESULTS = 8;
+
+/** Empty Category/Level cells listed by name before the panel falls back to a count. */
+const MAX_GAP_ROWS = 12;
 
 /** A roll-data stand-in, so the formula preview works with no actor selected. */
 const MOCK_ACTOR = {
@@ -77,6 +87,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._sourceSearch = '';
     // Rail sections are collapsible; which ones are open survives a re-render.
     this._railOpen = { categories: true, types: true };
+    // Which axis the statistics grid is showing. Swapping it repaints, never renders.
+    this._statsAxis = 'category';
   }
 
   static DEFAULT_OPTIONS = {
@@ -108,6 +120,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       resyncAll: FeatRegistryConfig._onResyncAll,
       removeReference: FeatRegistryConfig._onRemoveReference,
       openReference: FeatRegistryConfig._onOpenReference,
+      statsAxis: FeatRegistryConfig._onStatsAxis,
+      focusCell: FeatRegistryConfig._onFocusCell,
       save: FeatRegistryConfig._onSave
     }
   };
@@ -157,6 +171,12 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
     // The working copy, so a source added or a Feature dropped this session shows up
     // immediately instead of only after Save-and-reopen.
+    // A registry left open on Statistics when the setting is switched off would
+    // render a tab bar with nothing selected, so the guard runs before the context is
+    // built rather than at the point of use.
+    const showStats = getShowStatistics();
+    if (!showStats && this._tab === 'stats') this._tab = 'sources';
+
     const sources = await loadAllSourceFeatures(this.#config);
     this.#sourceNames = new Map([...sources].map(([uuid, src]) => [uuid, src.name]));
     const categoryOptions = this.#categories.map(c => ({
@@ -165,6 +185,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       icon: c.icon
     }));
     const typeOptions = this.#types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon }));
+
+    // The rail's own controls carry their filter state into the markup. Until the
+    // statistics grid could set a filter programmatically this was invisible — filters
+    // were only ever set by clicking these same boxes, and _onClearRegFilters resets
+    // them by writing the DOM rather than re-rendering. Switching tabs DOES re-render,
+    // so without this a filter set from a grid cell would apply with an untouched rail
+    // contradicting the visible row count.
+    const railCategories = categoryOptions.map(o => ({
+      ...o,
+      checked: this._filters.categories.includes(o.id)
+    }));
+    const railTypes = typeOptions.map(o => ({
+      ...o,
+      checked: this._filters.types.includes(o.id)
+    }));
 
     const feats = [...sources.values()]
       .map(source => {
@@ -251,13 +286,143 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       types: this.#types.map(t => ({ ...t, resolved: taxonomyLabel(t) })),
       formula: this.#formula,
       formulaPreview: this._previewFormula(),
-      filterCategories: categoryOptions,
-      filterTypes: typeOptions,
+      filterCategories: railCategories,
+      filterTypes: railTypes,
       filters: this._filters,
       uncuratedOnly: this._uncuratedOnly,
       hiddenOnly: this._hiddenOnly,
       sourceSearch: this._sourceSearch,
-      railOpen: this._railOpen
+      railOpen: this._railOpen,
+      showStats,
+      isStats: showStats && this._tab === 'stats',
+      // Computed ONLY when the tab is open. The Feats tab re-renders on every source
+      // add, feat drop and taxonomy edit; scanning every actor each time would be pure
+      // waste, and with the tab switched off nothing here runs at all.
+      stats: showStats && this._tab === 'stats' ? await this._buildStats(feats) : null,
+      statsAxis: this._statsAxis,
+      isAxisCategory: this._statsAxis === 'category',
+      isAxisType: this._statsAxis === 'type'
+    };
+  }
+
+  /**
+   * Assembles both halves of the Statistics tab.
+   *
+   * Reads the WORKING copy through the feat views already built for this render, so a
+   * Category assigned a moment ago on the Feats tab is reflected before Save. The
+   * arithmetic itself is pure and lives in logic/statistics.mjs; everything localized
+   * is resolved here, which is what keeps that file free of game.i18n.
+   *
+   * @param {Array<object>} feats  the feat views from _prepareContext
+   */
+  async _buildStats(feats) {
+    const records = feats.map(view => ({
+      uuid: view.uuid,
+      label: view.name,
+      level: view.level,
+      category: view.category,
+      types: view.types,
+      hidden: view.hidden,
+      standalone: view.standalone,
+      requirements: view.requirements,
+      resolves: true
+    }));
+
+    // A registered feat whose source Feature no longer resolves never reaches the feat
+    // views at all — loadAllSourceFeatures simply cannot produce a record for it. It
+    // still occupies a slot in the registry, and it is exactly what the Prune button
+    // exists to clear, so it is counted here from the working copy directly.
+    const seen = new Set(records.map(r => r.uuid));
+    for (const [uuid, stored] of Object.entries(this.#config.feats ?? {})) {
+      if (seen.has(uuid)) continue;
+      const feat = normalizeFeat(uuid, stored);
+      records.push({ ...feat, label: uuid, resolves: false });
+    }
+
+    const catalog = buildCatalogStats({
+      feats: records,
+      categories: this.#categories.map(c => ({ id: c.id, label: taxonomyLabel(c), icon: c.icon })),
+      types: this.#types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon })),
+      uncuratedLabel: game.i18n.localize('RDHF.catalog.uncurated')
+    });
+
+    const adoption = buildAdoptionStats({ feats: records, ledger: await gatherLedger() });
+
+    return {
+      catalog: this._decorateCatalog(catalog),
+      adoption: {
+        ...adoption,
+        recent: adoption.recent.map(entry => ({
+          ...entry,
+          // Formatted here rather than in logic/: a date is a localized display string,
+          // and the pure layer never touches game.i18n or the user's locale. An entry
+          // acquired before the timestamp existed carries 0 and shows a dash.
+          when: entry.at ? new Date(entry.at).toLocaleDateString() : '—'
+        }))
+      },
+      hasFeats: records.length > 0,
+      hasPlayData: adoption.charactersWithFeats > 0
+    };
+  }
+
+  /** Localizes the label-bearing rows and precomputes the shading percentages. */
+  _decorateCatalog(catalog) {
+    // A flat list rather than an object, each entry carrying its own axis and hidden
+    // state. The module registers no Handlebars helpers, so the template can neither
+    // look a key up nor compare one — every boolean it needs is computed here.
+    const gridList = ['category', 'type'].map(axis => {
+      const grid = catalog.grids[axis];
+      return {
+        axis,
+        hidden: this._statsAxis !== axis,
+        columns: grid.columns,
+        columnTotals: grid.columnTotals,
+        rows: grid.rows.map(row => ({
+          ...row,
+          cells: row.cells.map(cell => ({
+            ...cell,
+            rowId: row.id,
+            axis,
+            // Against this grid's own busiest cell. Handlebars gets a finished number
+            // because the module does no maths in templates.
+            intensity: grid.max ? Math.round((cell.count / grid.max) * 100) : 0,
+            empty: cell.count === 0
+          }))
+        }))
+      };
+    });
+
+    return {
+      ...catalog,
+      gridList,
+      requirementUsage: {
+        ...catalog.requirementUsage,
+        rows: catalog.requirementUsage.rows.map(r => ({
+          ...r,
+          label: game.i18n.localize(`RDHF.stats.requirement.${r.kind}`)
+        }))
+      },
+      traitDemand: {
+        ...catalog.traitDemand,
+        rows: catalog.traitDemand.rows.map(r => ({
+          ...r,
+          label: game.i18n.localize(`RDHF.trait.${r.key}`)
+        }))
+      },
+      resourceDemand: {
+        ...catalog.resourceDemand,
+        rows: catalog.resourceDemand.rows.map(r => ({
+          ...r,
+          label: game.i18n.localize(`RDHF.resource.${r.key}`)
+        }))
+      },
+      gaps: {
+        ...catalog.gaps,
+        // Capped: a brand-new catalog is nothing BUT empty cells, and a thousand-row
+        // list is not a finding. The count is reported either way.
+        shownCells: catalog.gaps.emptyCells.slice(0, MAX_GAP_ROWS),
+        moreCells: Math.max(0, catalog.gaps.emptyCells.length - MAX_GAP_ROWS)
+      }
     };
   }
 
@@ -884,9 +1049,12 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
-    // Target A: an "Other Feats or Features" requirement field. Works from any tab,
-    // because that is where the GM is when they want it.
-    const refInput = event.target?.closest?.('[data-field="features"]');
+    // Target A: the "Other Feats or Features" requirement block. Works from any tab,
+    // because that is where the GM is when they want it. The whole block counts, not
+    // just the text field — that field now lives inside a collapsed <details>, so on a
+    // normal drop it is not even visible to aim at.
+    const refBlock = event.target?.closest?.(`.${PREFIX}-ref-block`);
+    const refInput = refBlock?.querySelector('[data-field="features"]');
     if (refInput) return this._addFeatureReference(refInput, item);
 
     // Target B: the Sources drop zone, and ONLY the drop zone. The DragDrop binding
@@ -935,6 +1103,53 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /* ── Actions ─────────────────────────────────────────────────────────────── */
+
+  /**
+   * Swaps the statistics grid between its Category and Type rows.
+   *
+   * Both grids are rendered; this toggles which one is shown, exactly as the player
+   * catalog does for Catalog / My Feats. A re-render would reset the scroll position
+   * of a tab a GM is reading down.
+   */
+  static _onStatsAxis(event, target) {
+    event.preventDefault();
+    this._statsAxis = target.dataset.axis === 'type' ? 'type' : 'category';
+    for (const button of this.element.querySelectorAll(`.${PREFIX}-axis-btn[data-axis]`)) {
+      button.classList.toggle('is-active', button.dataset.axis === this._statsAxis);
+    }
+    for (const grid of this.element.querySelectorAll(`.${PREFIX}-heat[data-axis]`)) {
+      grid.hidden = grid.dataset.axis !== this._statsAxis;
+    }
+  }
+
+  /**
+   * Clicking a grid cell lands on the Feats tab showing exactly that cell's contents.
+   *
+   * The whole point of spotting "level 7 Alchemy is empty" is being one click from the
+   * rows themselves — including when the answer is no rows at all.
+   */
+  static _onFocusCell(event, target) {
+    event.preventDefault();
+    const { row, level, axis } = target.dataset;
+    if (!row) return;
+
+    this._filters = blankFilterState();
+    this._uncuratedOnly = false;
+    this._hiddenOnly = false;
+
+    // Uncurated is a grid row but not a Category, so it maps to the rail's own switch.
+    if (row === UNCURATED_ROW) this._uncuratedOnly = true;
+    else if (axis === 'type') this._filters.types = [row];
+    else this._filters.categories = [row];
+
+    if (level) {
+      this._filters.levelMin = Number(level);
+      this._filters.levelMax = Number(level);
+    }
+
+    this._tab = 'feats';
+    this.render();
+  }
 
   static _onSelectTab(event, target) {
     event.preventDefault();

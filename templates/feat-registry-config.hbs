@@ -18,6 +18,11 @@
         <button type="button" class="rdhf-tab {{#if isPoints}}is-active{{/if}}" data-action="selectTab" data-tab="points">
             <i class="fa-solid fa-calculator"></i> {{localize "RDHF.registry.tabs.points"}}
         </button>
+        {{#if showStats}}
+            <button type="button" class="rdhf-tab {{#if isStats}}is-active{{/if}}" data-action="selectTab" data-tab="stats">
+                <i class="fa-solid fa-chart-simple"></i> {{localize "RDHF.registry.tabs.stats"}}
+            </button>
+        {{/if}}
     </nav>
 
     {{!-- The Feats tab is a two-column grid whose list scrolls on its own; every
@@ -125,9 +130,11 @@
                     <section class="rdhf-rail-section">
                         <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.levelRange"}}</h4>
                         <div class="rdhf-level-range">
-                            <input type="number" min="1" data-filter="levelMin" placeholder="{{localize 'RDHF.catalog.min'}}">
+                            <input type="number" min="1" data-filter="levelMin" value="{{filters.levelMin}}"
+                                   placeholder="{{localize 'RDHF.catalog.min'}}">
                             <span class="rdhf-dash">&ndash;</span>
-                            <input type="number" min="1" data-filter="levelMax" placeholder="{{localize 'RDHF.catalog.max'}}">
+                            <input type="number" min="1" data-filter="levelMax" value="{{filters.levelMax}}"
+                                   placeholder="{{localize 'RDHF.catalog.max'}}">
                         </div>
                     </section>
 
@@ -140,7 +147,8 @@
                             </summary>
                             {{#each filterCategories}}
                                 <label class="rdhf-checkline">
-                                    <input type="checkbox" data-filter="category" value="{{this.id}}">
+                                    <input type="checkbox" data-filter="category" value="{{this.id}}"
+                                           {{#if this.checked}}checked{{/if}}>
                                     {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                                     <span>{{this.label}}</span>
                                 </label>
@@ -157,7 +165,8 @@
                             </summary>
                             {{#each filterTypes}}
                                 <label class="rdhf-checkline">
-                                    <input type="checkbox" data-filter="type" value="{{this.id}}">
+                                    <input type="checkbox" data-filter="type" value="{{this.id}}"
+                                           {{#if this.checked}}checked{{/if}}>
                                     {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                                     <span>{{this.label}}</span>
                                 </label>
@@ -351,23 +360,36 @@
 
                                             <h5 class="rdhf-sub">{{localize "RDHF.registry.otherFeats"}}</h5>
                                             <p class="rdhf-hint">{{localize "RDHF.registry.featuresDropHint"}}</p>
-                                            <input type="text" class="rdhf-wide rdhf-droppable" data-field="features"
-                                                   value="{{this.featuresText}}"
-                                                   placeholder="{{localize 'RDHF.registry.featuresPlaceholder'}}">
-                                            {{!-- Search, not another data-field: the
-                                                  results list is built and the pick
-                                                  written back by _bindReferenceSearch(),
-                                                  so this box never syncs anything. --}}
-                                            <div class="rdhf-ref-search">
-                                                <i class="fa-solid fa-magnifying-glass"></i>
-                                                <input type="text" class="rdhf-ref-search-input" autocomplete="off"
-                                                       placeholder="{{localize 'RDHF.registry.featureSearchPlaceholder'}}">
-                                                <ul class="rdhf-ref-results" hidden></ul>
+                                            {{!-- The chips and the search ARE the
+                                                  interface. The comma-separated list is
+                                                  still the single source of truth, but a
+                                                  UUID is unreadable, so it is demoted to
+                                                  the collapsed panel at the bottom. --}}
+                                            <div class="rdhf-ref-block">
+                                                {{!-- Search, not another data-field: the
+                                                      results list is built and the pick
+                                                      written back by _bindReferenceSearch(),
+                                                      so this box never syncs anything. --}}
+                                                <div class="rdhf-ref-search">
+                                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                                    <input type="text" class="rdhf-ref-search-input" autocomplete="off"
+                                                           placeholder="{{localize 'RDHF.registry.featureSearchPlaceholder'}}">
+                                                    <ul class="rdhf-ref-results" hidden></ul>
+                                                </div>
+
+                                                {{!-- Filled by _renderReferenceChips(). --}}
+                                                <div class="rdhf-ref-chips"></div>
+
+                                                <details class="rdhf-ref-raw">
+                                                    <summary>
+                                                        <span class="rdhf-arrow">&#9654;</span>
+                                                        {{localize "RDHF.registry.editRawList"}}
+                                                    </summary>
+                                                    <input type="text" class="rdhf-wide rdhf-droppable" data-field="features"
+                                                           value="{{this.featuresText}}"
+                                                           placeholder="{{localize 'RDHF.registry.featuresPlaceholder'}}">
+                                                </details>
                                             </div>
-                                            {{!-- Filled by _renderReferenceChips(): a raw
-                                                  UUID tells the GM nothing about what they
-                                                  just dropped. --}}
-                                            <div class="rdhf-ref-chips"></div>
 
                                             <div class="rdhf-field-grid">
                                                 <label>
@@ -476,6 +498,278 @@
                     <li><code>@prof</code> {{localize "RDHF.registry.keyProf"}}</li>
                     <li><code>@system.traits.agility.value</code> {{localize "RDHF.registry.keySystem"}}</li>
                 </ul>
+            </section>
+        {{/if}}
+
+        {{!-- Statistics. Everything here is DERIVED on each render from the working copy
+              and the actor flags. Nothing on this tab is stored and nothing is editable.
+              It reads the UNSAVED working copy deliberately, so a Category assigned a
+              moment ago on the Feats tab is already reflected here. --}}
+        {{#if isStats}}
+            <section class="rdhf-pane rdhf-stats">
+                {{#unless stats.hasFeats}}
+                    <p class="rdhf-empty">{{localize "RDHF.stats.noFeats"}}</p>
+                {{else}}
+
+                <h4 class="rdhf-stats-heading">{{localize "RDHF.stats.shape"}}</h4>
+
+                <div class="rdhf-counters">
+                    <div class="rdhf-counter">
+                        <strong>{{stats.catalog.total}}</strong>
+                        <span>{{localize "RDHF.stats.counter.total"}}</span>
+                    </div>
+                    <div class="rdhf-counter">
+                        <strong>{{stats.catalog.curated}}</strong>
+                        <span>{{localize "RDHF.stats.counter.curated"}}</span>
+                    </div>
+                    <div class="rdhf-counter {{#if stats.catalog.uncurated}}is-warn{{/if}}">
+                        <strong>{{stats.catalog.uncurated}}</strong>
+                        <span>{{localize "RDHF.stats.counter.uncurated"}}</span>
+                    </div>
+                    <div class="rdhf-counter">
+                        <strong>{{stats.catalog.hidden}}</strong>
+                        <span>{{localize "RDHF.stats.counter.hidden"}}</span>
+                    </div>
+                    <div class="rdhf-counter">
+                        <strong>{{stats.catalog.standalone}}</strong>
+                        <span>{{localize "RDHF.stats.counter.standalone"}}</span>
+                    </div>
+                    <div class="rdhf-counter {{#if stats.catalog.missing}}is-bad{{/if}}">
+                        <strong>{{stats.catalog.missing}}</strong>
+                        <span>{{localize "RDHF.stats.counter.missing"}}</span>
+                    </div>
+                </div>
+
+                {{!-- Both grids render; _onStatsAxis toggles [hidden] between them. A
+                      re-render would throw a GM reading down a long tab to the top. --}}
+                <div class="rdhf-axis-switch">
+                    <button type="button" class="rdhf-axis-btn {{#if isAxisCategory}}is-active{{/if}}"
+                            data-action="statsAxis" data-axis="category">
+                        {{localize "RDHF.catalog.categories"}}
+                    </button>
+                    <button type="button" class="rdhf-axis-btn {{#if isAxisType}}is-active{{/if}}"
+                            data-action="statsAxis" data-axis="type">
+                        {{localize "RDHF.catalog.types"}}
+                    </button>
+                </div>
+                <p class="rdhf-hint">{{localize "RDHF.stats.gridHint"}}</p>
+
+                {{#each stats.catalog.gridList}}
+                    <div class="rdhf-heat" data-axis="{{this.axis}}" {{#if this.hidden}}hidden{{/if}}>
+                        <div class="rdhf-heat-scroll">
+                            <table class="rdhf-heat-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col" class="rdhf-heat-corner"></th>
+                                        {{#each this.columns}}
+                                            <th scope="col">{{this}}</th>
+                                        {{/each}}
+                                        <th scope="col" class="rdhf-heat-total">{{localize "RDHF.stats.all"}}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{#each this.rows}}
+                                        <tr {{#if this.isUncurated}}class="is-uncurated"{{/if}}>
+                                            <th scope="row" class="rdhf-heat-rowhead">
+                                                {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                                                <span>{{this.label}}</span>
+                                            </th>
+                                            {{#each this.cells}}
+                                                <td class="rdhf-heat-cell {{#if this.empty}}is-empty{{/if}}"
+                                                    style="--rdhf-heat: {{this.intensity}}">
+                                                    <button type="button" data-action="focusCell"
+                                                            data-row="{{this.rowId}}"
+                                                            data-level="{{this.level}}"
+                                                            data-axis="{{this.axis}}">{{this.count}}</button>
+                                                </td>
+                                            {{/each}}
+                                            <td class="rdhf-heat-total">{{this.total}}</td>
+                                        </tr>
+                                    {{/each}}
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th scope="row" class="rdhf-heat-rowhead">{{localize "RDHF.stats.all"}}</th>
+                                        {{#each this.columnTotals}}
+                                            <td>{{this.count}}</td>
+                                        {{/each}}
+                                        <td class="rdhf-heat-total"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                {{/each}}
+
+                <p class="rdhf-hint">
+                    {{localize "RDHF.stats.typedNote"}}
+                    <strong>{{stats.catalog.typed}}</strong> / <strong>{{stats.catalog.total}}</strong>
+                </p>
+
+                <h4 class="rdhf-stats-heading">{{localize "RDHF.stats.gaps"}}</h4>
+
+                {{#if stats.catalog.gaps.emptyCategories.length}}
+                    <p class="rdhf-stats-line">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>{{localize "RDHF.stats.emptyCategories"}}</span>
+                        {{#each stats.catalog.gaps.emptyCategories}}
+                            <span class="rdhf-chip rdhf-chip--uncurated">{{this.label}}</span>
+                        {{/each}}
+                    </p>
+                {{/if}}
+
+                {{#if stats.catalog.gaps.emptyLevels.length}}
+                    <p class="rdhf-stats-line">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>{{localize "RDHF.stats.emptyLevels"}}</span>
+                        {{#each stats.catalog.gaps.emptyLevels}}
+                            <span class="rdhf-chip rdhf-chip--level">{{this}}</span>
+                        {{/each}}
+                    </p>
+                {{/if}}
+
+                {{#if stats.catalog.gaps.shownCells.length}}
+                    <p class="rdhf-stats-line"><span>{{localize "RDHF.stats.emptyCells"}}</span></p>
+                    <ul class="rdhf-gap-list">
+                        {{#each stats.catalog.gaps.shownCells}}
+                            <li>
+                                <button type="button" class="rdhf-gap-btn" data-action="focusCell"
+                                        data-row="{{this.id}}" data-level="{{this.level}}" data-axis="category">
+                                    {{this.label}} &middot; {{localize "RDHF.catalog.levelShort"}} {{this.level}}
+                                </button>
+                            </li>
+                        {{/each}}
+                    </ul>
+                    {{#if stats.catalog.gaps.moreCells}}
+                        <p class="rdhf-hint">
+                            {{stats.catalog.gaps.moreCells}} {{localize "RDHF.stats.moreCells"}}
+                        </p>
+                    {{/if}}
+                {{else}}
+                    <p class="rdhf-hint">{{localize "RDHF.stats.noGaps"}}</p>
+                {{/if}}
+
+                {{#if stats.catalog.brokenReferences.length}}
+                    <h5 class="rdhf-sub">{{localize "RDHF.stats.brokenRefs"}}</h5>
+                    <p class="rdhf-hint">{{localize "RDHF.stats.brokenRefsHint"}}</p>
+                    <ul class="rdhf-gap-list">
+                        {{#each stats.catalog.brokenReferences}}
+                            <li><strong>{{this.label}}</strong> <code>{{this.ref}}</code></li>
+                        {{/each}}
+                    </ul>
+                {{/if}}
+
+                <h5 class="rdhf-sub">{{localize "RDHF.stats.requirementUsage"}}</h5>
+                <ul class="rdhf-bars">
+                    {{#each stats.catalog.requirementUsage.rows}}
+                        <li class="rdhf-bar-row">
+                            <span class="rdhf-bar-label">{{this.label}}</span>
+                            <span class="rdhf-bar">
+                                <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
+                            </span>
+                            <span class="rdhf-bar-value">{{this.count}}</span>
+                        </li>
+                    {{/each}}
+                </ul>
+
+                <h5 class="rdhf-sub">{{localize "RDHF.stats.traitDemand"}}</h5>
+                <p class="rdhf-hint">{{localize "RDHF.stats.traitDemandHint"}}</p>
+                <ul class="rdhf-bars">
+                    {{#each stats.catalog.traitDemand.rows}}
+                        <li class="rdhf-bar-row">
+                            <span class="rdhf-bar-label">{{this.label}}</span>
+                            <span class="rdhf-bar">
+                                <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
+                            </span>
+                            <span class="rdhf-bar-value">{{this.count}}</span>
+                        </li>
+                    {{/each}}
+                </ul>
+
+                <h5 class="rdhf-sub">{{localize "RDHF.stats.resourceDemand"}}</h5>
+                <ul class="rdhf-bars">
+                    {{#each stats.catalog.resourceDemand.rows}}
+                        <li class="rdhf-bar-row">
+                            <span class="rdhf-bar-label">{{this.label}}</span>
+                            <span class="rdhf-bar">
+                                <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
+                            </span>
+                            <span class="rdhf-bar-value">{{this.count}}</span>
+                        </li>
+                    {{/each}}
+                </ul>
+
+                <h4 class="rdhf-stats-heading">{{localize "RDHF.stats.adoption"}}</h4>
+
+                {{#unless stats.hasPlayData}}
+                    <p class="rdhf-empty">{{localize "RDHF.stats.noPlayData"}}</p>
+                {{else}}
+                    <p class="rdhf-hint">{{localize "RDHF.stats.ledgerHint"}}</p>
+                    <div class="rdhf-ledger-scroll">
+                        <table class="rdhf-ledger">
+                            <thead>
+                                <tr>
+                                    <th scope="col">{{localize "RDHF.stats.character"}}</th>
+                                    <th scope="col">{{localize "RDHF.catalog.levelShort"}}</th>
+                                    <th scope="col">{{localize "RDHF.stats.feats"}}</th>
+                                    <th scope="col">{{localize "RDHF.stats.total"}}</th>
+                                    <th scope="col">{{localize "RDHF.stats.spent"}}</th>
+                                    <th scope="col">{{localize "RDHF.stats.granted"}}</th>
+                                    <th scope="col">{{localize "RDHF.stats.remaining"}}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{#each stats.adoption.characters}}
+                                    <tr {{#if this.overspent}}class="is-bad"{{/if}}>
+                                        <th scope="row" class="rdhf-ledger-who">
+                                            {{#if this.img}}
+                                                <img class="rdhf-feat-img rdhf-feat-img--small" src="{{this.img}}" alt="">
+                                            {{/if}}
+                                            <span>{{this.name}}</span>
+                                        </th>
+                                        <td>{{this.level}}</td>
+                                        <td>{{this.count}}</td>
+                                        <td>{{this.total}}</td>
+                                        <td>{{this.spent}}</td>
+                                        <td>{{this.free}}</td>
+                                        <td>{{this.remaining}}</td>
+                                    </tr>
+                                {{/each}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h5 class="rdhf-sub">{{localize "RDHF.stats.mostTaken"}}</h5>
+                    <ul class="rdhf-bars">
+                        {{#each stats.adoption.popular}}
+                            <li class="rdhf-bar-row">
+                                <span class="rdhf-bar-label">{{this.label}}</span>
+                                <span class="rdhf-bar">
+                                    <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
+                                </span>
+                                <span class="rdhf-bar-value">{{this.count}}</span>
+                            </li>
+                        {{/each}}
+                    </ul>
+
+                    <h5 class="rdhf-sub">{{localize "RDHF.stats.recent"}}</h5>
+                    <ul class="rdhf-recent">
+                        {{#each stats.adoption.recent}}
+                            <li>
+                                <span class="rdhf-recent-who">{{this.actorName}}</span>
+                                <span class="rdhf-recent-what">{{this.label}}</span>
+                                {{#if this.free}}
+                                    <span class="rdhf-chip rdhf-chip--granted">
+                                        {{localize "RDHF.catalog.granted"}}
+                                    </span>
+                                {{/if}}
+                                <span class="rdhf-recent-when">{{this.when}}</span>
+                            </li>
+                        {{/each}}
+                    </ul>
+                {{/unless}}
+
+                {{/unless}}
             </section>
         {{/if}}
     </div>
