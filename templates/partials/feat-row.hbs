@@ -1,0 +1,118 @@
+{{!--
+  One catalog row. Registered as a Handlebars partial by loadTemplates() in the init
+  hook, and used by both the available and the acquired section so the two lists
+  cannot drift apart.
+
+  Row state lives entirely in data-* attributes so the filter pass can run without a
+  re-render (see FeatCatalog._applyFilters). `isGM` is precomputed onto each view
+  rather than read as @root, which does not survive nesting reliably here.
+--}}
+<li>
+    <details class="rdhf-feat{{#if this.owned}} is-owned{{/if}}{{#if this.uncurated}} is-uncurated{{/if}}"
+             data-uuid="{{this.uuid}}"
+             data-name="{{this.name}}"
+             data-level="{{this.level}}"
+             data-category="{{this.category}}"
+             data-types="{{this.typesAttr}}"
+             data-owned="{{this.owned}}"
+             data-free="{{this.free}}"
+             data-eligible="{{this.eligible}}"
+             data-search="{{this.searchText}}"
+             {{#if this.isOpen}}open{{/if}}>
+        <summary class="rdhf-feat-summary">
+            <span class="rdhf-arrow">&#9654;</span>
+            <img class="rdhf-feat-img" src="{{this.img}}" alt="">
+
+            <div class="rdhf-feat-main">
+                <div class="rdhf-feat-titleline">
+                    <span class="rdhf-feat-name">{{this.name}}</span>
+                    <span class="rdhf-chip rdhf-chip--level">{{localize "RDHF.catalog.levelShort"}} {{this.level}}</span>
+                    {{#if this.categoryLabel}}
+                        <span class="rdhf-chip rdhf-chip--category">{{this.categoryLabel}}</span>
+                    {{/if}}
+                    {{#each this.typeLabels}}
+                        <span class="rdhf-chip rdhf-chip--type">{{this}}</span>
+                    {{/each}}
+                    {{#if this.uncurated}}
+                        <span class="rdhf-chip rdhf-chip--uncurated"
+                              data-tooltip="{{localize 'RDHF.catalog.uncuratedTooltip'}}">
+                            {{localize "RDHF.catalog.uncurated"}}
+                        </span>
+                    {{/if}}
+                    {{!-- GM-only: a hidden feat is never listed for a player who does
+                          not already own it, so this chip only ever renders for a GM. --}}
+                    {{#if this.hidden}}
+                        <span class="rdhf-chip rdhf-chip--hidden"
+                              data-tooltip="{{localize 'RDHF.catalog.hiddenTooltip'}}">
+                            <i class="fa-solid fa-eye-slash"></i>
+                            {{localize "RDHF.catalog.hidden"}}
+                        </span>
+                    {{/if}}
+                    {{!-- free === the GM granted it without charging a Feat Point.
+                          Two separate chips rather than one with a swapped label, so
+                          which branch rendered is visible in the DOM. --}}
+                    {{#if this.owned}}
+                        {{#if this.free}}
+                            <span class="rdhf-chip rdhf-chip--granted"
+                                  data-tooltip="{{localize 'RDHF.catalog.grantedTooltip'}}">
+                                <i class="fa-solid fa-gift"></i>
+                                {{localize "RDHF.catalog.granted"}}
+                            </span>
+                        {{else}}
+                            <span class="rdhf-chip rdhf-chip--owned">
+                                <i class="fa-solid fa-check"></i>
+                                {{localize "RDHF.catalog.owned"}}
+                            </span>
+                        {{/if}}
+                    {{/if}}
+                </div>
+
+                {{#if this.checks.length}}
+                    <div class="rdhf-req-line">
+                        <span class="rdhf-req-label">{{localize "RDHF.catalog.requires"}}</span>
+                        {{#each this.checks}}
+                            <span class="rdhf-chip rdhf-chip--req {{#if this.met}}is-met{{else}}is-unmet{{/if}}">
+                                <i class="fa-solid {{#if this.met}}fa-check{{else}}fa-xmark{{/if}}"></i>
+                                {{this.label}}
+                            </span>
+                        {{/each}}
+                    </div>
+                {{/if}}
+
+                {{#if this.summary}}
+                    <p class="rdhf-feat-teaser">{{this.summary}}</p>
+                {{/if}}
+            </div>
+
+            <div class="rdhf-feat-controls">
+                {{#unless this.owned}}
+                    <button type="button"
+                            class="rdhf-acquire{{#unless this.eligible}} is-blocked{{/unless}}"
+                            data-action="acquireFeat"
+                            data-tooltip="{{localize 'RDHF.catalog.acquireTooltip'}}">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                {{/unless}}
+                {{#if this.isGM}}
+                    {{#if this.owned}}
+                        <button type="button" class="rdhf-icon-btn rdhf-danger"
+                                data-action="revokeFeat"
+                                data-tooltip="{{localize 'RDHF.catalog.revokeTooltip'}}">
+                            <i class="fa-solid fa-rotate-left"></i>
+                        </button>
+                    {{else}}
+                        <button type="button" class="rdhf-icon-btn"
+                                data-action="grantAnyway"
+                                data-tooltip="{{localize 'RDHF.catalog.grantTooltip'}}">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        </button>
+                    {{/if}}
+                {{/if}}
+            </div>
+        </summary>
+
+        <div class="rdhf-feat-description" data-loaded="false">
+            <p class="rdhf-loading">{{localize "RDHF.catalog.loading"}}</p>
+        </div>
+    </details>
+</li>

@@ -1,0 +1,1031 @@
+/* ==========================================================================
+   remito-daggerheart-hero-feats
+
+   Theming follows the Foundryborne idiom: the system never DEFINES its palette
+   variables, it references them with a hex fallback, so the fallback is the default
+   and a theme can override. Every pair is wrapped in light-dark().
+
+   Tokens are scoped to the app root class rather than :root so nothing leaks into
+   the rest of Foundry — and redeclared on .rdhf-badge, which is injected into the
+   character sheet header and therefore lives outside any module root.
+   ========================================================================== */
+
+.rdhf,
+.rdhf-badge {
+    --rdhf-gold: var(--golden, #f3c267);
+    --rdhf-gold-soft: var(--golden-40, rgba(243, 194, 103, 0.4));
+    --rdhf-gold-dim: var(--golden-bg, rgba(243, 194, 103, 0.1));
+    --rdhf-ink: light-dark(var(--dark, #222222), var(--beige, #efe6d8));
+    --rdhf-ink-muted: light-dark(#55524a, rgba(239, 230, 216, 0.55));
+    --rdhf-panel: light-dark(#ffffff, var(--dark-blue, #18162e));
+    --rdhf-panel-deep: light-dark(#f5f2ed, var(--deep-black, #0e0d15));
+    --rdhf-panel-soft: light-dark(rgba(34, 34, 34, 0.04), rgba(239, 230, 216, 0.05));
+    --rdhf-border: light-dark(rgba(34, 34, 34, 0.25), rgba(239, 230, 216, 0.22));
+    --rdhf-met: var(--green, #40a640);
+    --rdhf-unmet: var(--medium-red, #d04747);
+    --rdhf-heading: 'Cinzel', serif;
+    --rdhf-body: var(--dh-font-body, 'Montserrat'), sans-serif;
+}
+
+/* The filter pass sets [hidden]; a display rule of ours must never outrank it. */
+.rdhf [hidden] {
+    display: none !important;
+}
+
+.rdhf {
+    color: var(--rdhf-ink);
+    font-family: var(--rdhf-body);
+}
+
+/* :not(.header-control) is load-bearing — Foundry's window-header buttons inherit
+   var(--font-awesome) from core's `button.icon` rule, and a blanket font-family
+   override wins by source order and breaks their glyphs. */
+.rdhf button:not(.header-control) {
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+}
+
+/* Native selects ignore background-color without an explicit appearance reset. */
+.rdhf select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-color: var(--rdhf-panel-deep);
+    color: var(--rdhf-ink);
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.rdhf input[type='text'],
+.rdhf input[type='number'],
+.rdhf input[type='search'] {
+    background: var(--rdhf-panel-deep);
+    color: var(--rdhf-ink);
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    padding: 2px 6px;
+}
+
+.rdhf input:focus,
+.rdhf select:focus {
+    outline: none;
+    border-color: var(--rdhf-gold);
+    box-shadow: 0 0 0 2px var(--rdhf-gold-dim);
+}
+
+/* A fixed-integer window height plus min-height:0 is what makes the pane scroll
+   instead of the page. */
+.rdhf .window-content {
+    padding: 0;
+    overflow: hidden;
+    background: var(--rdhf-panel);
+}
+
+.rdhf .window-content ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.rdhf .window-content ::-webkit-scrollbar-thumb {
+    background: var(--rdhf-gold-soft);
+    border-radius: 3px;
+}
+
+.rdhf * {
+    scrollbar-width: thin;
+}
+
+/* ── Shared atoms ─────────────────────────────────────────────────────────── */
+
+.rdhf-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    border: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel-soft);
+    font-size: var(--font-size-11, 0.7rem);
+    white-space: nowrap;
+    line-height: 1.6;
+}
+
+.rdhf-chip--level {
+    font-family: var(--rdhf-heading);
+    font-weight: 600;
+    border-color: var(--rdhf-gold-soft);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-chip--category {
+    border-color: var(--rdhf-gold-soft);
+}
+
+.rdhf-chip--owned {
+    border-color: var(--rdhf-met);
+    color: var(--rdhf-met);
+}
+
+.rdhf-chip--uncurated {
+    border-style: dashed;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-chip--req.is-met {
+    border-color: color-mix(in srgb, var(--rdhf-met) 45%, transparent);
+    color: var(--rdhf-met);
+}
+
+.rdhf-chip--req.is-unmet {
+    border-color: color-mix(in srgb, var(--rdhf-unmet) 45%, transparent);
+    color: var(--rdhf-unmet);
+}
+
+.rdhf-icon-btn,
+.rdhf-text-btn,
+.rdhf-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--rdhf-panel-soft);
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-size: var(--font-size-12, 0.75rem);
+}
+
+.rdhf-icon-btn {
+    padding: 3px 7px;
+    line-height: 1;
+}
+
+.rdhf-icon-btn:hover,
+.rdhf-text-btn:hover {
+    border-color: var(--rdhf-gold);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-danger:hover {
+    border-color: var(--rdhf-unmet);
+    color: var(--rdhf-unmet);
+}
+
+.rdhf-save-btn {
+    background: var(--rdhf-gold-dim);
+    border-color: var(--rdhf-gold-soft);
+    font-weight: 600;
+}
+
+.rdhf-spacer {
+    flex: 1;
+}
+
+.rdhf-hint {
+    margin: 2px 0 8px;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-empty {
+    padding: var(--spacer-12, 12px);
+    text-align: center;
+    color: var(--rdhf-ink-muted);
+}
+
+/* A ::before on <summary> is overridden by Chrome's native ::marker, so the arrow
+   is an explicit element. */
+.rdhf-arrow {
+    display: inline-block;
+    transition: transform 0.15s ease;
+    font-size: 0.65em;
+    color: var(--rdhf-ink-muted);
+    flex: 0 0 auto;
+}
+
+details[open] > summary .rdhf-arrow {
+    transform: rotate(90deg);
+}
+
+.rdhf summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.rdhf summary::-webkit-details-marker {
+    display: none;
+}
+
+.rdhf-checkline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 1px 0;
+    font-size: var(--font-size-12, 0.75rem);
+    cursor: pointer;
+}
+
+.rdhf-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 7px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-deep);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-search-wrap input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+.rdhf-search-wrap input:focus {
+    box-shadow: none;
+}
+
+/* ── Catalog ──────────────────────────────────────────────────────────────── */
+
+.rdhf-catalog-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.rdhf-point-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacer-12, 12px);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel-deep);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.rdhf-point-figure {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--rdhf-heading);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-point-figure > i {
+    align-self: center;
+}
+
+.rdhf-point-remaining {
+    font-size: var(--font-size-24, 1.5rem);
+    font-weight: 700;
+    line-height: 1;
+}
+
+.rdhf-point-remaining.is-overspent {
+    color: var(--rdhf-unmet);
+}
+
+.rdhf-point-of {
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-point-label,
+.rdhf-point-spent {
+    font-family: var(--rdhf-body);
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-point-spent {
+    margin-left: auto;
+}
+
+.rdhf-point-free {
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-point-adjust {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rdhf-point-adjust-value {
+    min-width: 2.2em;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.rdhf-catalog-body {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+}
+
+.rdhf-rail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacer-8, 8px);
+    padding: var(--spacer-8, 8px);
+    border-right: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel-deep);
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.rdhf-rail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: var(--spacer-8, 8px);
+    border-bottom: 1px solid var(--rdhf-border);
+}
+
+.rdhf-rail-heading {
+    margin: 0 0 4px;
+    font-family: var(--rdhf-heading);
+    font-size: var(--font-size-12, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rdhf-gold);
+}
+
+.rdhf-level-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rdhf-level-range input {
+    width: 100%;
+    min-width: 0;
+}
+
+.rdhf-dash {
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-rail-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-list-pane {
+    overflow-y: auto;
+    min-height: 0;
+    padding: var(--spacer-8, 8px);
+}
+
+/* Acquired feats are pushed into their own closed-off section so they cannot be
+   mistaken for something still purchasable. */
+.rdhf-section + .rdhf-section {
+    margin-top: var(--spacer-12, 12px);
+}
+
+.rdhf-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--rdhf-border);
+    font-family: var(--rdhf-heading);
+    font-size: var(--font-size-12, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rdhf-met);
+}
+
+.rdhf-feat-list,
+.rdhf-reg-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.rdhf-feat {
+    border: 1px solid var(--rdhf-border);
+    border-radius: 4px;
+    background: var(--rdhf-panel);
+    transition: border-color 0.15s ease;
+}
+
+.rdhf-feat:hover {
+    border-color: var(--rdhf-gold-soft);
+}
+
+.rdhf-feat.is-owned {
+    border-left: 3px solid var(--rdhf-met);
+}
+
+.rdhf-feat.is-uncurated {
+    border-style: dashed;
+}
+
+.rdhf-feat-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 9px;
+}
+
+.rdhf-feat-img {
+    width: 34px;
+    height: 34px;
+    object-fit: cover;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+
+.rdhf-feat-img--small {
+    width: 22px;
+    height: 22px;
+}
+
+/* Requirement fields that accept a dropped Feat or Feature. */
+.rdhf-droppable {
+    border-style: dashed;
+}
+
+.rdhf-droppable:focus {
+    border-style: solid;
+}
+
+.rdhf-feat-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rdhf-feat-titleline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+
+.rdhf-feat-name {
+    font-family: var(--rdhf-heading);
+    font-weight: 600;
+    font-size: var(--font-size-14, 0.875rem);
+}
+
+.rdhf-req-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+.rdhf-req-label {
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.rdhf-feat-teaser {
+    margin: 0;
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-feat-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.rdhf-acquire {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--rdhf-gold-soft);
+    background: var(--rdhf-gold-dim);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-acquire:hover {
+    background: var(--rdhf-gold);
+    color: var(--rdhf-panel-deep);
+}
+
+/* Blocked feats stay clickable — the dialog is where the player learns WHY. */
+.rdhf-acquire.is-blocked {
+    opacity: 0.4;
+    border-color: var(--rdhf-border);
+    background: transparent;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-feat-description {
+    padding: 0 10px 10px 52px;
+    font-size: var(--font-size-13, 0.8125rem);
+    border-top: 1px solid var(--rdhf-border);
+    padding-top: 8px;
+}
+
+.rdhf-loading {
+    color: var(--rdhf-ink-muted);
+    font-style: italic;
+}
+
+.rdhf-reasons {
+    margin: 6px 0 0;
+    padding-left: 18px;
+}
+
+.rdhf-warning {
+    color: var(--rdhf-unmet);
+    font-size: 0.9em;
+}
+
+/* ── Registry ─────────────────────────────────────────────────────────────── */
+
+.rdhf-registry-layout {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.rdhf-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px 0;
+    border-bottom: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel-deep);
+}
+
+.rdhf-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    background: transparent;
+    font-size: var(--font-size-12, 0.75rem);
+}
+
+.rdhf-tab.is-active {
+    background: var(--rdhf-panel);
+    border-color: var(--rdhf-border);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-tab-badge {
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--rdhf-unmet);
+    color: #fff;
+    font-size: 0.7rem;
+}
+
+.rdhf-registry-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.rdhf-pane {
+    padding: var(--spacer-12, 12px);
+}
+
+/* Section headings inside a registry pane follow other blocks (the drop zone, a list),
+   so they need breathing room the catalog rail's headings do not. */
+.rdhf-pane .rdhf-rail-heading {
+    margin-top: 14px;
+}
+
+.rdhf-pane > .rdhf-rail-heading:first-child {
+    margin-top: 0;
+}
+
+.rdhf-toolbar--filters {
+    flex-wrap: wrap;
+    padding-bottom: var(--spacer-8, 8px);
+    border-bottom: 1px solid var(--rdhf-border);
+}
+
+.rdhf-inline-field {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-inline-field input[type='number'] {
+    width: 56px;
+}
+
+.rdhf textarea {
+    background: var(--rdhf-panel-deep);
+    color: var(--rdhf-ink);
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    padding: 4px 6px;
+    font-family: inherit;
+    font-size: var(--font-size-12, 0.75rem);
+    resize: vertical;
+}
+
+.rdhf textarea:focus {
+    outline: none;
+    border-color: var(--rdhf-gold);
+    box-shadow: 0 0 0 2px var(--rdhf-gold-dim);
+}
+
+.rdhf-toolbar,
+.rdhf-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: var(--spacer-8, 8px);
+}
+
+.rdhf-add-row select {
+    flex: 1;
+}
+
+.rdhf-source-list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rdhf-source {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-soft);
+}
+
+.rdhf-source.is-missing {
+    border-color: var(--rdhf-unmet);
+}
+
+.rdhf-source-label {
+    font-weight: 600;
+}
+
+.rdhf-source-id {
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+    margin-right: auto;
+}
+
+.rdhf-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: var(--spacer-12, 12px);
+    border: 2px dashed var(--rdhf-border);
+    border-radius: 5px;
+    color: var(--rdhf-ink-muted);
+    text-align: center;
+}
+
+.rdhf-reg-feat {
+    border: 1px solid var(--rdhf-border);
+    border-radius: 4px;
+    background: var(--rdhf-panel);
+}
+
+.rdhf-reg-feat.is-uncurated {
+    border-style: dashed;
+}
+
+.rdhf-reg-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 9px;
+}
+
+.rdhf-reg-form {
+    padding: 10px;
+    border-top: 1px solid var(--rdhf-border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rdhf-field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+}
+
+.rdhf-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 6px;
+}
+
+.rdhf-chip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 2px;
+}
+
+.rdhf-field-grid label,
+.rdhf-mini-grid label,
+.rdhf-block-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-fieldset {
+    border: 1px solid var(--rdhf-border);
+    border-radius: 4px;
+    padding: 8px 10px;
+}
+
+.rdhf-fieldset legend {
+    padding: 0 6px;
+    font-family: var(--rdhf-heading);
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-sub {
+    margin: 10px 0 4px;
+    font-size: var(--font-size-11, 0.7rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-wide {
+    width: 100%;
+}
+
+.rdhf-investment-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.rdhf-investment-row input[type='number'] {
+    width: 70px;
+}
+
+.rdhf-atom-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.rdhf-atom {
+    padding: 1px 6px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-soft);
+    font-family: monospace;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-atom:hover {
+    border-color: var(--rdhf-gold);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-taxonomy {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacer-12, 12px);
+}
+
+.rdhf-taxonomy-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.rdhf-taxonomy-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rdhf-taxonomy-row input[type='text'] {
+    flex: 1;
+    min-width: 0;
+}
+
+.rdhf-icon-input {
+    flex: 0 0 130px !important;
+    font-family: monospace;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-formula-preview {
+    margin: 6px 0 12px;
+    padding: 6px 10px;
+    border-left: 3px solid var(--rdhf-gold);
+    background: var(--rdhf-gold-dim);
+    font-size: var(--font-size-12, 0.75rem);
+}
+
+.rdhf-key-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-key-list code {
+    color: var(--rdhf-gold);
+}
+
+.rdhf-registry-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel-deep);
+}
+
+/* ── Sheet badge ──────────────────────────────────────────────────────────
+   Injected into .level-div h3.label on the character sheet, so it sits outside
+   any .rdhf root — which is why the token block at the top of this file also
+   targets .rdhf-badge directly.
+   ------------------------------------------------------------------------ */
+
+.rdhf-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin-left: 4px;
+    border-radius: 50%;
+    border: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel-soft);
+    color: var(--rdhf-ink-muted);
+    font-size: 0.7rem;
+    vertical-align: middle;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.rdhf-badge--interactive {
+    cursor: pointer;
+}
+
+.rdhf-badge--interactive:hover {
+    color: var(--rdhf-gold);
+    border-color: var(--rdhf-gold);
+}
+
+.rdhf-badge--unspent {
+    color: var(--rdhf-gold);
+    border-color: var(--rdhf-gold);
+    animation: rdhf-pulse 2.4s ease-out infinite;
+}
+
+.rdhf-badge--overspent {
+    color: var(--rdhf-unmet);
+    border-color: var(--rdhf-unmet);
+    animation: rdhf-pulse-red 2.4s ease-out infinite;
+}
+
+/* The double box-shadow — an opaque inner ring in the backdrop colour, then the
+   coloured outer ring — is what makes the glow read cleanly against the sheet
+   header whatever its background. */
+@keyframes rdhf-pulse {
+    0% {
+        box-shadow: 0 0 0 0 var(--rdhf-gold-soft);
+    }
+    70% {
+        box-shadow: 0 0 0 7px transparent;
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+@keyframes rdhf-pulse-red {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--rdhf-unmet) 45%, transparent);
+    }
+    70% {
+        box-shadow: 0 0 0 7px transparent;
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+/* The settings-menu entry point. */
+.rdhf-open-registry {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+/* ── Round 3: catalog tabs, split registry pane, visibility chips ──────────── */
+
+/* The catalog's own tab strip sits inside the scrolling list pane, so it has to be
+   sticky and paint its own background or rows scroll underneath it. */
+.rdhf-tabs--catalog {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: calc(-1 * var(--spacer-8, 8px)) calc(-1 * var(--spacer-8, 8px)) var(--spacer-8, 8px);
+    padding: 6px var(--spacer-8, 8px) 0;
+}
+
+/* The registry's uncurated badge is a warning and reads red; a plain count is not. */
+.rdhf-tab-badge--count {
+    background: var(--rdhf-gold-soft);
+    color: var(--rdhf-ink);
+}
+
+/* The Feats tab mirrors the catalog: rail left, list right, list scrolls alone. */
+.rdhf-registry-body.is-split {
+    display: flex;
+    overflow: hidden;
+}
+
+.rdhf-registry-body.is-split > .rdhf-pane--split {
+    flex: 1;
+    min-height: 0;
+}
+
+.rdhf-pane--split {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    padding: 0;
+    min-height: 0;
+}
+
+/* Rail headings in a normal pane follow other blocks and need clearance; in the split
+   pane they head their own section and must not inherit it. */
+.rdhf-pane--split .rdhf-rail .rdhf-rail-heading {
+    margin-top: 0;
+}
+
+.rdhf-checkline--boxed {
+    padding: 5px 7px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-soft);
+}
+
+/* ── Visibility and provenance chips ──────────────────────────────────────── */
+
+.rdhf-chip--hidden {
+    border-color: color-mix(in srgb, var(--rdhf-unmet) 45%, transparent);
+    color: var(--rdhf-unmet);
+}
+
+/* Granted is deliberately distinct from Acquired: no Feat Point was spent. */
+.rdhf-chip--granted {
+    border-color: var(--rdhf-gold-soft);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-chip--standalone {
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-reg-feat.is-hidden {
+    border-left: 3px solid var(--rdhf-unmet);
+}

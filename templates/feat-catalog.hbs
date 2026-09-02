@@ -1,0 +1,137 @@
+{{!--
+  Feat catalog. Filter rail left, feat list right, sticky point bar on top.
+
+  The list is split across two tabs — feats still available, and the character's own
+  acquired feats. Both sections are rendered up front and the filter pass displays one
+  of them, so a tab switch costs no re-render. Both render the same row partial.
+--}}
+<div class="rdhf-catalog-layout">
+
+    <header class="rdhf-point-bar">
+        <div class="rdhf-point-figure">
+            <i class="fa-solid fa-award"></i>
+            <span class="rdhf-point-remaining {{#if pool.overspent}}is-overspent{{/if}}">{{pool.remaining}}</span>
+            <span class="rdhf-point-of">/ {{pool.total}}</span>
+            <span class="rdhf-point-label">{{localize "RDHF.points.label"}}</span>
+        </div>
+
+        {{#if isGM}}
+            <div class="rdhf-point-adjust" data-tooltip="{{localize 'RDHF.points.adjustTooltip'}}">
+                <button type="button" class="rdhf-icon-btn" data-action="adjustPoints" data-delta="-1">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+                <span class="rdhf-point-adjust-value">{{numberFormat pool.adjustment sign=true}}</span>
+                <button type="button" class="rdhf-icon-btn" data-action="adjustPoints" data-delta="1">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+        {{/if}}
+
+        <div class="rdhf-point-spent">
+            {{localize "RDHF.points.spent"}} <strong>{{pool.spent}}</strong>
+            {{#if pool.free}}<span class="rdhf-point-free">(+{{pool.free}} {{localize "RDHF.points.granted"}})</span>{{/if}}
+        </div>
+    </header>
+
+    <div class="rdhf-catalog-body">
+
+        <aside class="rdhf-rail">
+            <label class="rdhf-search-wrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="search" class="rdhf-search" autocomplete="off" spellcheck="false"
+                       placeholder="{{localize 'RDHF.catalog.searchPlaceholder'}}">
+            </label>
+
+            <section class="rdhf-rail-section">
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.levelRange"}}</h4>
+                <div class="rdhf-level-range">
+                    <input type="number" min="1" data-filter="levelMin" placeholder="{{localize 'RDHF.catalog.min'}}">
+                    <span class="rdhf-dash">–</span>
+                    <input type="number" min="1" data-filter="levelMax" placeholder="{{localize 'RDHF.catalog.max'}}">
+                </div>
+            </section>
+
+            {{#if categories.length}}
+                <section class="rdhf-rail-section">
+                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.categories"}}</h4>
+                    {{#each categories}}
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="category" value="{{this.id}}">
+                            {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                            <span>{{this.label}}</span>
+                        </label>
+                    {{/each}}
+                </section>
+            {{/if}}
+
+            {{#if types.length}}
+                <section class="rdhf-rail-section">
+                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.types"}}</h4>
+                    {{#each types}}
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="type" value="{{this.id}}">
+                            {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                            <span>{{this.label}}</span>
+                        </label>
+                    {{/each}}
+                </section>
+            {{/if}}
+
+            <section class="rdhf-rail-section">
+                <label class="rdhf-checkline">
+                    <input type="checkbox" data-filter="eligibleOnly">
+                    <span>{{localize "RDHF.catalog.eligibleOnly"}}</span>
+                </label>
+            </section>
+
+            <footer class="rdhf-rail-footer">
+                <span class="rdhf-result-summary">
+                    <strong class="rdhf-result-count">0</strong>
+                    {{localize "RDHF.catalog.shown"}}
+                </span>
+                <button type="button" class="rdhf-text-btn" data-action="clearFilters">
+                    {{localize "RDHF.catalog.clearFilters"}}
+                </button>
+            </footer>
+        </aside>
+
+        <section class="rdhf-list-pane">
+            <nav class="rdhf-tabs rdhf-tabs--catalog">
+                <button type="button" class="rdhf-tab {{#if isAvailableTab}}is-active{{/if}}"
+                        data-action="selectTab" data-tab="available">
+                    <i class="fa-solid fa-list"></i> {{localize "RDHF.catalog.tabs.available"}}
+                </button>
+                <button type="button" class="rdhf-tab {{#if isAcquiredTab}}is-active{{/if}}"
+                        data-action="selectTab" data-tab="acquired">
+                    <i class="fa-solid fa-award"></i> {{localize "RDHF.catalog.tabs.acquired"}}
+                    {{#if acquiredCount}}<span class="rdhf-tab-badge rdhf-tab-badge--count">{{acquiredCount}}</span>{{/if}}
+                </button>
+            </nav>
+
+            {{#if hasFeats}}
+                {{!-- Both tabs are rendered at once; _applyFilters shows one of them.
+                      Switching tabs must never re-render, or the rail resets. --}}
+                <section class="rdhf-section" data-section="available">
+                    <ul class="rdhf-feat-list">
+                        {{#each available}}
+                            {{> "modules/remito-daggerheart-hero-feats/templates/partials/feat-row.hbs"}}
+                        {{/each}}
+                    </ul>
+                </section>
+
+                <section class="rdhf-section" data-section="acquired" hidden>
+                    <ul class="rdhf-feat-list">
+                        {{#each acquired}}
+                            {{> "modules/remito-daggerheart-hero-feats/templates/partials/feat-row.hbs"}}
+                        {{/each}}
+                    </ul>
+                </section>
+
+                <p class="rdhf-empty" data-empty="available" hidden>{{localize "RDHF.catalog.noMatches"}}</p>
+                <p class="rdhf-empty" data-empty="acquired" hidden>{{localize "RDHF.catalog.noAcquired"}}</p>
+            {{else}}
+                <p class="rdhf-empty">{{localize "RDHF.catalog.noFeats"}}</p>
+            {{/if}}
+        </section>
+    </div>
+</div>

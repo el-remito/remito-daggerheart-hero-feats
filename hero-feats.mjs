@@ -1,0 +1,76 @@
+/**
+ * remito-daggerheart-hero-feats
+ * Entry point: settings, hooks, module API.
+ *
+ * No build step and no bundler — Foundry loads this module directly, and every import
+ * below is a plain ES module path.
+ */
+
+import { MODULE_ID, PREFIX, TEMPLATES, ACTOR_TYPES } from './scripts/constants.mjs';
+import { registerSettings, registerRegistryMenu } from './scripts/settings.mjs';
+import { FeatRegistryConfig } from './scripts/apps/feat-registry-config.mjs';
+import { FeatCatalog, openCatalog, registerCatalogHooks } from './scripts/apps/feat-catalog.mjs';
+import { injectBadge } from './scripts/badge/badge.mjs';
+import { grantFeat, revokeFeat, getPointPool, buildActorSnapshot } from './scripts/data/actor-state.mjs';
+import { listFeats, pruneOrphans, invalidatePackCache } from './scripts/data/registry.mjs';
+
+Hooks.once('init', () => {
+  registerSettings();
+  registerRegistryMenu(FeatRegistryConfig);
+  foundry.applications.handlebars.loadTemplates(Object.values(TEMPLATES));
+});
+
+Hooks.once('ready', () => {
+  if (game.system.id !== 'daggerheart') {
+    console.warn(`${MODULE_ID} | Inactive: this module requires the Daggerheart system.`);
+    return;
+  }
+
+  registerCatalogHooks();
+  invalidatePackCache();
+
+  // The badge must survive every sheet re-render, so it re-injects on each one.
+  // renderActorSheet never fires in v14 — renderActorSheetV2 is the live hook, and it
+  // hands over the sheet application whose `document` is the actor.
+  Hooks.on('renderActorSheetV2', injectBadge);
+
+  // Re-render open sheets when our own flags or the character's level move.
+  Hooks.on('updateActor', (actor, changes) => {
+    if (!changes.flags?.[MODULE_ID] && !changes.system?.levelData) return;
+    // foundry.applications.instances, not the legacy ui.windows registry — an
+    // ApplicationV2 sheet never appears in the latter.
+    for (const app of foundry.applications.instances.values()) {
+      if (app.document?.id === actor.id) app.render(false);
+    }
+  });
+
+  game.modules.get(MODULE_ID).api = {
+    openCatalog,
+    openRegistry: () => new FeatRegistryConfig().render(true),
+    grantFeat,
+    revokeFeat,
+    getPointPool,
+    buildActorSnapshot,
+    listFeats,
+    pruneOrphans
+  };
+
+  console.log(`${MODULE_ID} | Ready.`);
+});
+
+/** A second way into the registry, next to Foundry's own settings entries. */
+Hooks.on('renderSettings', (app, html) => {
+  if (!game.user.isGM) return;
+  const root = html instanceof HTMLElement ? html : html?.[0];
+  const section = root?.querySelector('#settings-game');
+  if (!section || section.querySelector(`.${PREFIX}-open-registry`)) return;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.classList.add(`${PREFIX}-open-registry`);
+  button.innerHTML = `<i class="fa-solid fa-award"></i> ${game.i18n.localize('RDHF.registry.title')}`;
+  button.addEventListener('click', () => new FeatRegistryConfig().render(true));
+  section.appendChild(button);
+});
+
+export { FeatCatalog, FeatRegistryConfig, ACTOR_TYPES };

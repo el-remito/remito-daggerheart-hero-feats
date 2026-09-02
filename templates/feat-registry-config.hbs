@@ -1,0 +1,429 @@
+{{!--
+  GM Feat Registry. Four tabs; the whole window is also a drop target for individual
+  Feature items (bound by hand in _onRender — ApplicationV2 has no dragDrop option).
+--}}
+<div class="rdhf-registry-layout">
+
+    <nav class="rdhf-tabs">
+        <button type="button" class="rdhf-tab {{#if isSources}}is-active{{/if}}" data-action="selectTab" data-tab="sources">
+            <i class="fa-solid fa-box-archive"></i> {{localize "RDHF.registry.tabs.sources"}}
+        </button>
+        <button type="button" class="rdhf-tab {{#if isFeats}}is-active{{/if}}" data-action="selectTab" data-tab="feats">
+            <i class="fa-solid fa-list-check"></i> {{localize "RDHF.registry.tabs.feats"}}
+            {{#if uncuratedCount}}<span class="rdhf-tab-badge">{{uncuratedCount}}</span>{{/if}}
+        </button>
+        <button type="button" class="rdhf-tab {{#if isTaxonomy}}is-active{{/if}}" data-action="selectTab" data-tab="taxonomy">
+            <i class="fa-solid fa-tags"></i> {{localize "RDHF.registry.tabs.taxonomy"}}
+        </button>
+        <button type="button" class="rdhf-tab {{#if isPoints}}is-active{{/if}}" data-action="selectTab" data-tab="points">
+            <i class="fa-solid fa-calculator"></i> {{localize "RDHF.registry.tabs.points"}}
+        </button>
+    </nav>
+
+    {{!-- The Feats tab is a two-column grid whose list scrolls on its own; every
+          other tab scrolls as one block. rdhf-reg-scroll marks whichever element is
+          the real scroller, so scroll position survives a re-render either way. --}}
+    <div class="rdhf-registry-body {{#if isFeats}}is-split{{else}}rdhf-reg-scroll{{/if}}">
+
+        {{#if isSources}}
+            <section class="rdhf-pane">
+                <p class="rdhf-hint">{{localize "RDHF.registry.sourcesHint"}}</p>
+
+                <div class="rdhf-add-row">
+                    <select class="rdhf-pack-select">
+                        <option value="">{{localize "RDHF.registry.choosePack"}}</option>
+                        {{#each availablePacks}}
+                            <option value="{{this.id}}">{{this.label}}</option>
+                        {{/each}}
+                    </select>
+                    <button type="button" class="rdhf-text-btn" data-action="addSource">
+                        <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addSource"}}
+                    </button>
+                </div>
+
+                {{#if sources.length}}
+                    <ul class="rdhf-source-list">
+                        {{#each sources}}
+                            <li class="rdhf-source {{#if this.missing}}is-missing{{/if}}">
+                                <i class="fa-solid fa-box-archive"></i>
+                                <span class="rdhf-source-label">{{this.label}}</span>
+                                <code class="rdhf-source-id">{{this.packId}}</code>
+                                {{#if this.missing}}
+                                    <span class="rdhf-chip rdhf-chip--unmet">{{localize "RDHF.registry.packMissing"}}</span>
+                                {{/if}}
+                                <button type="button" class="rdhf-icon-btn rdhf-danger"
+                                        data-action="removeSource" data-pack-id="{{this.packId}}"
+                                        data-tooltip="{{localize 'RDHF.registry.removeSource'}}">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </li>
+                        {{/each}}
+                    </ul>
+                {{else}}
+                    <p class="rdhf-empty">{{localize "RDHF.registry.noSources"}}</p>
+                {{/if}}
+
+                <div class="rdhf-dropzone">
+                    <i class="fa-solid fa-hand-pointer"></i>
+                    <p>{{localize "RDHF.registry.dropHint"}}</p>
+                </div>
+
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.standalone"}}</h4>
+                <p class="rdhf-hint">{{localize "RDHF.registry.standaloneHint"}}</p>
+                {{#if standaloneFeats.length}}
+                    <ul class="rdhf-source-list">
+                        {{#each standaloneFeats}}
+                            <li class="rdhf-source" data-uuid="{{this.uuid}}">
+                                <img class="rdhf-feat-img rdhf-feat-img--small" src="{{this.img}}" alt="">
+                                <span class="rdhf-source-label">{{this.name}}</span>
+                                <code class="rdhf-source-id">{{this.uuid}}</code>
+                                {{#if this.uncurated}}
+                                    <span class="rdhf-chip rdhf-chip--uncurated">{{localize "RDHF.catalog.uncurated"}}</span>
+                                {{/if}}
+                                <button type="button" class="rdhf-icon-btn rdhf-danger"
+                                        data-action="removeFeat"
+                                        data-tooltip="{{localize 'RDHF.registry.removeStandalone'}}">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </li>
+                        {{/each}}
+                    </ul>
+                {{else}}
+                    <p class="rdhf-empty">{{localize "RDHF.registry.noStandalone"}}</p>
+                {{/if}}
+            </section>
+        {{/if}}
+
+        {{#if isFeats}}
+            {{!-- Deliberately mirrors the player catalog: same rail, same row shape,
+                  same matchesFilters predicate. The GM should be curating against the
+                  view the table actually sees. Player-only switches (eligibility,
+                  hide-acquired) have no meaning here and are left out; "uncurated only"
+                  is the curation tool that replaces them. --}}
+            <section class="rdhf-pane rdhf-pane--split">
+                <aside class="rdhf-rail">
+                    <label class="rdhf-search-wrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="search" class="rdhf-reg-search" autocomplete="off" spellcheck="false"
+                               value="{{filters.search}}"
+                               placeholder="{{localize 'RDHF.registry.searchPlaceholder'}}">
+                    </label>
+
+                    <section class="rdhf-rail-section">
+                        <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.levelRange"}}</h4>
+                        <div class="rdhf-level-range">
+                            <input type="number" min="1" data-filter="levelMin" placeholder="{{localize 'RDHF.catalog.min'}}">
+                            <span class="rdhf-dash">&ndash;</span>
+                            <input type="number" min="1" data-filter="levelMax" placeholder="{{localize 'RDHF.catalog.max'}}">
+                        </div>
+                    </section>
+
+                    {{#if filterCategories.length}}
+                        <section class="rdhf-rail-section">
+                            <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.categories"}}</h4>
+                            {{#each filterCategories}}
+                                <label class="rdhf-checkline">
+                                    <input type="checkbox" data-filter="category" value="{{this.id}}">
+                                    {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                                    <span>{{this.label}}</span>
+                                </label>
+                            {{/each}}
+                        </section>
+                    {{/if}}
+
+                    {{#if filterTypes.length}}
+                        <section class="rdhf-rail-section">
+                            <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.types"}}</h4>
+                            {{#each filterTypes}}
+                                <label class="rdhf-checkline">
+                                    <input type="checkbox" data-filter="type" value="{{this.id}}">
+                                    {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                                    <span>{{this.label}}</span>
+                                </label>
+                            {{/each}}
+                        </section>
+                    {{/if}}
+
+                    <section class="rdhf-rail-section">
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="uncuratedOnly" {{#if uncuratedOnly}}checked{{/if}}>
+                            <span>{{localize "RDHF.registry.uncuratedOnly"}}</span>
+                        </label>
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="hiddenOnly" {{#if hiddenOnly}}checked{{/if}}>
+                            <span>{{localize "RDHF.registry.hiddenOnly"}}</span>
+                        </label>
+                    </section>
+
+                    <footer class="rdhf-rail-footer">
+                        <span class="rdhf-result-summary">
+                            <strong class="rdhf-reg-count">{{featCount}}</strong>
+                            {{localize "RDHF.catalog.shown"}}
+                        </span>
+                        <button type="button" class="rdhf-text-btn" data-action="clearRegFilters">
+                            {{localize "RDHF.catalog.clearFilters"}}
+                        </button>
+                        <button type="button" class="rdhf-text-btn" data-action="pruneOrphans">
+                            <i class="fa-solid fa-broom"></i> {{localize "RDHF.registry.prune"}}
+                        </button>
+                    </footer>
+                </aside>
+
+                <section class="rdhf-list-pane rdhf-reg-scroll">
+                {{#if feats.length}}
+                    <ul class="rdhf-reg-list">
+                        {{#each feats}}
+                            <li>
+                                <details class="rdhf-reg-feat {{#if this.uncurated}}is-uncurated{{/if}} {{#if this.hidden}}is-hidden{{/if}}"
+                                         data-uuid="{{this.uuid}}"
+                                         data-search="{{this.searchText}}"
+                                         data-uncurated="{{this.uncurated}}"
+                                         data-hidden="{{this.hidden}}"
+                                         data-level="{{this.level}}"
+                                         data-category="{{this.category}}"
+                                         data-types="{{this.typesAttr}}"
+                                         {{#if this.isOpen}}open{{/if}}>
+                                    <summary class="rdhf-feat-summary">
+                                        <span class="rdhf-arrow">&#9654;</span>
+                                        <img class="rdhf-feat-img" src="{{this.img}}" alt="">
+
+                                        <div class="rdhf-feat-main">
+                                            <div class="rdhf-feat-titleline">
+                                                <span class="rdhf-feat-name">{{this.name}}</span>
+                                                <span class="rdhf-chip rdhf-chip--level">{{localize "RDHF.catalog.levelShort"}} {{this.level}}</span>
+                                                {{#if this.categoryLabel}}
+                                                    <span class="rdhf-chip rdhf-chip--category">{{this.categoryLabel}}</span>
+                                                {{/if}}
+                                                {{#each this.typeLabels}}
+                                                    <span class="rdhf-chip rdhf-chip--type">{{this}}</span>
+                                                {{/each}}
+                                                {{#if this.uncurated}}
+                                                    <span class="rdhf-chip rdhf-chip--uncurated"
+                                                          data-tooltip="{{localize 'RDHF.catalog.uncuratedTooltip'}}">
+                                                        {{localize "RDHF.catalog.uncurated"}}
+                                                    </span>
+                                                {{/if}}
+                                                {{#if this.hidden}}
+                                                    <span class="rdhf-chip rdhf-chip--hidden"
+                                                          data-tooltip="{{localize 'RDHF.catalog.hiddenTooltip'}}">
+                                                        <i class="fa-solid fa-eye-slash"></i>
+                                                        {{localize "RDHF.catalog.hidden"}}
+                                                    </span>
+                                                {{/if}}
+                                                {{#if this.standalone}}
+                                                    <span class="rdhf-chip rdhf-chip--standalone"
+                                                          data-tooltip="{{localize 'RDHF.registry.standaloneTooltip'}}">
+                                                        <i class="fa-solid fa-hand-pointer"></i>
+                                                    </span>
+                                                {{/if}}
+                                            </div>
+                                            {{#if this.teaser}}
+                                                <p class="rdhf-feat-teaser">{{this.teaser}}</p>
+                                            {{/if}}
+                                        </div>
+
+                                        <div class="rdhf-feat-controls">
+                                            {{#if this.registered}}
+                                                <button type="button" class="rdhf-icon-btn rdhf-danger"
+                                                        data-action="removeFeat"
+                                                        data-tooltip="{{localize 'RDHF.registry.resetFeat'}}">
+                                                    <i class="fa-solid fa-rotate-left"></i>
+                                                </button>
+                                            {{/if}}
+                                        </div>
+                                    </summary>
+
+                                    <div class="rdhf-reg-form">
+                                        <div class="rdhf-field-grid">
+                                            <label>
+                                                <span>{{localize "RDHF.registry.level"}}</span>
+                                                <input type="number" min="1" data-field="level" value="{{this.level}}">
+                                            </label>
+                                            <label>
+                                                <span>{{localize "RDHF.registry.category"}}</span>
+                                                <select data-field="category">
+                                                    <option value="">{{localize "RDHF.registry.noCategory"}}</option>
+                                                    {{#each this.categoryOptions}}
+                                                        <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                                                    {{/each}}
+                                                </select>
+                                            </label>
+                                        </div>
+
+                                        <label class="rdhf-checkline rdhf-checkline--boxed">
+                                            <input type="checkbox" data-field="hidden" {{#if this.hidden}}checked{{/if}}>
+                                            <span>{{localize "RDHF.registry.hidden"}}</span>
+                                        </label>
+                                        <p class="rdhf-hint">{{localize "RDHF.registry.hiddenHint"}}</p>
+
+                                        <label class="rdhf-block-field">
+                                            <span>{{localize "RDHF.registry.summary"}}</span>
+                                            <textarea class="rdhf-wide" rows="2" data-field="summary"
+                                                      placeholder="{{this.autoSummary}}">{{this.summaryText}}</textarea>
+                                        </label>
+                                        <p class="rdhf-hint">{{localize "RDHF.registry.summaryHint"}}</p>
+
+                                        <fieldset class="rdhf-fieldset">
+                                            <legend>{{localize "RDHF.registry.types"}}</legend>
+                                            <div class="rdhf-chip-grid">
+                                                {{#each this.typeOptions}}
+                                                    <label class="rdhf-checkline">
+                                                        <input type="checkbox" data-field="type" value="{{this.id}}" {{#if this.checked}}checked{{/if}}>
+                                                        <span>{{this.label}}</span>
+                                                    </label>
+                                                {{/each}}
+                                            </div>
+                                        </fieldset>
+
+                                        <fieldset class="rdhf-fieldset">
+                                            <legend>{{localize "RDHF.registry.requirements"}}</legend>
+
+                                            <h5 class="rdhf-sub">{{localize "RDHF.registry.traits"}}</h5>
+                                            <div class="rdhf-mini-grid">
+                                                {{#each this.traitRows}}
+                                                    <label>
+                                                        <span>{{this.label}}</span>
+                                                        <input type="number" min="0" data-field="trait" data-key="{{this.key}}" value="{{this.value}}">
+                                                    </label>
+                                                {{/each}}
+                                            </div>
+
+                                            <h5 class="rdhf-sub">{{localize "RDHF.registry.resources"}}</h5>
+                                            <p class="rdhf-hint">{{localize "RDHF.registry.resourcesHint"}}</p>
+                                            <div class="rdhf-mini-grid">
+                                                {{#each this.resourceRows}}
+                                                    <label>
+                                                        <span>{{this.label}}</span>
+                                                        <input type="number" min="0" data-field="resource" data-key="{{this.key}}" value="{{this.value}}">
+                                                    </label>
+                                                {{/each}}
+                                            </div>
+
+                                            <h5 class="rdhf-sub">{{localize "RDHF.registry.otherFeats"}}</h5>
+                                            <p class="rdhf-hint">{{localize "RDHF.registry.featuresDropHint"}}</p>
+                                            <input type="text" class="rdhf-wide rdhf-droppable" data-field="features"
+                                                   value="{{this.featuresText}}"
+                                                   placeholder="{{localize 'RDHF.registry.featuresPlaceholder'}}">
+
+                                            <div class="rdhf-field-grid">
+                                                <label>
+                                                    <span>{{localize "RDHF.registry.classes"}}</span>
+                                                    <input type="text" data-field="classes" value="{{this.classesText}}">
+                                                </label>
+                                                <label>
+                                                    <span>{{localize "RDHF.registry.subclasses"}}</span>
+                                                    <input type="text" data-field="subclasses" value="{{this.subclassesText}}">
+                                                </label>
+                                            </div>
+
+                                            <h5 class="rdhf-sub">{{localize "RDHF.registry.investment"}}</h5>
+                                            {{#each this.investment}}
+                                                <div class="rdhf-investment-row">
+                                                    <select data-field="investmentCategory" data-index="{{this.index}}">
+                                                        {{#each this.options}}
+                                                            <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                                                        {{/each}}
+                                                    </select>
+                                                    <input type="number" min="1" data-field="investmentCount" data-index="{{this.index}}" value="{{this.count}}">
+                                                    <button type="button" class="rdhf-icon-btn rdhf-danger"
+                                                            data-action="removeInvestment" data-index="{{this.index}}">
+                                                        <i class="fa-solid fa-xmark"></i>
+                                                    </button>
+                                                </div>
+                                            {{/each}}
+                                            <button type="button" class="rdhf-text-btn" data-action="addInvestment">
+                                                <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addInvestment"}}
+                                            </button>
+
+                                            <h5 class="rdhf-sub">{{localize "RDHF.registry.expression"}}</h5>
+                                            <p class="rdhf-hint">{{localize "RDHF.registry.expressionHint"}}</p>
+                                            {{!-- The atom shortcut row is appended here by
+                                                  FeatRegistryConfig._renderAtomRows(). --}}
+                                            <input type="text" class="rdhf-wide" data-field="expression" value="{{this.expression}}">
+                                        </fieldset>
+                                    </div>
+                                </details>
+                            </li>
+                        {{/each}}
+                    </ul>
+                    <p class="rdhf-reg-empty rdhf-empty" hidden>{{localize "RDHF.registry.noMatches"}}</p>
+                {{else}}
+                    <p class="rdhf-empty">{{localize "RDHF.registry.noFeats"}}</p>
+                {{/if}}
+                </section>
+            </section>
+        {{/if}}
+
+        {{#if isTaxonomy}}
+            <section class="rdhf-pane rdhf-taxonomy">
+                <div class="rdhf-taxonomy-col">
+                    <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.categories"}}</h4>
+                    <p class="rdhf-hint">{{localize "RDHF.registry.categoriesHint"}}</p>
+                    {{#each categories}}
+                        <div class="rdhf-taxonomy-row" data-entry-id="{{this.id}}">
+                            <input type="text" data-field="category.label" value="{{this.resolved}}">
+                            <input type="text" class="rdhf-icon-input" data-field="category.icon" value="{{this.icon}}"
+                                   placeholder="fa-solid fa-flask">
+                            <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeCategory">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    {{/each}}
+                    <button type="button" class="rdhf-text-btn" data-action="addCategory">
+                        <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addCategory"}}
+                    </button>
+                </div>
+
+                <div class="rdhf-taxonomy-col">
+                    <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.types"}}</h4>
+                    <p class="rdhf-hint">{{localize "RDHF.registry.typesHint"}}</p>
+                    {{#each types}}
+                        <div class="rdhf-taxonomy-row" data-entry-id="{{this.id}}">
+                            <input type="text" data-field="type.label" value="{{this.resolved}}">
+                            <input type="text" class="rdhf-icon-input" data-field="type.icon" value="{{this.icon}}"
+                                   placeholder="fa-solid fa-tag">
+                            <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeType">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    {{/each}}
+                    <button type="button" class="rdhf-text-btn" data-action="addType">
+                        <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addType"}}
+                    </button>
+                </div>
+            </section>
+        {{/if}}
+
+        {{#if isPoints}}
+            <section class="rdhf-pane">
+                <label class="rdhf-block-field">
+                    <span>{{localize "RDHF.settings.pointFormula.name"}}</span>
+                    <input type="text" class="rdhf-wide" data-field="pointFormula" value="{{formula}}">
+                </label>
+                <p class="rdhf-hint">{{localize "RDHF.settings.pointFormula.hint"}}</p>
+                <p class="rdhf-formula-preview">{{formulaPreview}}</p>
+
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.formulaKeys"}}</h4>
+                <ul class="rdhf-key-list">
+                    <li><code>@level</code> {{localize "RDHF.registry.keyLevel"}}</li>
+                    <li><code>@tier</code> {{localize "RDHF.registry.keyTier"}}</li>
+                    <li><code>@prof</code> {{localize "RDHF.registry.keyProf"}}</li>
+                    <li><code>@system.traits.agility.value</code> {{localize "RDHF.registry.keySystem"}}</li>
+                </ul>
+            </section>
+        {{/if}}
+    </div>
+
+    <footer class="rdhf-registry-footer">
+        <button type="button" class="rdhf-text-btn" data-action="exportRegistry">
+            <i class="fa-solid fa-file-export"></i> {{localize "RDHF.registry.export"}}
+        </button>
+        <button type="button" class="rdhf-text-btn" data-action="importRegistry">
+            <i class="fa-solid fa-file-import"></i> {{localize "RDHF.registry.import"}}
+        </button>
+        <span class="rdhf-spacer"></span>
+        <button type="button" class="rdhf-save-btn" data-action="save">
+            <i class="fa-solid fa-floppy-disk"></i> {{localize "RDHF.registry.save"}}
+        </button>
+    </footer>
+</div>
