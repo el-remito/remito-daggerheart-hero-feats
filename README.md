@@ -22,7 +22,9 @@ Feature items are **never modified** — all metadata lives in a world setting k
 locked compendia (including the Daggerheart SRD packs) work untouched.
 
 A Feat stays **uncurated** until you give it a Category, and uncurated Feats are hidden from
-players. The Feats tab shows a badge with how many are still waiting.
+players. The Feats tab shows a badge with how many are still waiting. Every world has a fixed
+**General** Category for feats that need to be visible without belonging anywhere in particular —
+it cannot be renamed or deleted, and it always sorts first.
 
 A fully curated Feat can also be held back with **Hide from players**, for something that should
 exist in the registry before the table is allowed to find it. Hidden Feats carry a red *Hidden*
@@ -35,6 +37,9 @@ curate against the view your table actually sees.
 Requirements can demand any combination of:
 
 - a **Level** (the Feat's own Level is always a requirement)
+- **investment in Categories**, combined with AND / OR — rows read left to right with AND binding
+  tighter, so "Alchemy ×2 AND Arcana ×1 OR Swordmaster ×3" means either both of the first two, or
+  the last one alone
 - minimum **Hit Points, Stress, Hope or Evasion** — compared against the character's *maximum*, not
   their current value
 - minimum **Traits**
@@ -52,6 +57,18 @@ Default is `@level * 2`. Available keys: `@level`, `@tier`, `@prof`, and any `@s
 
 You can also give one character a bonus or penalty with the `+` / `−` stepper on their catalog's
 point bar.
+
+### Changing a Feature after people own it
+
+An acquired Feat is a **copy** on the character, which is what makes its actions and effects work
+like any other Feature. So editing the source does not reach anyone who already bought it.
+
+Edit the Feature, then use **Re-sync** — on a single Feat's row, or **Re-sync all** in the Feats
+tab rail. It tells you how many copies it is about to rewrite before it does anything. Name, image,
+description, actions and effects are all replaced, so any edits made to a character's own copy are
+lost. Characters keep the Feat and the Feat Point they spent; nothing is revoked.
+
+Editing a Feature also refreshes the catalog for anyone who has *not* bought it, with no reload.
 
 ### GM controls in the catalog
 

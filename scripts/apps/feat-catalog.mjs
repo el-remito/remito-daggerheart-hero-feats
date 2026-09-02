@@ -13,6 +13,7 @@
 import { MODULE_ID, PREFIX, TEMPLATES, ACTOR_TYPES } from '../constants.mjs';
 import { getCategories, getTypes, taxonomyLabel } from '../settings.mjs';
 import { listFeats, typeLabels, getEnrichedDescription } from '../data/registry.mjs';
+import { onFeatureDocumentChanged } from '../data/resync.mjs';
 import {
   acquisitionOf,
   buildActorSnapshot,
@@ -52,10 +53,33 @@ export function refreshCatalog(actorId) {
   openCatalogs.get(actorId)?.render();
 }
 
-/** Turns a requirement descriptor into display text. */
+/**
+ * Turns a requirement descriptor into display text.
+ *
+ * logic/ deliberately emits keys and parts rather than sentences, so every string that
+ * needs a language lives here. Investment arrives as a list of rows plus connectors and
+ * is rendered as one readable chain: "Alchemy x2 and Arcana x1, or Swordmaster x3".
+ */
 function localizeCheck(check) {
   const data = { ...check.data };
   if (data.traitKey) data.trait = game.i18n.localize(data.traitKey);
+
+  if (Array.isArray(data.parts)) {
+    data.value = data.parts
+      .map((part, index) => {
+        const row = game.i18n.format('RDHF.requirement.investmentRow', {
+          category: part.category,
+          value: part.count
+        });
+        if (!index) return row;
+        const join = game.i18n.localize(
+          part.join === 'or' ? 'RDHF.requirement.joinOr' : 'RDHF.requirement.joinAnd'
+        );
+        return `${join} ${row}`;
+      })
+      .join(' ');
+  }
+
   return { ...check, label: game.i18n.format(check.key, data) };
 }
 
@@ -440,6 +464,17 @@ export function registerCatalogHooks() {
   Hooks.on('updateActor', (actor, changes) => {
     if (changes.flags?.[MODULE_ID] || changes.system?.levelData) refreshCatalog(actor.id);
   });
+
+  // Editing a Feature invalidates the cached pack index and its enriched description,
+  // then re-renders every open catalog so the edit is visible without a reload. The
+  // registry app is deliberately NOT re-rendered: it holds an unsaved working copy and
+  // the GM may be mid-edit, and its next render re-reads the now-empty caches anyway.
+  for (const hook of ['updateItem', 'deleteItem', 'createItem']) {
+    Hooks.on(hook, doc => {
+      if (!onFeatureDocumentChanged(doc)) return;
+      for (const app of openCatalogs.values()) app.render();
+    });
+  }
   Hooks.on('updateSetting', setting => {
     if (setting.key?.startsWith(`${MODULE_ID}.`)) {
       for (const app of openCatalogs.values()) app.render();

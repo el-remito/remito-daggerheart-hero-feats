@@ -17,8 +17,12 @@ export const SETTINGS = {
   CATEGORIES: 'categories',
   TYPES: 'types',
   POINT_FORMULA: 'pointFormula',
-  MENU: 'registryMenu'
+  MENU: 'registryMenu',
+  MIGRATION: 'migration'
 };
+
+/** Bump when a migration is added; see scripts/data/migrations.mjs. */
+export const MIGRATION_VERSION = 1;
 
 export const ACTOR_TYPES = { PC: 'character' };
 
@@ -40,12 +44,33 @@ export const RESOURCE_REQS = {
 };
 
 /**
+ * The one Category every world has. It exists so a Feat can be curated — and therefore
+ * visible to players — without the GM having to invent a filing system first; that is
+ * the job the "General" *type* used to do, badly, because a type could not lift a feat
+ * out of uncurated. It is fixed: the Taxonomy tab may not rename or delete it, and
+ * getCategories() re-inserts it if it ever goes missing.
+ */
+export const GENERAL_CATEGORY_ID = 'general';
+
+export const DEFAULT_CATEGORIES = [
+  {
+    id: GENERAL_CATEGORY_ID,
+    label: 'RDHF.category.general',
+    icon: 'fa-solid fa-star',
+    description: '',
+    fixed: true
+  }
+];
+
+/**
  * Types seeded on first run. The whitepaper's Category / Class / Domain types are not
  * listed here — they are resolved dynamically at read time from the feat's own Category,
  * the daggerheart.classes pack, and CONFIG.DH.DOMAIN.allDomains().
+ *
+ * "General" is deliberately absent: it is a Category now (see GENERAL_CATEGORY_ID), and
+ * migration 1 strips the old type from every feat.
  */
 export const DEFAULT_TYPES = [
-  { id: 'general', label: 'RDHF.type.general', icon: 'fa-solid fa-star' },
   { id: 'combat', label: 'RDHF.type.combat', icon: 'fa-solid fa-swords' },
   { id: 'spellcasting', label: 'RDHF.type.spellcasting', icon: 'fa-solid fa-wand-sparkles' },
   { id: 'utility', label: 'RDHF.type.utility', icon: 'fa-solid fa-toolbox' },

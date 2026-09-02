@@ -13,6 +13,8 @@ import { FeatCatalog, openCatalog, registerCatalogHooks } from './scripts/apps/f
 import { injectBadge } from './scripts/badge/badge.mjs';
 import { grantFeat, revokeFeat, getPointPool, buildActorSnapshot } from './scripts/data/actor-state.mjs';
 import { listFeats, pruneOrphans, invalidatePackCache } from './scripts/data/registry.mjs';
+import { runMigrations } from './scripts/data/migrations.mjs';
+import { resyncFeat, resyncAll, countAffected } from './scripts/data/resync.mjs';
 
 Hooks.once('init', () => {
   registerSettings();
@@ -20,7 +22,7 @@ Hooks.once('init', () => {
   foundry.applications.handlebars.loadTemplates(Object.values(TEMPLATES));
 });
 
-Hooks.once('ready', () => {
+Hooks.once('ready', async () => {
   if (game.system.id !== 'daggerheart') {
     console.warn(`${MODULE_ID} | Inactive: this module requires the Daggerheart system.`);
     return;
@@ -28,6 +30,11 @@ Hooks.once('ready', () => {
 
   registerCatalogHooks();
   invalidatePackCache();
+
+  // Awaited before the API is exposed, so nothing renders a taxonomy that is about
+  // to change under it. Foundry does not await the hook itself, but the ordering
+  // within this callback is what matters.
+  await runMigrations();
 
   // The badge must survive every sheet re-render, so it re-injects on each one.
   // renderActorSheet never fires in v14 — renderActorSheetV2 is the live hook, and it
@@ -52,7 +59,10 @@ Hooks.once('ready', () => {
     getPointPool,
     buildActorSnapshot,
     listFeats,
-    pruneOrphans
+    pruneOrphans,
+    resyncFeat,
+    resyncAll,
+    countAffected
   };
 
   console.log(`${MODULE_ID} | Ready.`);

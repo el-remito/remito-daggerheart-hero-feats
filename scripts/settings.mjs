@@ -11,7 +11,9 @@ import {
   MODULE_ID,
   SETTINGS,
   DEFAULT_TYPES,
-  DEFAULT_POINT_FORMULA
+  DEFAULT_CATEGORIES,
+  DEFAULT_POINT_FORMULA,
+  GENERAL_CATEGORY_ID
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
 
@@ -36,7 +38,7 @@ export function registerSettings() {
     scope: 'world',
     config: false,
     type: Array,
-    default: []
+    default: foundry.utils.deepClone(DEFAULT_CATEGORIES)
   });
 
   game.settings.register(MODULE_ID, SETTINGS.TYPES, {
@@ -44,6 +46,14 @@ export function registerSettings() {
     config: false,
     type: Array,
     default: foundry.utils.deepClone(DEFAULT_TYPES)
+  });
+
+  // Which data migrations have run in this world. See data/migrations.mjs.
+  game.settings.register(MODULE_ID, SETTINGS.MIGRATION, {
+    scope: 'world',
+    config: false,
+    type: Number,
+    default: 0
   });
 
   // The one setting a GM may want to tweak without opening the registry app.
@@ -83,16 +93,48 @@ export async function setRegistry(registry) {
   return game.settings.set(MODULE_ID, SETTINGS.REGISTRY, registry);
 }
 
+/**
+ * Categories, General first and the rest alphabetical by displayed label.
+ *
+ * Sorting lives in the accessor rather than at each call site so the filter rails, the
+ * curation dropdowns and the Taxonomy tab can never disagree about the order. General
+ * is re-inserted here if a world is missing it, which keeps a pre-migration world (or
+ * an imported registry) from losing the one Category that must always exist.
+ */
 export function getCategories() {
-  return game.settings.get(MODULE_ID, SETTINGS.CATEGORIES) ?? [];
+  const stored = game.settings.get(MODULE_ID, SETTINGS.CATEGORIES) ?? [];
+  const list = stored.some(c => c?.id === GENERAL_CATEGORY_ID)
+    ? [...stored]
+    : [...foundry.utils.deepClone(DEFAULT_CATEGORIES), ...stored];
+  return sortTaxonomy(list, GENERAL_CATEGORY_ID);
+}
+
+/** True for a Category the Taxonomy tab must not rename or delete. */
+export function isFixedCategory(id) {
+  return id === GENERAL_CATEGORY_ID;
+}
+
+/**
+ * Alphabetical by displayed label, with one id optionally pinned to the front.
+ * localeCompare so accented and non-English labels sort the way a reader expects.
+ */
+function sortTaxonomy(list, pinnedId = null) {
+  return [...list].sort((a, b) => {
+    if (pinnedId) {
+      if (a?.id === pinnedId) return -1;
+      if (b?.id === pinnedId) return 1;
+    }
+    return taxonomyLabel(a).localeCompare(taxonomyLabel(b));
+  });
 }
 
 export async function setCategories(categories) {
   return game.settings.set(MODULE_ID, SETTINGS.CATEGORIES, categories);
 }
 
+/** Types, alphabetical. Nothing is pinned — General is a Category now. */
 export function getTypes() {
-  return game.settings.get(MODULE_ID, SETTINGS.TYPES) ?? [];
+  return sortTaxonomy(game.settings.get(MODULE_ID, SETTINGS.TYPES) ?? []);
 }
 
 export async function setTypes(types) {

@@ -47,8 +47,15 @@ export function normalizeRequirements(reqs) {
     features: Array.isArray(reqs.features) ? [...reqs.features] : [],
     classes: Array.isArray(reqs.classes) ? [...reqs.classes] : [],
     subclasses: Array.isArray(reqs.subclasses) ? [...reqs.subclasses] : [],
+    // `join` is the connector to the PREVIOUS row, so the first row never carries one.
+    // Rows are evaluated left to right with AND binding tighter than OR, exactly like
+    // the expression grammar below — one precedence rule for the whole module.
     categoryInvestment: Array.isArray(reqs.categoryInvestment)
-      ? reqs.categoryInvestment.map(r => ({ category: r.category, count: Number(r.count) || 0 }))
+      ? reqs.categoryInvestment.map((r, i) => ({
+          category: r.category,
+          count: Number(r.count) || 0,
+          join: i === 0 ? null : r.join === 'or' ? 'or' : 'and'
+        }))
       : [],
     expression: typeof reqs.expression === 'string' ? reqs.expression : ''
   };
@@ -152,17 +159,23 @@ export function checkRequirements(feat, snapshot) {
     });
   }
 
-  // Investment in Category
-  for (const rule of reqs.categoryInvestment) {
-    if (!rule.category || !rule.count) continue;
+  // Investment in Category — ONE descriptor for the whole chain, not one per row.
+  // With OR in play a single unmet row no longer means the requirement failed, so a
+  // per-row chip would report a failure the evaluation does not agree with.
+  const investment = reqs.categoryInvestment.filter(r => r.category && r.count);
+  if (investment.length) {
     out.push({
       kind: 'categoryInvestment',
       key: 'RDHF.requirement.categoryInvestment',
+      // Parts, not a sentence: the connector words are localized by the app layer.
       data: {
-        category: snapshot.categoryLabels?.[rule.category] ?? rule.category,
-        value: rule.count
+        parts: investment.map((r, i) => ({
+          category: snapshot.categoryLabels?.[r.category] ?? r.category,
+          count: r.count,
+          join: i === 0 ? null : r.join ?? 'and'
+        }))
       },
-      met: (snapshot.categoryCounts?.[rule.category] ?? 0) >= rule.count
+      met: evaluateInvestment(investment, snapshot)
     });
   }
 
@@ -177,6 +190,32 @@ export function checkRequirements(feat, snapshot) {
   }
 
   return out;
+}
+
+/**
+ * Evaluates the Investment in Category chain: OR of AND groups, left to right, with
+ * AND binding tighter. `andResult` accumulates the current group; every `or` closes
+ * that group into `orResult` and starts a new one.
+ *
+ * @param {Array<{category: string, count: number, join: string|null}>} rules
+ * @param {object} snapshot
+ * @returns {boolean}
+ */
+export function evaluateInvestment(rules, snapshot) {
+  if (!rules?.length) return true;
+  let orResult = false;
+  let andResult = true;
+
+  rules.forEach((rule, index) => {
+    const met = (snapshot.categoryCounts?.[rule.category] ?? 0) >= Number(rule.count);
+    if (index === 0) andResult = met;
+    else if (rule.join === 'or') {
+      orResult = orResult || andResult;
+      andResult = met;
+    } else andResult = andResult && met;
+  });
+
+  return orResult || andResult;
 }
 
 /**

@@ -30,6 +30,16 @@ export function invalidateDescriptionCache() {
   _descriptionCache.clear();
 }
 
+/**
+ * Drops one cached description. Called when its Feature is edited — without this the
+ * enriched text an expanded row shows is whatever it was the first time anyone opened
+ * it, for the rest of the session.
+ * @param {string} uuid
+ */
+export function invalidateDescription(uuid) {
+  _descriptionCache.delete(uuid);
+}
+
 /* ── Pack reading ──────────────────────────────────────────────────────────── */
 
 /**

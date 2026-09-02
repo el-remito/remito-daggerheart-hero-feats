@@ -10,7 +10,7 @@
         </button>
         <button type="button" class="rdhf-tab {{#if isFeats}}is-active{{/if}}" data-action="selectTab" data-tab="feats">
             <i class="fa-solid fa-list-check"></i> {{localize "RDHF.registry.tabs.feats"}}
-            {{#if uncuratedCount}}<span class="rdhf-tab-badge">{{uncuratedCount}}</span>{{/if}}
+            <span class="rdhf-tab-badge" {{#unless uncuratedCount}}hidden{{/unless}}>{{uncuratedCount}}</span>
         </button>
         <button type="button" class="rdhf-tab {{#if isTaxonomy}}is-active{{/if}}" data-action="selectTab" data-tab="taxonomy">
             <i class="fa-solid fa-tags"></i> {{localize "RDHF.registry.tabs.taxonomy"}}
@@ -29,6 +29,15 @@
             <section class="rdhf-pane">
                 <p class="rdhf-hint">{{localize "RDHF.registry.sourcesHint"}}</p>
 
+                {{!-- Filters both lists below in place. Its value is held on the app,
+                      so adding a pack or dropping a Feature does not clear it. --}}
+                <label class="rdhf-search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="search" class="rdhf-source-search" autocomplete="off" spellcheck="false"
+                           value="{{sourceSearch}}"
+                           placeholder="{{localize 'RDHF.registry.sourceSearchPlaceholder'}}">
+                </label>
+
                 <div class="rdhf-add-row">
                     <select class="rdhf-pack-select">
                         <option value="">{{localize "RDHF.registry.choosePack"}}</option>
@@ -44,7 +53,8 @@
                 {{#if sources.length}}
                     <ul class="rdhf-source-list">
                         {{#each sources}}
-                            <li class="rdhf-source {{#if this.missing}}is-missing{{/if}}">
+                            <li class="rdhf-source {{#if this.missing}}is-missing{{/if}}"
+                                data-source-search="{{this.searchText}}">
                                 <i class="fa-solid fa-box-archive"></i>
                                 <span class="rdhf-source-label">{{this.label}}</span>
                                 <code class="rdhf-source-id">{{this.packId}}</code>
@@ -59,6 +69,7 @@
                             </li>
                         {{/each}}
                     </ul>
+                    <p class="rdhf-source-empty rdhf-empty" hidden>{{localize "RDHF.registry.noMatches"}}</p>
                 {{else}}
                     <p class="rdhf-empty">{{localize "RDHF.registry.noSources"}}</p>
                 {{/if}}
@@ -73,7 +84,8 @@
                 {{#if standaloneFeats.length}}
                     <ul class="rdhf-source-list">
                         {{#each standaloneFeats}}
-                            <li class="rdhf-source" data-uuid="{{this.uuid}}">
+                            <li class="rdhf-source" data-uuid="{{this.uuid}}"
+                                data-source-search="{{this.searchText}}">
                                 <img class="rdhf-feat-img rdhf-feat-img--small" src="{{this.img}}" alt="">
                                 <span class="rdhf-source-label">{{this.name}}</span>
                                 <code class="rdhf-source-id">{{this.uuid}}</code>
@@ -88,6 +100,7 @@
                             </li>
                         {{/each}}
                     </ul>
+                    <p class="rdhf-source-empty rdhf-empty" hidden>{{localize "RDHF.registry.noMatches"}}</p>
                 {{else}}
                     <p class="rdhf-empty">{{localize "RDHF.registry.noStandalone"}}</p>
                 {{/if}}
@@ -119,8 +132,12 @@
                     </section>
 
                     {{#if filterCategories.length}}
-                        <section class="rdhf-rail-section">
-                            <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.categories"}}</h4>
+                        <details class="rdhf-rail-section rdhf-rail-details" data-rail="categories"
+                                 {{#if railOpen.categories}}open{{/if}}>
+                            <summary class="rdhf-rail-heading">
+                                <span class="rdhf-arrow">&#9654;</span>
+                                {{localize "RDHF.catalog.categories"}}
+                            </summary>
                             {{#each filterCategories}}
                                 <label class="rdhf-checkline">
                                     <input type="checkbox" data-filter="category" value="{{this.id}}">
@@ -128,12 +145,16 @@
                                     <span>{{this.label}}</span>
                                 </label>
                             {{/each}}
-                        </section>
+                        </details>
                     {{/if}}
 
                     {{#if filterTypes.length}}
-                        <section class="rdhf-rail-section">
-                            <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.types"}}</h4>
+                        <details class="rdhf-rail-section rdhf-rail-details" data-rail="types"
+                                 {{#if railOpen.types}}open{{/if}}>
+                            <summary class="rdhf-rail-heading">
+                                <span class="rdhf-arrow">&#9654;</span>
+                                {{localize "RDHF.catalog.types"}}
+                            </summary>
                             {{#each filterTypes}}
                                 <label class="rdhf-checkline">
                                     <input type="checkbox" data-filter="type" value="{{this.id}}">
@@ -141,7 +162,7 @@
                                     <span>{{this.label}}</span>
                                 </label>
                             {{/each}}
-                        </section>
+                        </details>
                     {{/if}}
 
                     <section class="rdhf-rail-section">
@@ -165,6 +186,10 @@
                         </button>
                         <button type="button" class="rdhf-text-btn" data-action="pruneOrphans">
                             <i class="fa-solid fa-broom"></i> {{localize "RDHF.registry.prune"}}
+                        </button>
+                        <button type="button" class="rdhf-text-btn" data-action="resyncAll"
+                                data-tooltip="{{localize 'RDHF.registry.resyncAllTooltip'}}">
+                            <i class="fa-solid fa-arrows-rotate"></i> {{localize "RDHF.registry.resyncAll"}}
                         </button>
                     </footer>
                 </aside>
@@ -190,6 +215,11 @@
                                         <div class="rdhf-feat-main">
                                             <div class="rdhf-feat-titleline">
                                                 <span class="rdhf-feat-name">{{this.name}}</span>
+                                                {{!-- Everything from here to the close of
+                                                      this span is rebuilt in place by
+                                                      _refreshRow() as the GM edits, so the
+                                                      chips never lag a re-render behind. --}}
+                                                <span class="rdhf-reg-chips">
                                                 <span class="rdhf-chip rdhf-chip--level">{{localize "RDHF.catalog.levelShort"}} {{this.level}}</span>
                                                 {{#if this.categoryLabel}}
                                                     <span class="rdhf-chip rdhf-chip--category">{{this.categoryLabel}}</span>
@@ -216,6 +246,7 @@
                                                         <i class="fa-solid fa-hand-pointer"></i>
                                                     </span>
                                                 {{/if}}
+                                                </span>
                                             </div>
                                             {{#if this.teaser}}
                                                 <p class="rdhf-feat-teaser">{{this.teaser}}</p>
@@ -223,6 +254,11 @@
                                         </div>
 
                                         <div class="rdhf-feat-controls">
+                                            <button type="button" class="rdhf-icon-btn"
+                                                    data-action="resyncFeat"
+                                                    data-tooltip="{{localize 'RDHF.registry.resyncFeatTooltip'}}">
+                                                <i class="fa-solid fa-arrows-rotate"></i>
+                                            </button>
                                             {{#if this.registered}}
                                                 <button type="button" class="rdhf-icon-btn rdhf-danger"
                                                         data-action="removeFeat"
@@ -262,6 +298,20 @@
                                                       placeholder="{{this.autoSummary}}">{{this.summaryText}}</textarea>
                                         </label>
                                         <p class="rdhf-hint">{{localize "RDHF.registry.summaryHint"}}</p>
+
+                                        {{!-- The placeholder showing the auto-summary
+                                              disappears the moment the GM types, so the
+                                              source text needs a home of its own. Loaded
+                                              lazily on first open. --}}
+                                        <details class="rdhf-desc-panel">
+                                            <summary class="rdhf-desc-summary">
+                                                <span class="rdhf-arrow">&#9654;</span>
+                                                {{localize "RDHF.registry.fullDescription"}}
+                                            </summary>
+                                            <div class="rdhf-desc-body" data-loaded="false">
+                                                <p class="rdhf-loading">{{localize "RDHF.catalog.loading"}}</p>
+                                            </div>
+                                        </details>
 
                                         <fieldset class="rdhf-fieldset">
                                             <legend>{{localize "RDHF.registry.types"}}</legend>
@@ -304,6 +354,10 @@
                                             <input type="text" class="rdhf-wide rdhf-droppable" data-field="features"
                                                    value="{{this.featuresText}}"
                                                    placeholder="{{localize 'RDHF.registry.featuresPlaceholder'}}">
+                                            {{!-- Filled by _renderReferenceChips(): a raw
+                                                  UUID tells the GM nothing about what they
+                                                  just dropped. --}}
+                                            <div class="rdhf-ref-chips"></div>
 
                                             <div class="rdhf-field-grid">
                                                 <label>
@@ -317,20 +371,12 @@
                                             </div>
 
                                             <h5 class="rdhf-sub">{{localize "RDHF.registry.investment"}}</h5>
-                                            {{#each this.investment}}
-                                                <div class="rdhf-investment-row">
-                                                    <select data-field="investmentCategory" data-index="{{this.index}}">
-                                                        {{#each this.options}}
-                                                            <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
-                                                        {{/each}}
-                                                    </select>
-                                                    <input type="number" min="1" data-field="investmentCount" data-index="{{this.index}}" value="{{this.count}}">
-                                                    <button type="button" class="rdhf-icon-btn rdhf-danger"
-                                                            data-action="removeInvestment" data-index="{{this.index}}">
-                                                        <i class="fa-solid fa-xmark"></i>
-                                                    </button>
-                                                </div>
-                                            {{/each}}
+                                            <p class="rdhf-hint">{{localize "RDHF.registry.investmentHint"}}</p>
+                                            {{!-- Rows are built by _renderInvestment().
+                                                  Adding one used to re-render the whole
+                                                  window, which threw the GM back to the
+                                                  top of the list. --}}
+                                            <div class="rdhf-investment-list"></div>
                                             <button type="button" class="rdhf-text-btn" data-action="addInvestment">
                                                 <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addInvestment"}}
                                             </button>
@@ -360,13 +406,23 @@
                     <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.categories"}}</h4>
                     <p class="rdhf-hint">{{localize "RDHF.registry.categoriesHint"}}</p>
                     {{#each categories}}
-                        <div class="rdhf-taxonomy-row" data-entry-id="{{this.id}}">
-                            <input type="text" data-field="category.label" value="{{this.resolved}}">
+                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}}" data-entry-id="{{this.id}}">
+                            {{#if this.fixed}}
+                                {{!-- General is the Category that lets a feat be curated
+                                      without inventing a filing system, so it may not be
+                                      renamed or deleted. Its icon is still the GM's. --}}
+                                <input type="text" value="{{this.resolved}}" readonly
+                                       data-tooltip="{{localize 'RDHF.registry.fixedCategoryTooltip'}}">
+                            {{else}}
+                                <input type="text" data-field="category.label" value="{{this.resolved}}">
+                            {{/if}}
                             <input type="text" class="rdhf-icon-input" data-field="category.icon" value="{{this.icon}}"
                                    placeholder="fa-solid fa-flask">
-                            <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeCategory">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
+                            {{#unless this.fixed}}
+                                <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeCategory">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            {{/unless}}
                         </div>
                     {{/each}}
                     <button type="button" class="rdhf-text-btn" data-action="addCategory">

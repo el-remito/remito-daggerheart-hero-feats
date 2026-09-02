@@ -35,6 +35,8 @@ scripts/
   data/
     registry.mjs            compendium pack indexing, feat records, GM mutations
     actor-state.mjs         the ONLY place actor flags are touched; snapshot, grant, revoke, points
+    resync.mjs              pushing an edited source Feature back to the copies characters own
+    migrations.mjs          one-way world data migrations, run once each by the GM on ready
   logic/                    PURE — plain values in, plain values out
     requirements.mjs        structured checks + the AND/OR expression grammar
     points.mjs              total / spent / remaining
@@ -61,11 +63,12 @@ World setting `registry`:
       types: ['combat'],
       hidden: false,             // GM secret: withheld even once curated
       summary: '',               // GM teaser; blank falls back to the description
+      standalone: false,         // registered by drag and drop, not from a pack source
       requirements: {
         resources: { hitPoints, stress, hope, evasion },   // minimum MAX values
         traits:    { agility … knowledge },
         features: [], classes: [], subclasses: [],          // any-of within each list
-        categoryInvestment: [{ category, count }],
+        categoryInvestment: [{ category, count, join }],   // join: connector to the PREVIOUS row
         expression: ''                                      // optional escape hatch
       }
     }
@@ -74,8 +77,22 @@ World setting `registry`:
 ```
 
 World settings `categories` / `types` are `[{ id, label, icon, description }]`. A `label` starting
-with `RDHF.` is an i18n key (the seeded types); anything else is literal GM text. Editing a seeded
+with `RDHF.` is an i18n key (the seeded entries); anything else is literal GM text. Editing a seeded
 label in the Taxonomy tab converts it to literal text — that is intended.
+
+**`general` is a fixed Category**, seeded from `DEFAULT_CATEGORIES` and re-inserted by
+`getCategories()` if a world ever loses it. It exists so a feat can be *curated* — and therefore
+visible to players — without the GM inventing a filing system first. `isFixedCategory()` gates
+renaming and deletion. It was a *type* until v1.1.0, which could never lift a feat out of uncurated;
+migration 1 files General-typed uncategorised feats under it and strips the type everywhere.
+
+**Ordering lives in the accessors**, not at the call sites: `getCategories()` returns General first
+then alphabetical by displayed label, `getTypes()` alphabetical. That is the only way the two filter
+rails, the curation dropdowns and the Taxonomy tab can be guaranteed to agree.
+
+`SETTINGS.MIGRATION` holds an integer against `MIGRATION_VERSION`. A migration that throws leaves
+the number alone and is retried next load rather than half-applying and being forgotten. Migrations
+are GM-only, so every read path still has to tolerate un-migrated data.
 
 Actor flag `actor.flags['remito-daggerheart-hero-feats'].state`:
 
@@ -156,6 +173,28 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **Formula evaluation goes through `Roll`**, never `eval` or `new Function`. The registry's live
   preview uses the system's own idiom — `Roll.replaceFormulaData` then `Roll.safeEval` — because a
   point pool has no business rolling dice.
+- **One precedence rule for the whole module.** Investment in Category rows carry a `join` to the
+  *previous* row (so the first never has one) and evaluate left to right with AND binding tighter
+  than OR — identical to the expression grammar. `checkRequirements` emits ONE descriptor for the
+  whole chain, never one per row: with OR in play a single unmet row is not a failure, and a per-row
+  chip would contradict the evaluation. The connectors are localized in the app layer from
+  `data.parts`, which is what keeps `logic/` free of `game.i18n`.
+- **An acquired Feat is a COPY, and re-sync is the deliberate bridge.** `grantFeat` embeds
+  `source.toObject()`, which is what makes a Feat behave like any other Feature and lets revoke
+  delete exactly the right item — at the cost that editing the source never reaches existing owners.
+  `data/resync.mjs` rewrites each owner's copy in place, keeping `_id` (the acquisition record
+  stores it) and `sort` (so the sheet does not reshuffle), and updates with **`recursive: false`**
+  so an action or effect *removed* from the source is actually removed rather than merged back in.
+- **Derived state is repainted, not re-rendered.** `_refreshRow()` rewrites a registry row's chips,
+  classes, `data-*` and the tab badge straight from the working copy on every edit. Anything built
+  in JS rather than Handlebars — atom buttons, investment rows, reference chips — exists for the
+  same reason: `render()` resets scroll and steals focus, and a GM adding a requirement row should
+  not be thrown to the top of a long list.
+- **Drops are targeted, not global.** `ApplicationV2` gives no per-element drop option, so the
+  DragDrop binds the whole window; `_onDrop` therefore tests the target itself. Only
+  `.rdhf-dropzone` registers a new Feat. A requirement field accepts a drop from any tab, and
+  anything else is refused with a hint — otherwise curating on the Feats tab silently registered
+  new source feats.
 
 ## Known scope simplifications
 
@@ -170,3 +209,9 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   ordinary types. Category is handled by its own filter section rather than as a pseudo-type.
 - `categoryInvestment` counts acquired feats per Category including GM-granted ones.
 - No chat integration, no socket traffic, no compendium shipped with the module.
+- Re-sync is manual and GM-triggered. There is no automatic propagation on `updateItem`: it would
+  be silent, would fire on every save, and has no undo. The document hooks only drop the caches.
+- The catalog's cached pack index and enriched descriptions are invalidated on `updateItem` /
+  `deleteItem` / `createItem` for non-embedded Features, which re-renders open catalogs. The
+  registry app is deliberately NOT re-rendered there — it holds an unsaved working copy and the GM
+  may be mid-edit; its next render re-reads the now-empty caches anyway.

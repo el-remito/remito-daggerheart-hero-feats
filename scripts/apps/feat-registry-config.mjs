@@ -14,7 +14,8 @@ import {
   TRAITS,
   RESOURCE_REQS,
   ITEM_TYPES,
-  SETTINGS
+  SETTINGS,
+  GENERAL_CATEGORY_ID
 } from '../constants.mjs';
 import {
   getRegistry,
@@ -24,15 +25,19 @@ import {
   getTypes,
   setTypes,
   getPointFormula,
-  taxonomyLabel
+  taxonomyLabel,
+  isFixedCategory
 } from '../settings.mjs';
 import {
   loadAllSourceFeatures,
   normalizeFeat,
   blankFeat,
   isUncurated,
-  invalidatePackCache
+  invalidatePackCache,
+  getEnrichedDescription,
+  resolveQuietly
 } from '../data/registry.mjs';
+import { countAffected, resyncAll, resyncFeat } from '../data/resync.mjs';
 import { ATOMS, blankRequirements } from '../logic/requirements.mjs';
 import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/filters.mjs';
 
@@ -57,6 +62,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   #formula = null;
   #dragDrop = null;
   #openFeats = new Set();
+  /** uuid -> source Feature name, for resolving requirement reference chips. */
+  #sourceNames = new Map();
 
   constructor(options = {}) {
     super(options);
@@ -64,6 +71,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._filters = blankFilterState();
     this._uncuratedOnly = false;
     this._hiddenOnly = false;
+    this._sourceSearch = '';
+    // Rail sections are collapsible; which ones are open survives a re-render.
+    this._railOpen = { categories: true, types: true };
   }
 
   static DEFAULT_OPTIONS = {
@@ -91,6 +101,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       importRegistry: FeatRegistryConfig._onImport,
       pruneOrphans: FeatRegistryConfig._onPrune,
       clearRegFilters: FeatRegistryConfig._onClearRegFilters,
+      resyncFeat: FeatRegistryConfig._onResyncFeat,
+      resyncAll: FeatRegistryConfig._onResyncAll,
+      removeReference: FeatRegistryConfig._onRemoveReference,
+      openReference: FeatRegistryConfig._onOpenReference,
       save: FeatRegistryConfig._onSave
     }
   };
@@ -127,6 +141,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.#openFeats = new Set(
       [...this.element.querySelectorAll(`.${PREFIX}-reg-feat[open]`)].map(el => el.dataset.uuid)
     );
+    for (const rail of this.element.querySelectorAll(`.${PREFIX}-rail-details[data-rail]`)) {
+      this._railOpen[rail.dataset.rail] = rail.open;
+    }
   }
 
   async _prepareContext(_options) {
@@ -138,6 +155,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // The working copy, so a source added or a Feature dropped this session shows up
     // immediately instead of only after Save-and-reopen.
     const sources = await loadAllSourceFeatures(this.#config);
+    this.#sourceNames = new Map([...sources].map(([uuid, src]) => [uuid, src.name]));
     const categoryOptions = this.#categories.map(c => ({
       id: c.id,
       label: taxonomyLabel(c),
@@ -188,6 +206,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
             id => taxonomyLabel(this.#types.find(t => t.id === id)) || id
           ),
           typesAttr: (feat.types ?? []).join('|'),
+          // Investment rows and reference chips are built in _onRender rather than here,
+          // so adding one costs no re-render. Only the raw data travels.
+          investment: feat.requirements.categoryInvestment,
           searchText: [source.name, source.summary, feat.summary]
             .filter(Boolean)
             .join(' ')
@@ -202,11 +223,15 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       isFeats: this._tab === 'feats',
       isTaxonomy: this._tab === 'taxonomy',
       isPoints: this._tab === 'points',
-      sources: (this.#config.sources ?? []).map(s => ({
-        ...s,
-        label: game.packs.get(s.packId)?.metadata?.label ?? s.packId,
-        missing: !game.packs.get(s.packId)
-      })),
+      sources: (this.#config.sources ?? []).map(s => {
+        const label = game.packs.get(s.packId)?.metadata?.label ?? s.packId;
+        return {
+          ...s,
+          label,
+          missing: !game.packs.get(s.packId),
+          searchText: `${label} ${s.packId}`.toLowerCase()
+        };
+      }),
       availablePacks: game.packs
         .filter(p => p.documentName === 'Item' && !(this.#config.sources ?? []).some(s => s.packId === p.collection))
         .map(p => ({ id: p.collection, label: `${p.metadata.label} (${p.collection})` }))
@@ -215,7 +240,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       standaloneFeats: feats.filter(f => f.standalone),
       featCount: feats.length,
       uncuratedCount: feats.filter(f => f.uncurated).length,
-      categories: this.#categories.map(c => ({ ...c, resolved: taxonomyLabel(c) })),
+      categories: this.#categories.map(c => ({
+        ...c,
+        resolved: taxonomyLabel(c),
+        fixed: isFixedCategory(c.id)
+      })),
       types: this.#types.map(t => ({ ...t, resolved: taxonomyLabel(t) })),
       formula: this.#formula,
       formulaPreview: this._previewFormula(),
@@ -223,7 +252,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       filterTypes: typeOptions,
       filters: this._filters,
       uncuratedOnly: this._uncuratedOnly,
-      hiddenOnly: this._hiddenOnly
+      hiddenOnly: this._hiddenOnly,
+      sourceSearch: this._sourceSearch,
+      railOpen: this._railOpen
     };
   }
 
@@ -282,7 +313,35 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       });
     }
 
+    // Sources tab: one search over both lists, filtered in place like every other
+    // search in this module.
+    const sourceSearch = el.querySelector(`.${PREFIX}-source-search`);
+    sourceSearch?.addEventListener('input', () => {
+      this._sourceSearch = sourceSearch.value;
+      this._applySourceFilter();
+    });
+
+    // Lazily enrich the full description the first time its panel is opened. It is a
+    // compendium document more often than not, so it cannot resolve synchronously.
+    for (const panel of el.querySelectorAll(`.${PREFIX}-desc-panel`)) {
+      panel.addEventListener('toggle', () => {
+        if (panel.open) this._loadFullDescription(panel);
+      });
+      if (panel.open) this._loadFullDescription(panel);
+    }
+
+    for (const row of el.querySelectorAll(`.${PREFIX}-reg-feat[data-uuid]`)) {
+      this._renderInvestment(row);
+      this._renderReferenceChips(row);
+      // On change rather than input: re-chipping every keystroke would fire a document
+      // lookup for each half-typed UUID, and the chips would flicker while typing.
+      row
+        .querySelector('[data-field="features"]')
+        ?.addEventListener('change', () => this._renderReferenceChips(row));
+    }
+
     this._renderAtomRows();
+    this._applySourceFilter();
     this._applyRegFilters();
 
     const scroller = el.querySelector(`.${PREFIX}-reg-scroll`);
@@ -324,6 +383,279 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         row.appendChild(button);
       }
     }
+  }
+
+  /**
+   * Repaints one row's chips, classes and data attributes from the working copy.
+   *
+   * Called on every edit because the chips are derived state: without this, ticking
+   * "Hide from players" or choosing a Category left the Hidden and Uncurated chips
+   * showing the old answer until the GM switched tabs and came back. Also refreshes the
+   * tab badge and re-runs the filters, since both read the same derived state.
+   *
+   * @param {string} uuid
+   */
+  _refreshRow(uuid) {
+    // Matched in JS rather than through an attribute selector: a UUID is full of dots
+    // and would need escaping to survive one, for no gain over a direct comparison.
+    const row = [...(this.element?.querySelectorAll(`.${PREFIX}-reg-feat[data-uuid]`) ?? [])].find(
+      el => el.dataset.uuid === uuid
+    );
+    if (!row) return;
+    const feat = normalizeFeat(uuid, this.#config.feats?.[uuid]);
+    const uncurated = isUncurated(feat);
+
+    row.dataset.level = String(feat.level);
+    row.dataset.category = feat.category ?? '';
+    row.dataset.types = (feat.types ?? []).join('|');
+    row.dataset.uncurated = String(uncurated);
+    row.dataset.hidden = String(feat.hidden);
+    row.classList.toggle('is-uncurated', uncurated);
+    row.classList.toggle('is-hidden', feat.hidden);
+
+    const chips = row.querySelector(`.${PREFIX}-reg-chips`);
+    if (chips) chips.replaceChildren(...this._buildChips(feat, uncurated));
+
+    const badge = this.element.querySelector(`.${PREFIX}-tab-badge`);
+    const outstanding = Object.keys(this.#config.feats ?? {}).length
+      ? [...this.element.querySelectorAll(`.${PREFIX}-reg-feat`)].filter(
+          r => r.dataset.uncurated === 'true'
+        ).length
+      : 0;
+    if (badge) {
+      badge.textContent = String(outstanding);
+      badge.hidden = outstanding === 0;
+    }
+
+    this._applyRegFilters();
+  }
+
+  /** One chip element. Kept tiny because _buildChips calls it six times a row. */
+  _chip(modifier, text, { icon = null, tooltip = null } = {}) {
+    const chip = document.createElement('span');
+    chip.className = `${PREFIX}-chip ${PREFIX}-chip--${modifier}`;
+    if (tooltip) chip.dataset.tooltip = tooltip;
+    if (icon) {
+      const i = document.createElement('i');
+      i.className = icon;
+      chip.appendChild(i);
+    }
+    if (text) chip.appendChild(document.createTextNode(text));
+    return chip;
+  }
+
+  /** The chip row for one feat, mirroring what the template renders on a full pass. */
+  _buildChips(feat, uncurated) {
+    const chips = [
+      this._chip('level', `${game.i18n.localize('RDHF.catalog.levelShort')} ${feat.level}`)
+    ];
+
+    if (feat.category) {
+      const entry = this.#categories.find(c => c.id === feat.category);
+      chips.push(this._chip('category', taxonomyLabel(entry) || feat.category));
+    }
+    for (const id of feat.types ?? []) {
+      const entry = this.#types.find(t => t.id === id);
+      chips.push(this._chip('type', taxonomyLabel(entry) || id));
+    }
+    if (uncurated) {
+      chips.push(
+        this._chip('uncurated', game.i18n.localize('RDHF.catalog.uncurated'), {
+          tooltip: game.i18n.localize('RDHF.catalog.uncuratedTooltip')
+        })
+      );
+    }
+    if (feat.hidden) {
+      chips.push(
+        this._chip('hidden', game.i18n.localize('RDHF.catalog.hidden'), {
+          icon: 'fa-solid fa-eye-slash',
+          tooltip: game.i18n.localize('RDHF.catalog.hiddenTooltip')
+        })
+      );
+    }
+    if (feat.standalone) {
+      chips.push(
+        this._chip('standalone', '', {
+          icon: 'fa-solid fa-hand-pointer',
+          tooltip: game.i18n.localize('RDHF.registry.standaloneTooltip')
+        })
+      );
+    }
+    return chips;
+  }
+
+  /** Filters both Sources lists in place. No re-render, so the box keeps focus. */
+  _applySourceFilter() {
+    const el = this.element;
+    if (!el) return;
+    const query = this._sourceSearch.trim().toLowerCase();
+
+    for (const list of el.querySelectorAll(`.${PREFIX}-source-list`)) {
+      let visible = 0;
+      for (const item of list.querySelectorAll(`.${PREFIX}-source`)) {
+        const show = !query || (item.dataset.sourceSearch ?? '').includes(query);
+        item.hidden = !show;
+        if (show) visible++;
+      }
+      const empty = list.nextElementSibling;
+      if (empty?.classList.contains(`${PREFIX}-source-empty`)) empty.hidden = visible > 0;
+    }
+  }
+
+  /**
+   * Rebuilds one feat's Investment in Category rows from the working copy.
+   *
+   * Rebuilt wholesale rather than patched, because removing a row shifts every later
+   * row's index and the join selector on the new first row has to disappear. Doing it
+   * here instead of through render() is what keeps the scroll position still.
+   *
+   * @param {HTMLElement} row  the feat's <details>
+   */
+  _renderInvestment(row) {
+    const list = row.querySelector(`.${PREFIX}-investment-list`);
+    if (!list) return;
+    const uuid = row.dataset.uuid;
+    const feat = this.#config.feats?.[uuid];
+    const rules = feat?.requirements?.categoryInvestment ?? [];
+    list.replaceChildren();
+
+    rules.forEach((rule, index) => {
+      const line = document.createElement('div');
+      line.className = `${PREFIX}-investment-row`;
+
+      // The connector to the PREVIOUS row, so the first row never shows one. AND binds
+      // tighter than OR, matching the expression grammar.
+      if (index > 0) {
+        const join = document.createElement('select');
+        join.className = `${PREFIX}-join-select`;
+        join.dataset.field = 'investmentJoin';
+        join.dataset.index = String(index);
+        for (const value of ['and', 'or']) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = game.i18n.localize(
+            value === 'or' ? 'RDHF.requirement.joinOr' : 'RDHF.requirement.joinAnd'
+          );
+          option.selected = (rule.join ?? 'and') === value;
+          join.appendChild(option);
+        }
+        join.addEventListener('change', () => this._syncField(join));
+        line.appendChild(join);
+      } else {
+        line.appendChild(document.createElement('span'));
+      }
+
+      const category = document.createElement('select');
+      category.dataset.field = 'investmentCategory';
+      category.dataset.index = String(index);
+      for (const entry of this.#categories) {
+        const option = document.createElement('option');
+        option.value = entry.id;
+        option.textContent = taxonomyLabel(entry);
+        option.selected = entry.id === rule.category;
+        category.appendChild(option);
+      }
+      category.addEventListener('change', () => this._syncField(category));
+      line.appendChild(category);
+
+      const count = document.createElement('input');
+      count.type = 'number';
+      count.min = '1';
+      count.dataset.field = 'investmentCount';
+      count.dataset.index = String(index);
+      count.value = String(rule.count ?? 1);
+      count.addEventListener('input', () => this._syncField(count));
+      line.appendChild(count);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = `${PREFIX}-icon-btn ${PREFIX}-danger`;
+      remove.dataset.action = 'removeInvestment';
+      remove.dataset.index = String(index);
+      remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      line.appendChild(remove);
+
+      list.appendChild(line);
+    });
+  }
+
+  /**
+   * Renders the "Other Feats or Features" field's current value as named chips.
+   *
+   * A dropped Feat lands in the field as a bare UUID, which tells the GM nothing about
+   * what they just added. Each chip resolves to a name, opens its source item on click,
+   * and carries its own remove button.
+   *
+   * @param {HTMLElement} row
+   */
+  _renderReferenceChips(row) {
+    const input = row.querySelector('[data-field="features"]');
+    const box = row.querySelector(`.${PREFIX}-ref-chips`);
+    if (!input || !box) return;
+
+    const refs = input.value
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+    box.replaceChildren();
+
+    for (const ref of refs) {
+      const isUuid = ref.includes('.') && !ref.includes(' ');
+      const chip = document.createElement('span');
+      chip.className = `${PREFIX}-chip ${PREFIX}-ref-chip`;
+      chip.dataset.ref = ref;
+
+      const label = document.createElement('button');
+      label.type = 'button';
+      label.className = `${PREFIX}-ref-open`;
+      // A known Feat resolves immediately; anything else shows as typed until (and
+      // unless) the async lookup below finds a document with a better name.
+      label.textContent = this.#sourceNames.get(ref) ?? ref;
+      if (isUuid) {
+        label.dataset.action = 'openReference';
+        label.dataset.tooltip = game.i18n.localize('RDHF.registry.openReference');
+      } else {
+        label.disabled = true;
+      }
+      chip.appendChild(label);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = `${PREFIX}-ref-remove`;
+      remove.dataset.action = 'removeReference';
+      remove.dataset.tooltip = game.i18n.localize('RDHF.registry.removeReference');
+      remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      chip.appendChild(remove);
+
+      box.appendChild(chip);
+
+      // A UUID from an unregistered pack is not in #sourceNames; fetch its name once.
+      if (isUuid && !this.#sourceNames.has(ref)) {
+        resolveQuietly(ref).then(doc => {
+          if (!doc?.name || !label.isConnected) return;
+          this.#sourceNames.set(ref, doc.name);
+          label.textContent = doc.name;
+        });
+      }
+    }
+  }
+
+  /** Writes a reference list back to the field and re-chips it. */
+  _setReferences(row, refs) {
+    const input = row.querySelector('[data-field="features"]');
+    if (!input) return;
+    input.value = refs.join(', ');
+    this._syncField(input);
+    this._renderReferenceChips(row);
+  }
+
+  /** Loads the source Feature's enriched description into an open panel, once. */
+  async _loadFullDescription(panel) {
+    const body = panel.querySelector(`.${PREFIX}-desc-body`);
+    const uuid = panel.closest('[data-uuid]')?.dataset.uuid;
+    if (!body || !uuid || body.dataset.loaded === 'true') return;
+    body.dataset.loaded = 'true';
+    body.innerHTML = await getEnrichedDescription(uuid);
   }
 
   /** Shows or hides curation rows to match the filters. No re-render. */
@@ -394,6 +726,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       case 'hidden':
         feat.hidden = value === true;
         break;
+      case 'investmentJoin':
+        feat.requirements.categoryInvestment[Number(input.dataset.index)].join =
+          value === 'or' ? 'or' : 'and';
+        break;
       case 'type': {
         const set = new Set(feat.types);
         value ? set.add(input.value) : set.delete(input.value);
@@ -424,6 +760,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         feat.requirements.expression = String(value);
         break;
     }
+
+    // Every one of these can change what the row's chips say, so repaint them now
+    // rather than waiting for the next full render.
+    if (['level', 'category', 'type', 'hidden'].includes(field)) this._refreshRow(uuid);
   }
 
   /* ── Drag and drop ───────────────────────────────────────────────────────── */
@@ -447,11 +787,20 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
-    // Target A: an "Other Feats or Features" requirement field.
+    // Target A: an "Other Feats or Features" requirement field. Works from any tab,
+    // because that is where the GM is when they want it.
     const refInput = event.target?.closest?.('[data-field="features"]');
     if (refInput) return this._addFeatureReference(refInput, item);
 
-    // Target B: anywhere else on the window — register the Feature as a Feat.
+    // Target B: the Sources drop zone, and ONLY the drop zone. The DragDrop binding
+    // covers the whole window (ApplicationV2 gives no per-element option), so without
+    // this test a Feature dropped while curating on the Feats tab was silently
+    // registered as a new source feat — never what the GM meant.
+    if (!event.target?.closest?.(`.${PREFIX}-dropzone`)) {
+      ui.notifications?.info(game.i18n.localize('RDHF.notify.dropOnZone'));
+      return;
+    }
+
     const uuid = item.uuid;
     if (this.#config.feats[uuid]) {
       ui.notifications?.info(game.i18n.format('RDHF.notify.alreadyRegistered', { name: item.name }));
@@ -482,6 +831,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     input.value = existing.join(', ');
     // Fire input so the normal [data-field] sync listener writes it to the working copy.
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.#sourceNames.set(ref, item.name);
+    const row = input.closest(`.${PREFIX}-reg-feat`);
+    if (row) this._renderReferenceChips(row);
     ui.notifications?.info(game.i18n.format('RDHF.notify.featureRefAdded', { name: item.name }));
   }
 
@@ -534,6 +886,12 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   static async _onRemoveCategory(event, target) {
     event.preventDefault();
     const id = target.closest('[data-entry-id]')?.dataset.entryId;
+    // The template hides this button for a fixed Category; the guard is here because
+    // an imported registry could still be carrying one that has to survive.
+    if (isFixedCategory(id)) {
+      ui.notifications?.warn(game.i18n.localize('RDHF.notify.fixedCategory'));
+      return;
+    }
     const inUse = Object.values(this.#config.feats ?? {}).filter(f => f.category === id).length;
 
     const confirmed = await foundry.applications.api.DialogV2.confirm({
@@ -578,21 +936,119 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.render();
   }
 
+  /**
+   * Adds an investment row. Rebuilds only that block — this used to call render(),
+   * which threw the GM back to the top of a long Feats list every single time.
+   */
   static _onAddInvestment(event, target) {
     event.preventDefault();
-    const uuid = target.closest('[data-uuid]')?.dataset.uuid;
+    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const uuid = row?.dataset.uuid;
+    if (!uuid) return;
     const feat = (this.#config.feats[uuid] ??= blankFeat(uuid));
     feat.requirements ??= blankRequirements();
-    feat.requirements.categoryInvestment.push({ category: this.#categories[0]?.id ?? '', count: 1 });
-    this.render();
+    feat.requirements.categoryInvestment.push({
+      category: this.#categories.find(c => c.id === GENERAL_CATEGORY_ID)?.id ??
+        this.#categories[0]?.id ??
+        '',
+      count: 1,
+      join: 'and'
+    });
+    this._renderInvestment(row);
   }
 
   static _onRemoveInvestment(event, target) {
     event.preventDefault();
-    const uuid = target.closest('[data-uuid]')?.dataset.uuid;
+    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const uuid = row?.dataset.uuid;
     const index = Number(target.dataset.index);
     this.#config.feats[uuid]?.requirements?.categoryInvestment.splice(index, 1);
-    this.render();
+    if (row) this._renderInvestment(row);
+  }
+
+  /** Removes one requirement reference chip and rewrites the field behind it. */
+  static _onRemoveReference(event, target) {
+    event.preventDefault();
+    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const ref = target.closest('[data-ref]')?.dataset.ref;
+    const input = row?.querySelector('[data-field="features"]');
+    if (!row || !input || ref === undefined) return;
+    const refs = input.value
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean)
+      .filter(v => v !== ref);
+    this._setReferences(row, refs);
+  }
+
+  /** Opens the Feature a reference chip points at, in its own sheet. */
+  static async _onOpenReference(event, target) {
+    event.preventDefault();
+    const ref = target.closest('[data-ref]')?.dataset.ref;
+    if (!ref) return;
+    const doc = await resolveQuietly(ref);
+    if (!doc) {
+      ui.notifications?.warn(game.i18n.format('RDHF.notify.sourceMissing', { uuid: ref }));
+      return;
+    }
+    doc.sheet?.render(true);
+  }
+
+  /**
+   * Pushes one feat's source back out to every character who owns it.
+   *
+   * The confirmation names the count first, because this overwrites whatever those
+   * characters' copies currently hold — including any per-character edits.
+   */
+  static async _onResyncFeat(event, target) {
+    event.preventDefault();
+    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const uuid = row?.dataset.uuid;
+    if (!uuid) return;
+
+    const { acquisitions } = countAffected([uuid]);
+    if (!acquisitions) {
+      ui.notifications?.info(game.i18n.localize('RDHF.notify.resyncNobody'));
+      return;
+    }
+
+    const name = foundry.utils.escapeHTML(row.querySelector(`.${PREFIX}-feat-name`)?.textContent ?? uuid);
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('RDHF.registry.resyncTitle') },
+      content:
+        `<p>${game.i18n.format('RDHF.registry.resyncFeatBody', { name, count: acquisitions })}</p>` +
+        `<p class="${PREFIX}-warning">${game.i18n.localize('RDHF.registry.resyncWarning')}</p>`
+    });
+    if (!confirmed) return;
+
+    const result = await resyncFeat(uuid);
+    ui.notifications?.info(game.i18n.format('RDHF.notify.resynced', { count: result.updated }));
+  }
+
+  /** The same, for every registered feat at once. */
+  static async _onResyncAll(event) {
+    event.preventDefault();
+    const { feats, characters, acquisitions } = countAffected();
+    if (!acquisitions) {
+      ui.notifications?.info(game.i18n.localize('RDHF.notify.resyncNobody'));
+      return;
+    }
+
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('RDHF.registry.resyncTitle') },
+      content:
+        `<p>${game.i18n.format('RDHF.registry.resyncAllBody', { feats, characters, count: acquisitions })}</p>` +
+        `<p class="${PREFIX}-warning">${game.i18n.localize('RDHF.registry.resyncWarning')}</p>`
+    });
+    if (!confirmed) return;
+
+    const result = await resyncAll();
+    ui.notifications?.info(game.i18n.format('RDHF.notify.resynced', { count: result.updated }));
+    if (result.missing.length) {
+      ui.notifications?.warn(
+        game.i18n.format('RDHF.notify.resyncMissing', { count: result.missing.length })
+      );
+    }
   }
 
   static _onExport(event) {

@@ -791,17 +791,6 @@ details[open] > summary .rdhf-arrow {
     width: 100%;
 }
 
-.rdhf-investment-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 4px;
-}
-
-.rdhf-investment-row input[type='number'] {
-    width: 70px;
-}
-
 .rdhf-atom-row {
     display: flex;
     flex-wrap: wrap;
@@ -1028,4 +1017,132 @@ details[open] > summary .rdhf-arrow {
 
 .rdhf-reg-feat.is-hidden {
     border-left: 3px solid var(--rdhf-unmet);
+}
+
+/* ── v1.1: collapsible rails, description panel, reference chips, re-sync ──── */
+
+/* A rail section that collapses. The heading doubles as the summary, so it keeps the
+   gold uppercase treatment and gains the same arrow the feat rows use. */
+.rdhf-rail-details > summary.rdhf-rail-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.rdhf-rail-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+/* Sources tab search: full width above both lists. */
+.rdhf-source-search {
+    width: 100%;
+}
+
+/* The source Feature's own text, kept available while the GM writes the short one —
+   the field's placeholder vanishes on the first keystroke, which is the whole reason
+   this panel exists. */
+.rdhf-desc-panel {
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-deep);
+}
+
+.rdhf-desc-summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    font-family: var(--rdhf-heading);
+    font-size: var(--font-size-12, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rdhf-gold);
+}
+
+.rdhf-desc-body {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 0 10px 8px;
+    border-top: 1px solid var(--rdhf-border);
+    font-size: var(--font-size-12, 0.75rem);
+}
+
+.rdhf-desc-body img {
+    max-width: 100%;
+}
+
+/* ── Requirement reference chips ──────────────────────────────────────────── */
+
+.rdhf-ref-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 5px;
+}
+
+.rdhf-ref-chip {
+    padding: 0 2px 0 0;
+    gap: 0;
+}
+
+/* Both halves are buttons, so they have to be stripped back to plain text first. */
+.rdhf-ref-chip button {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 1.6;
+    padding: 1px 6px;
+    width: auto;
+}
+
+.rdhf-ref-open:not(:disabled):hover {
+    color: var(--rdhf-gold);
+    text-decoration: underline;
+}
+
+.rdhf-ref-open:disabled {
+    opacity: 1;
+    cursor: default;
+}
+
+.rdhf-ref-remove {
+    padding: 1px 5px !important;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-ref-remove:hover {
+    color: var(--rdhf-unmet);
+}
+
+/* ── Investment rows ──────────────────────────────────────────────────────── */
+
+.rdhf-investment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+/* Four columns: connector, category, count, remove. The empty span on the first row
+   keeps every row's category select aligned with the ones below it. */
+.rdhf-investment-row {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) 70px auto;
+    align-items: center;
+    gap: 6px;
+}
+
+.rdhf-join-select {
+    text-transform: uppercase;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-gold);
+}
+
+/* ── Taxonomy: the fixed Category ─────────────────────────────────────────── */
+
+.rdhf-taxonomy-row.is-fixed input[readonly] {
+    color: var(--rdhf-ink-muted);
+    border-style: dashed;
+    cursor: default;
 }
