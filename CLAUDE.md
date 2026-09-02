@@ -132,6 +132,16 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **`ApplicationV2` has NO `dragDrop` option.** Only `ActorSheetV2`/`ItemSheetV2` read one. The
   registry builds a `foundry.applications.ux.DragDrop.implementation` by hand and re-binds it in
   `_onRender`, because a re-render replaces the elements the previous bind attached to.
+- **Every `<button>` is one line tall and centres its content.** Core's
+  `a.button, button, kbd` rule (`public/css/foundry2.css`) declares
+  `display: flex; justify-content: center; height: var(--button-size); min-height: var(--button-size)`
+  with `--button-size: 2em`. A button used as a *row* — anything stacking two lines, or leading with
+  an icon the text must sit beside — is therefore cropped to 2em, its overflow paints over the rows
+  around it, and the centring drags the content back across the icon. That was the Curation queue's
+  alignment bug in v1.3.1. Any multi-line button has to restate `height: auto; min-height: 0;
+  justify-content: flex-start`. Same trap for the padding: core sets `padding: 0 0.5rem`, so a row
+  that also carries a state border (`.rdhf-cur-row.is-uncurated`'s 3px left edge) must give the
+  extra border width back as padding or the column of icons goes ragged.
 - **Compendium UUIDs cannot resolve synchronously.** `fromUuidSync` is world-documents-only, which
   is why full descriptions load lazily on row expand.
 - **Roll data — the sibling modules' note is half wrong.** `DhpActor.getRollData()`

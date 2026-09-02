@@ -1369,10 +1369,46 @@ details[open] > summary .rdhf-arrow {
     font-weight: normal;
 }
 
+/* The system paints `.dh-style table thead` solid --golden in dark mode and solid
+   dark-blue in light mode, and the module then wrote its own muted ink on top —
+   pale-on-gold one way, dark-on-dark the other, illegible both times. So the tables
+   state their own band: a deep gold that keeps the header's accent without swallowing
+   the text, identical in either theme. The leading `.rdhf` is what outweighs
+   `.dh-style table thead`.
+
+   The band is painted on the CELLS, not the row group, with the thead itself cleared:
+   that is what lets the empty top-left corner stay out of it, so the band lines up
+   with the data columns rather than reaching back over the row labels. */
+.rdhf .rdhf-heat-table thead,
+.rdhf .rdhf-ledger thead {
+    background: transparent;
+}
+
+.rdhf-heat-table thead th:not(.rdhf-heat-corner),
+.rdhf-ledger thead th {
+    background: color-mix(in srgb, var(--rdhf-gold) 38%, var(--deep-black, #0e0d15));
+}
+
+/* The totals band stays quiet — it repeats numbers already on screen. Core paints it
+   from --table-header-bg-color, which is dark in BOTH themes, so it needs saying
+   explicitly too or muted ink lands on it in light mode. */
+.rdhf .rdhf-heat-table tfoot {
+    background: var(--rdhf-panel-soft);
+}
+
 .rdhf-heat-table thead th,
 .rdhf-heat-table tfoot td,
 .rdhf-heat-table tfoot th {
     padding: 3px 6px;
+}
+
+.rdhf-heat-table thead th,
+.rdhf-ledger thead th {
+    color: var(--beige, #efe6d8);
+}
+
+.rdhf-heat-table tfoot td,
+.rdhf-heat-table tfoot th {
     color: var(--rdhf-ink-muted);
 }
 
@@ -1544,7 +1580,6 @@ details[open] > summary .rdhf-arrow {
 }
 
 .rdhf-ledger thead th {
-    color: var(--rdhf-ink-muted);
     white-space: nowrap;
 }
 
@@ -1687,6 +1722,14 @@ details[open] > summary .rdhf-arrow {
     width: 100%;
     display: flex;
     align-items: center;
+    /* Core's `button` rule pins every button to `height: var(--button-size)` (2em)
+       and centres its content. This row is two lines tall — a name over its chips —
+       so the fixed height cropped it, the overflow bled over the neighbouring rows,
+       and the centring dragged the text back across the icon. Size to content and
+       pack from the left instead. */
+    justify-content: flex-start;
+    height: auto;
+    min-height: 0;
     gap: 7px;
     padding: 5px 6px;
     text-align: left;
@@ -1709,15 +1752,21 @@ details[open] > summary .rdhf-arrow {
 
 /* A feat that has been given a Category stays in the queue until it is filed, so the
    only thing distinguishing the two states is this marker. Uncurated is the one that
-   still needs work, so it is the one that gets the accent. */
+   still needs work, so it is the one that gets the accent. The thicker border eats
+   2px of the content box and the padding gives them back — otherwise a curated row
+   and an uncurated one start their icons 2px apart. */
 .rdhf-cur-row.is-uncurated {
     border-left: 3px solid var(--rdhf-gold-soft);
+    padding-left: 4px;
 }
 
 .rdhf-cur-row-main {
     display: flex;
     flex-direction: column;
     gap: 3px;
+    /* flex-basis 0 with min-width 0 is what lets a long name ellipsis instead of
+       widening the row past the queue column. */
+    flex: 1 1 0;
     min-width: 0;
 }
 

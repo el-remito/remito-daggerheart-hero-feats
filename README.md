@@ -154,6 +154,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.3.1
+- **The Curation queue lines up.** Every row is a button, and Foundry pins buttons to a fixed one-line height — so a row carrying a name above its chips was cropped, spilled over its neighbours and shoved its own text back across the icon. Rows now size to their content
+- **Table headers are readable again.** The Daggerheart system paints a table's header row solid gold in dark mode and solid dark blue in light mode, and the header text was landing pale-on-gold one way and dark-on-dark the other. The Statistics grids and the character ledger now use a deep gold band of their own, legible in both themes
+
 ### v1.3.0
 - **Curation tab** — a queue of every uncurated Feat beside a single-feat editor holding only the fields you actually set while sorting a catalog: Level, Category, Types, both descriptions, prerequisite Feats, Trait minimums and Category investment. The rarer ones (Hide from players, resource minimums, Class / Subclass, the raw expression) are one click away under **More fields**. The full description is shown next to the teaser box on purpose — reading the Feature is how the teaser gets written
 - **File saves immediately** — filing a Feat writes that one Feat straight to your world, so a long curation pass can never be lost and you never curate the same Feat twice. It writes *only* that Feat: sources, taxonomy and the point formula are still working copies and still need **Save**
