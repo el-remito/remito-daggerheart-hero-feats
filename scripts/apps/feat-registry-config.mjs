@@ -36,7 +36,8 @@ import {
   isUncurated,
   invalidatePackCache,
   getEnrichedDescription,
-  resolveQuietly
+  resolveQuietly,
+  saveFeatEntry
 } from '../data/registry.mjs';
 import { countAffected, resyncAll, resyncFeat } from '../data/resync.mjs';
 import { gatherLedger } from '../data/analytics.mjs';
@@ -47,6 +48,7 @@ import {
 } from '../logic/statistics.mjs';
 import { ATOMS, blankRequirements } from '../logic/requirements.mjs';
 import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/filters.mjs';
+import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -75,6 +77,18 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   #formula = null;
   #dragDrop = null;
   #openFeats = new Set();
+  /**
+   * A deep clone of the working copy as it stood at the last commit, so close() can
+   * tell an untouched registry from an edited one. A snapshot rather than a flag set
+   * at every mutation site: there are a dozen of those and a future one that forgot
+   * the flag would silently discard the GM's work again.
+   *
+   * Held as an object, not a string, because Curation's File writes one feat through
+   * and has to rebase exactly that key without claiming the rest of the session is
+   * saved. Comparison is by stable JSON, so a rebased key landing in a different
+   * position never reads as an edit.
+   */
+  #baseline = null;
   /** uuid -> source Feature name, for resolving requirement reference chips. */
   #sourceNames = new Map();
 
@@ -89,6 +103,19 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._railOpen = { categories: true, types: true };
     // Which axis the statistics grid is showing. Swapping it repaints, never renders.
     this._statsAxis = 'category';
+
+    /* Curation queue state. All three are session-local by design: the queue is
+       DERIVED from "has no Category", so anything left half-done is simply back the
+       next time the registry opens. Nothing here is stored, and there is no migration. */
+    // Feats that have appeared in the queue at least once. Keeps a feat in place after
+    // a Category is chosen — otherwise picking one would delete the row out from under
+    // the GM before they could set its dependencies or traits.
+    this._curationSeen = new Set();
+    // Explicitly filed this session, and gone from the queue until the app is reopened.
+    this._curationFiled = new Set();
+    this._curationUuid = null;
+    this._curationMore = false;
+    this._curationScroll = 0;
   }
 
   static DEFAULT_OPTIONS = {
@@ -106,6 +133,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       addSource: FeatRegistryConfig._onAddSource,
       removeSource: FeatRegistryConfig._onRemoveSource,
       removeFeat: FeatRegistryConfig._onRemoveFeat,
+      resetFeat: FeatRegistryConfig._onResetFeat,
       addCategory: FeatRegistryConfig._onAddCategory,
       removeCategory: FeatRegistryConfig._onRemoveCategory,
       addType: FeatRegistryConfig._onAddType,
@@ -121,6 +149,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       removeReference: FeatRegistryConfig._onRemoveReference,
       openReference: FeatRegistryConfig._onOpenReference,
       statsAxis: FeatRegistryConfig._onStatsAxis,
+      curationSelect: FeatRegistryConfig._onCurationSelect,
+      curationFile: FeatRegistryConfig._onCurationFile,
+      curationSkip: FeatRegistryConfig._onCurationSkip,
       focusCell: FeatRegistryConfig._onFocusCell,
       save: FeatRegistryConfig._onSave
     }
@@ -150,6 +181,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._captureOpen();
     const scroller = this.element?.querySelector(`.${PREFIX}-reg-scroll`);
     if (scroller) this._scrollTop = scroller.scrollTop;
+    // The Curation tab has two scrollers: the editor pane is the rdhf-reg-scroll one,
+    // and the queue keeps its own place so picking a feat does not throw the list back
+    // to the top on every selection.
+    const queue = this.element?.querySelector(`.${PREFIX}-cur-queue-scroll`);
+    if (queue) this._curationScroll = queue.scrollTop;
     return super.render(options);
   }
 
@@ -168,6 +204,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.#categories ??= foundry.utils.deepClone(getCategories());
     this.#types ??= foundry.utils.deepClone(getTypes());
     this.#formula ??= getPointFormula();
+    this.#baseline ??= foundry.utils.deepClone(this.#snapshot());
 
     // The working copy, so a source added or a Feature dropped this session shows up
     // immediately instead of only after Save-and-reopen.
@@ -255,10 +292,16 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       })
       .sort(byCurationThenLevel);
 
+    // Carried so _refreshCurationRow can move the Feats badge without re-deriving the
+    // whole catalog: it counts ALL uncurated feats, filed ones included, and the
+    // Curation queue does not contain those.
+    this._uncuratedTotal = feats.filter(f => f.uncurated).length;
+
     return {
       tab: this._tab,
       isSources: this._tab === 'sources',
       isFeats: this._tab === 'feats',
+      isCuration: this._tab === 'curation',
       isTaxonomy: this._tab === 'taxonomy',
       isPoints: this._tab === 'points',
       sources: (this.#config.sources ?? []).map(s => {
@@ -277,7 +320,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       feats,
       standaloneFeats: feats.filter(f => f.standalone),
       featCount: feats.length,
-      uncuratedCount: feats.filter(f => f.uncurated).length,
+      uncuratedCount: this._uncuratedTotal,
       categories: this.#categories.map(c => ({
         ...c,
         resolved: taxonomyLabel(c),
@@ -301,7 +344,56 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       stats: showStats && this._tab === 'stats' ? await this._buildStats(feats) : null,
       statsAxis: this._statsAxis,
       isAxisCategory: this._statsAxis === 'category',
-      isAxisType: this._statsAxis === 'type'
+      isAxisType: this._statsAxis === 'type',
+      // Built from the same feat views the Feats tab uses, so the editor pane needs no
+      // second shape and every [data-field] control behaves identically in both.
+      curation: this._tab === 'curation' ? this._buildCuration(feats) : null
+    };
+  }
+
+  /**
+   * The Curation queue and whichever feat it currently has open.
+   *
+   * Everything here is session state on the app; nothing is read from or written to a
+   * setting. Feats reaching the queue are recorded in `_curationSeen` as a side effect
+   * of building it — that set is what keeps a row in place after its Category is
+   * chosen, and there is no other moment at which membership is known.
+   *
+   * @param {Array<object>} feats  the feat views from _prepareContext
+   */
+  _buildCuration(feats) {
+    const { queue, outstanding, ready, filed } = buildCurationQueue({
+      feats,
+      seen: this._curationSeen,
+      filed: this._curationFiled
+    });
+    for (const feat of queue) this._curationSeen.add(feat.uuid);
+
+    // A selection can go stale in three ways: it was just filed, it was pruned, or the
+    // tab is being opened for the first time. All three land on the head of the queue.
+    if (!queue.some(f => f.uuid === this._curationUuid)) {
+      this._curationUuid = queue[0]?.uuid ?? null;
+    }
+    const index = queue.findIndex(f => f.uuid === this._curationUuid);
+
+    return {
+      queue: queue.map(feat => ({
+        uuid: feat.uuid,
+        name: feat.name,
+        img: feat.img,
+        level: feat.level,
+        categoryLabel: feat.categoryLabel,
+        uncurated: feat.uncurated,
+        isCurrent: feat.uuid === this._curationUuid
+      })),
+      feat: index === -1 ? null : queue[index],
+      position: index + 1,
+      total: queue.length,
+      hasQueue: queue.length > 0,
+      outstanding,
+      ready,
+      filed,
+      moreOpen: this._curationMore
     };
   }
 
@@ -498,7 +590,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       if (panel.open) this._loadFullDescription(panel);
     }
 
-    for (const row of el.querySelectorAll(`.${PREFIX}-reg-feat[data-uuid]`)) {
+    // The Curation editor is a second host for the very same requirement controls, so
+    // it is wired by the same loop. Every helper below takes the containing element and
+    // queries inside it, and _syncField routes on the nearest [data-uuid] ancestor, so
+    // none of them care which tab the controls are sitting on.
+    const rows = el.querySelectorAll(
+      `.${PREFIX}-reg-feat[data-uuid], .${PREFIX}-cur-editor[data-uuid]`
+    );
+    for (const row of rows) {
       this._renderInvestment(row);
       this._renderReferenceChips(row);
       // On change rather than input: re-chipping every keystroke would fire a document
@@ -509,12 +608,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       this._bindReferenceSearch(row);
     }
 
+    // Whether the Curation pane's secondary fields are open has to survive the
+    // re-render that selecting the next feat causes.
+    const more = el.querySelector(`.${PREFIX}-cur-more`);
+    more?.addEventListener('toggle', () => {
+      this._curationMore = more.open;
+    });
+
     this._renderAtomRows();
     this._applySourceFilter();
     this._applyRegFilters();
 
     const scroller = el.querySelector(`.${PREFIX}-reg-scroll`);
     if (scroller && this._scrollTop) scroller.scrollTop = this._scrollTop;
+    const queue = el.querySelector(`.${PREFIX}-cur-queue-scroll`);
+    if (queue && this._curationScroll) queue.scrollTop = this._curationScroll;
   }
 
   /**
@@ -597,6 +705,79 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     }
 
     this._applyRegFilters();
+  }
+
+  /**
+   * Repaints one Curation queue row from the working copy.
+   *
+   * The queue row is derived state exactly as the Feats tab's chips are, and for the
+   * same reason it cannot re-render: picking a Category is a keystroke away from
+   * picking the next one, and render() resets scroll and steals focus. The row stays
+   * in place once curated — it leaves only on File — so what changes here is the level
+   * badge, the Category chip and the still-uncurated marker.
+   *
+   * @param {string} uuid
+   */
+  _refreshCurationRow(uuid) {
+    const row = [...(this.element?.querySelectorAll(`.${PREFIX}-cur-row[data-uuid]`) ?? [])].find(
+      el => el.dataset.uuid === uuid
+    );
+    if (!row) return;
+    const feat = normalizeFeat(uuid, this.#config.feats?.[uuid]);
+    const uncurated = isUncurated(feat);
+    const was = row.dataset.uncurated === 'true';
+
+    row.classList.toggle('is-uncurated', uncurated);
+    row.dataset.uncurated = String(uncurated);
+
+    const level = row.querySelector(`.${PREFIX}-cur-row-level`);
+    if (level) level.textContent = `${game.i18n.localize('RDHF.catalog.levelShort')} ${feat.level}`;
+
+    const category = row.querySelector(`.${PREFIX}-cur-row-category`);
+    if (category) {
+      const entry = this.#categories.find(c => c.id === feat.category);
+      category.textContent = feat.category ? taxonomyLabel(entry) || feat.category : '';
+      category.hidden = !feat.category;
+    }
+
+    // The header counts what is still outstanding, so it moves the moment a Category
+    // is chosen even though the row itself stays put. Every uncurated feat that has not
+    // been filed IS a queue row, so the rows are the whole population.
+    const outstanding = [
+      ...this.element.querySelectorAll(`.${PREFIX}-cur-row[data-uncurated="true"]`)
+    ].length;
+    const counter = this.element.querySelector(`.${PREFIX}-cur-outstanding`);
+    if (counter) counter.textContent = String(outstanding);
+
+    // Rows that now have a Category and are only waiting on File. Without this the
+    // queue looks like it is not shrinking as the GM works.
+    const rows = this.element.querySelectorAll(`.${PREFIX}-cur-row`).length;
+    const ready = this.element.querySelector(`.${PREFIX}-cur-ready`);
+    if (ready) {
+      ready.textContent = game.i18n.format('RDHF.curation.readyCount', {
+        count: rows - outstanding
+      });
+      ready.hidden = rows - outstanding === 0;
+    }
+
+    // The Feats tab badge counts ALL uncurated feats, filed ones included, so it cannot
+    // be read off the queue. Carried as a running total from the last render and moved
+    // by this one edit — the same repaint-don't-re-render rule, one tab over.
+    if (was !== uncurated) {
+      this._uncuratedTotal = Math.max(0, (this._uncuratedTotal ?? 0) + (uncurated ? 1 : -1));
+      const badge = this.element.querySelector(`.${PREFIX}-tab-badge`);
+      if (badge) {
+        badge.textContent = String(this._uncuratedTotal);
+        badge.hidden = this._uncuratedTotal === 0;
+      }
+    }
+
+    // Filing a feat that still has no Category is legal but temporary, and the GM
+    // should know that before they press it rather than after it reappears.
+    if (uuid === this._curationUuid) {
+      const note = this.element.querySelector(`.${PREFIX}-cur-file-note`);
+      if (note) note.hidden = !uncurated;
+    }
   }
 
   /** One chip element. Kept tiny because _buildChips calls it six times a row. */
@@ -1025,7 +1206,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
     // Every one of these can change what the row's chips say, so repaint them now
     // rather than waiting for the next full render.
-    if (['level', 'category', 'type', 'hidden'].includes(field)) this._refreshRow(uuid);
+    if (['level', 'category', 'type', 'hidden'].includes(field)) {
+      this._refreshRow(uuid);
+      this._refreshCurationRow(uuid);
+    }
   }
 
   /* ── Drag and drop ───────────────────────────────────────────────────────── */
@@ -1176,11 +1360,55 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.render();
   }
 
+  /**
+   * Sources tab — unregisters a standalone Feature outright. This is the only place a
+   * standalone entry may legitimately be deleted: the entry IS the registration, so
+   * there is no pack to rediscover it from afterwards.
+   */
   static async _onRemoveFeat(event, target) {
     event.preventDefault();
     const uuid = target.closest('[data-uuid]')?.dataset.uuid;
     if (!uuid) return;
+
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('RDHF.registry.unregisterTitle') },
+      content: `<p>${game.i18n.format('RDHF.registry.unregisterBody', {
+        name: foundry.utils.escapeHTML(this.#sourceNames.get(uuid) ?? uuid)
+      })}</p>`
+    });
+    if (!confirmed) return;
+
     delete this.#config.feats[uuid];
+    this.render();
+  }
+
+  /**
+   * Feats tab — clears a feat's curation and starts it over as uncurated.
+   *
+   * The distinction is load-bearing. A pack-sourced feat is rediscovered by
+   * loadAllSourceFeatures on the next render whether or not it has a registry entry,
+   * so dropping the entry IS a reset. A **standalone** feat is reachable only because
+   * its entry exists — dropping that entry unregistered it from the module entirely,
+   * which is emphatically not what "reset this feat's metadata" promises. So a
+   * standalone feat is rewritten blank instead, keeping the flag that lists it on the
+   * Sources tab.
+   */
+  static async _onResetFeat(event, target) {
+    event.preventDefault();
+    const uuid = target.closest('[data-uuid]')?.dataset.uuid;
+    if (!uuid) return;
+    const standalone = this.#config.feats?.[uuid]?.standalone === true;
+
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('RDHF.registry.resetFeatTitle') },
+      content: `<p>${game.i18n.format('RDHF.registry.resetFeatBody', {
+        name: foundry.utils.escapeHTML(this.#sourceNames.get(uuid) ?? uuid)
+      })}</p>`
+    });
+    if (!confirmed) return;
+
+    if (standalone) this.#config.feats[uuid] = { ...blankFeat(uuid), standalone: true };
+    else delete this.#config.feats[uuid];
     this.render();
   }
 
@@ -1448,14 +1676,193 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.render();
   }
 
+  /* ── Curation ────────────────────────────────────────────────────────────── */
+
+  /**
+   * The queue as it currently stands, read off the DOM.
+   *
+   * The rendered rows ARE the queue, in queue order, so there is nothing to recompute
+   * — and recomputing would mean re-indexing every source pack to answer "which feat
+   * comes after this one".
+   */
+  _curationOrder() {
+    return [...(this.element?.querySelectorAll(`.${PREFIX}-cur-row[data-uuid]`) ?? [])].map(el => ({
+      uuid: el.dataset.uuid
+    }));
+  }
+
+  static _onCurationSelect(event, target) {
+    event.preventDefault();
+    const uuid = target.closest('[data-uuid]')?.dataset.uuid;
+    if (!uuid || uuid === this._curationUuid) return;
+    this._curationUuid = uuid;
+    this.render();
+  }
+
+  /**
+   * Commits the open feat to the world and drops it out of the queue.
+   *
+   * The write is surgical — see #commitFeat. Filing a feat that still has no Category
+   * is allowed and means "done with this for now": it leaves the session's queue, and
+   * because the queue is derived from the registry it is simply back the next time the
+   * registry opens. The pane says so before the button is pressed.
+   */
+  static async _onCurationFile(event) {
+    event.preventDefault();
+    const uuid = this._curationUuid;
+    if (!uuid) return;
+
+    try {
+      await this.#commitFeat(uuid);
+    } catch (err) {
+      console.error(`${MODULE_ID} | Failed to file feat ${uuid}:`, err);
+      ui.notifications?.error(game.i18n.localize('RDHF.notify.fileFailed'));
+      return;
+    }
+
+    // Read the order BEFORE filing: the row is still present, so "the one after this"
+    // is answerable, and the fallback to the previous row keeps the selection where
+    // the GM was working instead of throwing them to the top.
+    this._curationUuid = nextInQueue(this._curationOrder(), uuid);
+    this._curationFiled.add(uuid);
+    this.render();
+  }
+
+  /** Moves on without filing or writing. Wraps, so a skipped feat is reachable again. */
+  static _onCurationSkip(event) {
+    event.preventDefault();
+    const uuid = this._curationUuid;
+    if (!uuid) return;
+    const next = nextInQueue(this._curationOrder(), uuid, { wrap: true });
+    if (!next || next === uuid) return;
+    this._curationUuid = next;
+    this.render();
+  }
+
   static async _onSave(event) {
     event.preventDefault();
+    await this.#commit();
+    this.close();
+  }
+
+  /* ── Unsaved work ────────────────────────────────────────────────────────── */
+
+  /** The four working copies as one object. References, not a clone. */
+  #snapshot() {
+    return {
+      registry: this.#config,
+      categories: this.#categories,
+      types: this.#types,
+      formula: this.#formula
+    };
+  }
+
+  /**
+   * Comparable JSON with every object's keys sorted, at every depth.
+   *
+   * JSON rather than a deep-equality helper because these four ARE the world settings
+   * and are stored the same way, so anything that round-trips through a setting is
+   * representable here. The key sort is what makes the comparison safe: Curation's
+   * File rebases one feat's key in the baseline, and `registry.feats` is keyed by
+   * uuid, so a rebased entry lands wherever object insertion order puts it. Comparing
+   * raw JSON would read that as an edit and prompt about work that is already on disk.
+   */
+  #stableJson(value) {
+    if (Array.isArray(value)) return `[${value.map(v => this.#stableJson(v)).join(',')}]`;
+    if (value && typeof value === 'object') {
+      return `{${Object.keys(value)
+        .sort()
+        .map(k => `${JSON.stringify(k)}:${this.#stableJson(value[k])}`)
+        .join(',')}}`;
+    }
+    return JSON.stringify(value ?? null);
+  }
+
+  /** True once anything in the working copy has moved away from what is on disk. */
+  #isDirty() {
+    if (this.#baseline === null) return false;
+    return this.#stableJson(this.#snapshot()) !== this.#stableJson(this.#baseline);
+  }
+
+  /** Writes all four working copies through, and rebases so the app is clean again. */
+  async #commit() {
     await setRegistry(this.#config);
     await setCategories(this.#categories);
     await setTypes(this.#types);
     await game.settings.set(MODULE_ID, SETTINGS.POINT_FORMULA, this.#formula);
     invalidatePackCache();
+    this.#baseline = foundry.utils.deepClone(this.#snapshot());
     ui.notifications?.info(game.i18n.localize('RDHF.notify.saved'));
-    this.close();
+  }
+
+  /**
+   * Writes ONE feat through to the world and rebases only that key of the baseline.
+   *
+   * Everything else the GM has touched this session — taxonomy, sources, the point
+   * formula, other feats — stays in the working copy and still needs Save, and the
+   * close prompt still catches it. Returns false when there was nothing to write, so
+   * File on an untouched feat costs no setting write and no broadcast.
+   *
+   * @param {string} uuid
+   * @returns {Promise<boolean>}  whether anything reached the world
+   */
+  async #commitFeat(uuid) {
+    const entry = this.#config.feats?.[uuid];
+    if (!entry || !this.#baseline) return false;
+
+    const saved = this.#baseline.registry?.feats?.[uuid];
+    if (saved && this.#stableJson(saved) === this.#stableJson(entry)) return false;
+
+    await saveFeatEntry(uuid, entry);
+    this.#baseline.registry.feats ??= {};
+    this.#baseline.registry.feats[uuid] = foundry.utils.deepClone(entry);
+    return true;
+  }
+
+  /**
+   * "Working copy, save on Save" means closing the window throws every edit away, and
+   * the window closes on the header X, on Escape and on a click outside — none of which
+   * read as destructive. So an edited registry asks first.
+   *
+   * DialogV2.wait with one button per outcome, not confirm(): the choice is three-way,
+   * and a button's callback return value IS the dialog's result, so `confirm` could
+   * only ever distinguish two of them. `rejectClose: false` turns a dismissed dialog
+   * into null, which is treated as Cancel — dismissing a "you have unsaved work" prompt
+   * must never be the thing that discards it.
+   */
+  async close(options = {}) {
+    if (options.rdhfDiscard || !this.#isDirty()) return super.close(options);
+
+    const choice = await foundry.applications.api.DialogV2.wait({
+      window: { title: game.i18n.localize('RDHF.registry.unsavedTitle') },
+      content: `<p>${game.i18n.localize('RDHF.registry.unsavedBody')}</p>`,
+      rejectClose: false,
+      buttons: [
+        {
+          action: 'save',
+          icon: 'fa-solid fa-floppy-disk',
+          label: 'RDHF.registry.unsavedSave',
+          default: true,
+          callback: () => 'save'
+        },
+        {
+          action: 'discard',
+          icon: 'fa-solid fa-trash',
+          label: 'RDHF.registry.unsavedDiscard',
+          callback: () => 'discard'
+        },
+        {
+          action: 'cancel',
+          icon: 'fa-solid fa-xmark',
+          label: 'RDHF.registry.unsavedCancel',
+          callback: () => 'cancel'
+        }
+      ]
+    });
+
+    if (choice === 'save') await this.#commit();
+    else if (choice !== 'discard') return this; // cancel, or the dialog was dismissed
+
+    return super.close(options);
   }
 }

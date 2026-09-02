@@ -23,7 +23,7 @@ export const SETTINGS = {
 };
 
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */
-export const MIGRATION_VERSION = 1;
+export const MIGRATION_VERSION = 2;
 
 export const ACTOR_TYPES = { PC: 'character' };
 
@@ -77,7 +77,7 @@ export const DEFAULT_TYPES = [
   { id: 'utility', label: 'RDHF.type.utility', icon: 'fa-solid fa-toolbox' },
   { id: 'social', label: 'RDHF.type.social', icon: 'fa-solid fa-comments' },
   { id: 'crafting', label: 'RDHF.type.crafting', icon: 'fa-solid fa-hammer' },
-  { id: 'downtime', label: 'RDHF.type.downtime', icon: 'fa-solid fa-campground' }
+  { id: 'downtime', label: 'RDHF.type.downtime', icon: 'fa-solid fa-fire-burner' }
 ];
 
 export const DEFAULT_POINT_FORMULA = '@level * 2';

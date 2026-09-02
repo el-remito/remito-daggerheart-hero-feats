@@ -17,6 +17,17 @@ import {
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
 
+/**
+ * The source list as it stood at the last invalidation, so a registry write that did
+ * not touch it costs nothing.
+ *
+ * Curation's File writes one feat's entry straight to the registry, and it does that
+ * once per feat over a long session. Invalidating the pack index on every one of those
+ * would force a full re-index of every source pack on the very next render — for a
+ * change that cannot affect what a pack contains.
+ */
+let _sourceSignature = null;
+
 /** The registry setting's shape on a fresh world. */
 export function defaultRegistry() {
   return { sources: [], feats: {} };
@@ -29,8 +40,16 @@ export function registerSettings() {
     config: false,
     type: Object,
     default: defaultRegistry(),
-    // Registering or removing a compendium invalidates the cached pack indices.
-    onChange: () => invalidatePackCache()
+    // Registering, removing or disabling a compendium invalidates the cached pack
+    // indices. Nothing else in the registry can, so nothing else pays for it.
+    onChange: registry => {
+      const signature = JSON.stringify(
+        (registry?.sources ?? []).map(s => [s.packId, s.enabled !== false])
+      );
+      if (signature === _sourceSignature) return;
+      _sourceSignature = signature;
+      invalidatePackCache();
+    }
   });
 
   // Managed taxonomy lists.

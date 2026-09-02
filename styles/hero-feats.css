@@ -1631,3 +1631,205 @@ details[open] > summary .rdhf-arrow {
 .rdhf-ref-raw input {
     margin-top: 3px;
 }
+
+/* ── Curation tab ──────────────────────────────────────────────────────────────
+   A queue beside one feat's editor. The queue column is wider than the Feats tab's
+   filter rail because it carries a name plus chips rather than a checkbox list. */
+
+.rdhf-curation {
+    grid-template-columns: 270px minmax(0, 1fr);
+}
+
+.rdhf-cur-queue {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--rdhf-border);
+}
+
+.rdhf-cur-head {
+    padding: var(--spacer-8, 8px);
+    border-bottom: 1px solid var(--rdhf-border);
+}
+
+.rdhf-cur-head .rdhf-rail-heading {
+    margin: 0;
+}
+
+.rdhf-cur-counts {
+    margin: 4px 0 0;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-cur-outstanding {
+    font-weight: 600;
+    color: var(--rdhf-gold);
+}
+
+.rdhf-cur-queue-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--spacer-8, 8px);
+}
+
+.rdhf-cur-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.rdhf-cur-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 6px;
+    text-align: left;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: inherit;
+    cursor: pointer;
+}
+
+.rdhf-cur-row:hover {
+    background: var(--rdhf-gold-dim);
+    border-color: var(--rdhf-gold-soft);
+}
+
+.rdhf-cur-row.is-current {
+    background: var(--rdhf-gold-dim);
+    border-color: var(--rdhf-gold);
+}
+
+/* A feat that has been given a Category stays in the queue until it is filed, so the
+   only thing distinguishing the two states is this marker. Uncurated is the one that
+   still needs work, so it is the one that gets the accent. */
+.rdhf-cur-row.is-uncurated {
+    border-left: 3px solid var(--rdhf-gold-soft);
+}
+
+.rdhf-cur-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.rdhf-cur-row-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rdhf-cur-row-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.rdhf-cur-pane {
+    overflow-y: auto;
+    min-height: 0;
+    padding: var(--spacer-12, 12px);
+}
+
+.rdhf-cur-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: var(--spacer-8, 8px);
+    border-bottom: 1px solid var(--rdhf-border);
+}
+
+.rdhf-cur-title-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.rdhf-cur-title h3 {
+    margin: 0;
+    font-size: var(--font-size-14, 0.875rem);
+    color: var(--rdhf-gold);
+}
+
+.rdhf-cur-position {
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-cur-form {
+    padding-top: var(--spacer-8, 8px);
+}
+
+/* Open from the start, so it reads as reference text rather than another control to
+   operate. The cap keeps a long Feature from pushing File off the bottom of the pane. */
+.rdhf-cur-desc .rdhf-desc-body {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.rdhf-cur-more {
+    margin-top: var(--spacer-12, 12px);
+    padding: var(--spacer-8, 8px);
+    border: 1px solid var(--rdhf-border);
+    border-radius: 4px;
+}
+
+.rdhf-cur-more > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-cur-more[open] > summary {
+    margin-bottom: var(--spacer-8, 8px);
+}
+
+.rdhf-cur-actions {
+    position: sticky;
+    bottom: 0;
+    margin-top: var(--spacer-12, 12px);
+    padding-top: var(--spacer-8, 8px);
+    border-top: 1px solid var(--rdhf-border);
+    background: var(--rdhf-panel);
+}
+
+.rdhf-cur-buttons {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--spacer-8, 8px);
+}
+
+.rdhf-cur-file-note {
+    margin: 0 0 6px;
+}
+
+.rdhf-cur-done {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 100%;
+    text-align: center;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-cur-done i {
+    font-size: 2rem;
+    color: var(--rdhf-gold-soft);
+}
+
+.rdhf-cur-done p {
+    margin: 0;
+}

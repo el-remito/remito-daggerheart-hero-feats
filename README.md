@@ -9,14 +9,19 @@ spend them from a filterable catalog reached by a badge next to Level on their s
 
 ## For the GM
 
-Open **Feat Registry** from the module settings (or the button under Game Settings). Four tabs:
+Open **Feat Registry** from the module settings (or the button under Game Settings):
 
 | Tab | What it does |
 |---|---|
 | **Sources** | Register a compendium — every Feature inside becomes a Feat. Or drag a single Feature item anywhere onto the window. |
-| **Feats** | Curate each one: Level, Category, Types, Requirements. |
+| **Feats** | The full list. Curate or revise any one of them: Level, Category, Types, Requirements. |
+| **Curation** | A queue of everything still uncurated, one at a time, built for working through a freshly registered pack. |
 | **Taxonomy** | Maintain the Category and Type lists. |
 | **Points** | The Feat Point formula, with a live preview. |
+| **Statistics** | How the catalog is distributed and what your table has actually taken. |
+
+Nothing on any tab reaches your world until you press **Save** — the one exception is Curation's
+**File** button, which is described below. Closing the window with unsaved changes asks first.
 
 Feature items are **never modified** — all metadata lives in a world setting keyed by item UUID, so
 locked compendia (including the Daggerheart SRD packs) work untouched.
@@ -50,6 +55,32 @@ Requirements can demand any combination of:
 
 There is also an optional advanced expression field combining atoms with `AND` / `OR`, for example
 `classIs:Rogue AND tierAtLeast:2`.
+
+### Curation
+
+Registering a pack of two hundred Features leaves you with two hundred uncurated Feats and no
+obvious place to start. The **Curation** tab is that place: a queue of everything still waiting,
+alphabetical, with one Feat's editor beside it holding only the fields you actually set while
+sorting a catalog — Level, Category, Types, the short and full descriptions, prerequisite Feats,
+Trait minimums and Category investment. Anything rarer (Hide from players, resource minimums,
+Class / Subclass, the raw expression) is one click away under **More fields**, so a Feat that needs
+one does not cost you a trip to another tab.
+
+The full description is shown next to the teaser box on purpose: reading the Feature is how the
+teaser gets written.
+
+- **File** saves *that one Feat* straight to your world and moves you on — so a long curation pass
+  can never be lost, and you never curate the same Feat twice. It writes only that Feat: sources,
+  taxonomy and the point formula are still working copies and still need **Save**.
+- **Skip** moves on without saving, and wraps around, so a Feat you passed over is reachable again.
+- Choosing a Category does **not** make a Feat vanish mid-edit. It stays in the queue, marked as no
+  longer outstanding, until you File it.
+- Filing a Feat that still has no Category is allowed and just means "not now" — it leaves the
+  queue for this session and is back the next time you open the Registry. The pane says so before
+  you press it.
+
+The queue is worked out from the registry each time, so there is nothing to keep in sync and
+nothing to reset.
 
 ### Feat Points
 

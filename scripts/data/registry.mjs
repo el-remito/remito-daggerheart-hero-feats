@@ -280,6 +280,31 @@ export async function addFeat(uuid) {
   return registry;
 }
 
+/**
+ * Writes ONE feat's entry through to the saved registry, leaving every other key of
+ * the setting exactly as it is on disk.
+ *
+ * This is the Curation tab's File action, and the surgical shape is the whole point.
+ * The registry app holds a working copy of four settings and commits all of them on
+ * Save; if File reused that path, filing one feat would also push a half-renamed
+ * Category, an unsure new source and an untested point formula live to players — and
+ * the unsaved-changes prompt would stop firing, because everything had been committed
+ * through a side door.
+ *
+ * Reads the saved value fresh rather than taking a caller-supplied registry, so a
+ * concurrent GM edit elsewhere is merged into rather than overwritten.
+ *
+ * @param {string} uuid
+ * @param {object} entry  the feat record from the caller's working copy
+ * @returns {Promise<void>}
+ */
+export async function saveFeatEntry(uuid, entry) {
+  const registry = foundry.utils.deepClone(getRegistry());
+  registry.feats ??= {};
+  registry.feats[uuid] = foundry.utils.deepClone(entry);
+  await setRegistry(registry);
+}
+
 export async function removeFeat(uuid) {
   const registry = foundry.utils.deepClone(getRegistry());
   delete registry.feats?.[uuid];

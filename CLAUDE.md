@@ -43,9 +43,10 @@ scripts/
     points.mjs              total / spent / remaining
     filters.mjs             catalog filter predicate and sort comparators
     statistics.mjs          catalog-shape, coverage-gap and adoption derivation
+    curation.mjs            the Curation queue's membership rule and advance order
   apps/
     feat-catalog.mjs        player + GM catalog (one instance per actor, tracked in openCatalogs)
-    feat-registry-config.mjs  GM registry (5 tabs), registered via registerMenu
+    feat-registry-config.mjs  GM registry (6 tabs), registered via registerMenu
   badge/badge.mjs           renderActorSheetV2 injection next to Level
 ```
 
@@ -176,6 +177,47 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **Working copy, save on Save.** The registry app clones the setting into `#config`, mutates it on
   every `input`, and writes only in `_onSave`. Open `<details>` state is captured before
   `super.render()` and restored by uuid, never by index.
+- **Closing is destructive, so it asks.** `close()` compares a stable-JSON snapshot of the four
+  working copies against `#baseline` and offers Save / Discard / Keep editing through `DialogV2.wait`
+  — three outcomes, so `confirm()` could not express it, and `rejectClose: false` makes a dismissed
+  dialog mean Cancel. A snapshot rather than a dirty flag set at each mutation site: there are a
+  dozen of those, and the next one to forget the flag would silently discard the GM's work, which is
+  the exact bug this exists to fix. The comparison sorts object keys at every depth because
+  `#commitFeat` rebases one uuid-keyed entry and insertion order would otherwise read as an edit.
+- **Curation's File is the ONE surgical write.** `saveFeatEntry` merges a single feat's entry into
+  the *saved* registry and `#commitFeat` rebases only that key of `#baseline`; taxonomy, sources and
+  the formula stay working copies and still need Save. Reusing `#commit()` would have pushed a
+  half-renamed Category live as a side effect of filing a feat AND stopped the close prompt from
+  firing, because everything would have been committed through a side door. It also skips the write
+  entirely when the entry is unchanged.
+- **The Curation queue is derived and session-local.** Membership is
+  `(uncurated OR already seen) AND NOT filed`, held in two `Set`s on the app instance — no setting,
+  no flag, no migration. The `seen` half is load-bearing: choosing a Category stops a feat being
+  uncurated, and a queue derived strictly from that would delete the row out from under the GM
+  before they could reach its dependencies or traits. Reopening the registry rebuilds the backlog
+  from the registry itself, which is what makes filing an uncurated feat safe.
+- **The Curation editor is the Feats row's controls in a second host.** It renders from the same
+  feat views and carries `data-uuid`, so `_syncField`, `_renderInvestment`, `_renderReferenceChips`,
+  `_bindReferenceSearch`, `_renderAtomRows` and `_loadFullDescription` all apply unchanged — every
+  one of them takes a container and queries inside it. `_onRender`'s wiring loop selects
+  `.rdhf-reg-feat[data-uuid], .rdhf-cur-editor[data-uuid]`; `_applyRegFilters` and `_refreshRow`
+  deliberately still match only `.rdhf-reg-feat`, because the queue is not filtered.
+- **Selecting a queue feat re-renders; editing one does not.** The pane is a whole form, and
+  rebuilding it by hand would duplicate every control the Feats tab declares. So `render()` captures
+  and restores the queue's own scroller (`.rdhf-cur-queue-scroll`) alongside `.rdhf-reg-scroll`, and
+  field edits still go through `_refreshCurationRow`, which repaints the row's chips and both
+  counters in place.
+- **The registry setting's `onChange` invalidates the pack cache only when `sources` changed**,
+  compared against a signature held in `settings.mjs`. Curation writes the registry once per filed
+  feat, and invalidating on each would force a full re-index of every source pack on the next render
+  for a change that cannot affect what a pack contains.
+- **Reset and unregister are different verbs.** `resetFeat` (Feats tab) clears curation; `removeFeat`
+  (Sources tab) unregisters a standalone Feature outright. They were one action, and it deleted the
+  registry entry either way — fine for a pack-sourced feat, which `loadAllSourceFeatures`
+  rediscovers on the next render, but for a **standalone** feat the entry IS the registration, so
+  "reset this feat's metadata" removed it from the module. `_onResetFeat` therefore rewrites a
+  standalone feat as `{ ...blankFeat(uuid), standalone: true }` — the flag has to be re-applied by
+  hand, because `blankFeat` does not carry it.
 - **Permissive requirement failure.** An unrecognized expression atom returns `true`. A GM's typo
   must not silently lock a feat away with no visible cause.
 - **Formula evaluation goes through `Roll`**, never `eval` or `new Function`. The registry's live
@@ -207,6 +249,13 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 ## Known scope simplifications
 
 - Feat cost is a flat 1 Feat Point; there is no per-feat cost field.
+- Curation scope decisions worth not re-litigating: **one feat at a time, no multi-select** (only
+  Level, Category and Types would batch; prerequisites, Trait minimums and investment are per-feat
+  and relational), **name-only ordering** (chains are authored through the reference search, which
+  does not need its members adjacent), **no assist** — neither keyword suggestion nor reading a
+  Level off a class pack's `system.features[]` parent — and **no "dismiss / not a Feat" flag**, on
+  the explicit basis that only packs consisting entirely of Features are ever registered, so the
+  queue always reaches zero on its own.
 - The Statistics tab **derives everything and stores nothing** — no setting, no flag, no migration.
   It reads the registry app's *working copy*, so a Category assigned a moment ago is reflected
   before Save, and it is computed **only while that tab is open**: the Feats tab re-renders on every

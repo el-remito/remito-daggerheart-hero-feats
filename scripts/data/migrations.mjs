@@ -11,7 +11,13 @@
  * every read path (getCategories, normalizeFeat) also tolerates un-migrated data.
  */
 
-import { MODULE_ID, MIGRATION_VERSION, GENERAL_CATEGORY_ID, SETTINGS } from '../constants.mjs';
+import {
+  MODULE_ID,
+  MIGRATION_VERSION,
+  GENERAL_CATEGORY_ID,
+  SETTINGS,
+  DEFAULT_TYPES
+} from '../constants.mjs';
 import {
   getRegistry,
   setRegistry,
@@ -33,6 +39,7 @@ export async function runMigrations() {
 
   try {
     if (from < 1) await migrateGeneralTypeToCategory();
+    if (from < 2) await migrateSeededTypeIcons();
     await game.settings.set(MODULE_ID, SETTINGS.MIGRATION, MIGRATION_VERSION);
     console.log(`${MODULE_ID} | Migrated world data ${from} → ${MIGRATION_VERSION}.`);
   } catch (err) {
@@ -84,4 +91,34 @@ async function migrateGeneralTypeToCategory() {
       game.i18n.format('RDHF.notify.migratedGeneral', { filed, stripped })
     );
   }
+}
+
+/**
+ * Migration 2 — refresh the icon on seeded Types the GM has not touched.
+ *
+ * Downtime shipped with `fa-campground`, which reads as "camp" rather than "the time
+ * between adventures". Changing DEFAULT_TYPES alone would only ever reach a brand new
+ * world, because the Types list is seeded once and then owned by the GM.
+ *
+ * Matching on the *stored* icon is what keeps this safe: a Type whose icon is anything
+ * other than the one originally seeded has been deliberately chosen and is left alone.
+ * An id not in DEFAULT_TYPES is a GM's own Type and is never considered.
+ */
+const SEEDED_TYPE_ICONS = { downtime: 'fa-solid fa-campground' };
+
+async function migrateSeededTypeIcons() {
+  const types = getTypes();
+  const fresh = new Map(DEFAULT_TYPES.map(t => [t.id, t.icon]));
+  let changed = 0;
+
+  for (const type of types) {
+    const seeded = SEEDED_TYPE_ICONS[type?.id];
+    if (!seeded || type.icon !== seeded) continue;
+    const replacement = fresh.get(type.id);
+    if (!replacement || replacement === type.icon) continue;
+    type.icon = replacement;
+    changed++;
+  }
+
+  if (changed) await setTypes(types);
 }

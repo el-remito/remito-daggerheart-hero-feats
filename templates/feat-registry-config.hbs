@@ -1,5 +1,5 @@
 {{!--
-  GM Feat Registry. Four tabs; the whole window is also a drop target for individual
+  GM Feat Registry. Six tabs; the whole window is also a drop target for individual
   Feature items (bound by hand in _onRender — ApplicationV2 has no dragDrop option).
 --}}
 <div class="rdhf-registry-layout">
@@ -11,6 +11,9 @@
         <button type="button" class="rdhf-tab {{#if isFeats}}is-active{{/if}}" data-action="selectTab" data-tab="feats">
             <i class="fa-solid fa-list-check"></i> {{localize "RDHF.registry.tabs.feats"}}
             <span class="rdhf-tab-badge" {{#unless uncuratedCount}}hidden{{/unless}}>{{uncuratedCount}}</span>
+        </button>
+        <button type="button" class="rdhf-tab {{#if isCuration}}is-active{{/if}}" data-action="selectTab" data-tab="curation">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "RDHF.registry.tabs.curation"}}
         </button>
         <button type="button" class="rdhf-tab {{#if isTaxonomy}}is-active{{/if}}" data-action="selectTab" data-tab="taxonomy">
             <i class="fa-solid fa-tags"></i> {{localize "RDHF.registry.tabs.taxonomy"}}
@@ -28,7 +31,7 @@
     {{!-- The Feats tab is a two-column grid whose list scrolls on its own; every
           other tab scrolls as one block. rdhf-reg-scroll marks whichever element is
           the real scroller, so scroll position survives a re-render either way. --}}
-    <div class="rdhf-registry-body {{#if isFeats}}is-split{{else}}rdhf-reg-scroll{{/if}}">
+    <div class="rdhf-registry-body {{#if isFeats}}is-split{{else}}{{#if isCuration}}is-split{{else}}rdhf-reg-scroll{{/if}}{{/if}}">
 
         {{#if isSources}}
             <section class="rdhf-pane">
@@ -270,7 +273,7 @@
                                             </button>
                                             {{#if this.registered}}
                                                 <button type="button" class="rdhf-icon-btn rdhf-danger"
-                                                        data-action="removeFeat"
+                                                        data-action="resetFeat"
                                                         data-tooltip="{{localize 'RDHF.registry.resetFeat'}}">
                                                     <i class="fa-solid fa-rotate-left"></i>
                                                 </button>
@@ -427,6 +430,238 @@
                     <p class="rdhf-reg-empty rdhf-empty" hidden>{{localize "RDHF.registry.noMatches"}}</p>
                 {{else}}
                     <p class="rdhf-empty">{{localize "RDHF.registry.noFeats"}}</p>
+                {{/if}}
+                </section>
+            </section>
+        {{/if}}
+
+        {{#if isCuration}}
+            {{!-- Two panes: the queue on the left, one feat's editor on the right.
+                  Both scroll independently. Selecting a feat DOES re-render — the pane
+                  is a whole form and rebuilding it by hand would duplicate every
+                  control the Feats tab already declares — so the queue's scroll
+                  position is captured and restored around it. --}}
+            <section class="rdhf-pane--split rdhf-curation">
+
+                <aside class="rdhf-cur-queue">
+                    <header class="rdhf-cur-head">
+                        <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.tabs.curation"}}</h4>
+                        <p class="rdhf-cur-counts">
+                            <span class="rdhf-cur-outstanding">{{curation.outstanding}}</span>
+                            {{localize "RDHF.curation.outstanding"}}
+                            <span class="rdhf-cur-ready" {{#unless curation.ready}}hidden{{/unless}}>&middot; {{localize "RDHF.curation.readyCount" count=curation.ready}}</span>
+                            {{#if curation.filed}}
+                                <span class="rdhf-cur-filed">&middot; {{localize "RDHF.curation.filedCount" count=curation.filed}}</span>
+                            {{/if}}
+                        </p>
+                    </header>
+
+                    <div class="rdhf-cur-queue-scroll">
+                        {{#if curation.hasQueue}}
+                            <ul class="rdhf-cur-list">
+                                {{#each curation.queue}}
+                                    <li>
+                                        <button type="button"
+                                                class="rdhf-cur-row {{#if this.isCurrent}}is-current{{/if}} {{#if this.uncurated}}is-uncurated{{/if}}"
+                                                data-action="curationSelect"
+                                                data-uuid="{{this.uuid}}"
+                                                data-uncurated="{{this.uncurated}}">
+                                            <img class="rdhf-feat-img rdhf-feat-img--small" src="{{this.img}}" alt="">
+                                            <span class="rdhf-cur-row-main">
+                                                <span class="rdhf-cur-row-name">{{this.name}}</span>
+                                                <span class="rdhf-cur-row-chips">
+                                                    <span class="rdhf-chip rdhf-chip--level rdhf-cur-row-level">{{localize "RDHF.catalog.levelShort"}} {{this.level}}</span>
+                                                    <span class="rdhf-chip rdhf-chip--category rdhf-cur-row-category"
+                                                          {{#unless this.categoryLabel}}hidden{{/unless}}>{{this.categoryLabel}}</span>
+                                                </span>
+                                            </span>
+                                        </button>
+                                    </li>
+                                {{/each}}
+                            </ul>
+                        {{else}}
+                            <p class="rdhf-empty">{{localize "RDHF.curation.queueEmpty"}}</p>
+                        {{/if}}
+                    </div>
+                </aside>
+
+                <section class="rdhf-cur-pane rdhf-reg-scroll">
+                {{#if curation.feat}}
+                    {{#with curation.feat}}
+                    {{!-- rdhf-cur-editor is the hook _onRender uses to wire this pane
+                          with exactly the helpers a Feats row gets, and data-uuid is
+                          what _syncField routes every control below into. --}}
+                    <div class="rdhf-cur-editor" data-uuid="{{this.uuid}}">
+
+                        <header class="rdhf-cur-title">
+                            <img class="rdhf-feat-img" src="{{this.img}}" alt="">
+                            <div class="rdhf-cur-title-main">
+                                <h3>{{this.name}}</h3>
+                                <span class="rdhf-cur-position">{{localize "RDHF.curation.position" position=@root.curation.position total=@root.curation.total}}</span>
+                            </div>
+                        </header>
+
+                        <div class="rdhf-cur-form">
+                            <div class="rdhf-field-grid">
+                                <label>
+                                    <span>{{localize "RDHF.registry.level"}}</span>
+                                    <input type="number" min="1" data-field="level" value="{{this.level}}">
+                                </label>
+                                <label>
+                                    <span>{{localize "RDHF.registry.category"}}</span>
+                                    <select data-field="category">
+                                        <option value="">{{localize "RDHF.registry.noCategory"}}</option>
+                                        {{#each this.categoryOptions}}
+                                            <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
+                                        {{/each}}
+                                    </select>
+                                </label>
+                            </div>
+
+                            <fieldset class="rdhf-fieldset">
+                                <legend>{{localize "RDHF.registry.types"}}</legend>
+                                <div class="rdhf-chip-grid">
+                                    {{#each this.typeOptions}}
+                                        <label class="rdhf-checkline">
+                                            <input type="checkbox" data-field="type" value="{{this.id}}" {{#if this.checked}}checked{{/if}}>
+                                            <span>{{this.label}}</span>
+                                        </label>
+                                    {{/each}}
+                                </div>
+                            </fieldset>
+
+                            {{!-- Short above Full, and the full text is open from the
+                                  start rather than folded away: reading the description
+                                  IS how the teaser gets written, so it has to be on
+                                  screen while the box above it is typed into. --}}
+                            <fieldset class="rdhf-fieldset">
+                                <legend>{{localize "RDHF.registry.summary"}}</legend>
+                                <textarea class="rdhf-wide" rows="2" data-field="summary"
+                                          placeholder="{{this.autoSummary}}">{{this.summaryText}}</textarea>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.summaryHint"}}</p>
+
+                                {{!-- Kept as a details so _loadFullDescription's toggle
+                                      wiring and its data-loaded guard apply unchanged. --}}
+                                <details class="rdhf-desc-panel rdhf-cur-desc" open>
+                                    <summary class="rdhf-desc-summary">
+                                        <span class="rdhf-arrow">&#9654;</span>
+                                        {{localize "RDHF.registry.fullDescription"}}
+                                    </summary>
+                                    <div class="rdhf-desc-body" data-loaded="false">
+                                        <p class="rdhf-loading">{{localize "RDHF.catalog.loading"}}</p>
+                                    </div>
+                                </details>
+                            </fieldset>
+
+                            <fieldset class="rdhf-fieldset">
+                                <legend>{{localize "RDHF.registry.requirements"}}</legend>
+
+                                <h5 class="rdhf-sub">{{localize "RDHF.registry.otherFeats"}}</h5>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.featuresDropHint"}}</p>
+                                <div class="rdhf-ref-block">
+                                    <div class="rdhf-ref-search">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                        <input type="text" class="rdhf-ref-search-input" autocomplete="off"
+                                               placeholder="{{localize 'RDHF.registry.featureSearchPlaceholder'}}">
+                                        <ul class="rdhf-ref-results" hidden></ul>
+                                    </div>
+                                    <div class="rdhf-ref-chips"></div>
+                                    <details class="rdhf-ref-raw">
+                                        <summary>
+                                            <span class="rdhf-arrow">&#9654;</span>
+                                            {{localize "RDHF.registry.editRawList"}}
+                                        </summary>
+                                        <input type="text" class="rdhf-wide rdhf-droppable" data-field="features"
+                                               value="{{this.featuresText}}"
+                                               placeholder="{{localize 'RDHF.registry.featuresPlaceholder'}}">
+                                    </details>
+                                </div>
+
+                                <h5 class="rdhf-sub">{{localize "RDHF.registry.traits"}}</h5>
+                                <div class="rdhf-mini-grid">
+                                    {{#each this.traitRows}}
+                                        <label>
+                                            <span>{{this.label}}</span>
+                                            <input type="number" min="0" data-field="trait" data-key="{{this.key}}" value="{{this.value}}">
+                                        </label>
+                                    {{/each}}
+                                </div>
+
+                                <h5 class="rdhf-sub">{{localize "RDHF.registry.investment"}}</h5>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.investmentHint"}}</p>
+                                {{!-- Rows are built by _renderInvestment(). --}}
+                                <div class="rdhf-investment-list"></div>
+                                <button type="button" class="rdhf-text-btn" data-action="addInvestment">
+                                    <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addInvestment"}}
+                                </button>
+                            </fieldset>
+
+                            {{!-- Everything not set on most feats. Present, so a feat
+                                  that needs one does not cost a tab switch; folded away,
+                                  so it is not in the way of the eight that are. --}}
+                            <details class="rdhf-cur-more" {{#if @root.curation.moreOpen}}open{{/if}}>
+                                <summary>
+                                    <span class="rdhf-arrow">&#9654;</span>
+                                    {{localize "RDHF.curation.more"}}
+                                </summary>
+
+                                <label class="rdhf-checkline rdhf-checkline--boxed">
+                                    <input type="checkbox" data-field="hidden" {{#if this.hidden}}checked{{/if}}>
+                                    <span>{{localize "RDHF.registry.hidden"}}</span>
+                                </label>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.hiddenHint"}}</p>
+
+                                <h5 class="rdhf-sub">{{localize "RDHF.registry.resources"}}</h5>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.resourcesHint"}}</p>
+                                <div class="rdhf-mini-grid">
+                                    {{#each this.resourceRows}}
+                                        <label>
+                                            <span>{{this.label}}</span>
+                                            <input type="number" min="0" data-field="resource" data-key="{{this.key}}" value="{{this.value}}">
+                                        </label>
+                                    {{/each}}
+                                </div>
+
+                                <div class="rdhf-field-grid">
+                                    <label>
+                                        <span>{{localize "RDHF.registry.classes"}}</span>
+                                        <input type="text" data-field="classes" value="{{this.classesText}}">
+                                    </label>
+                                    <label>
+                                        <span>{{localize "RDHF.registry.subclasses"}}</span>
+                                        <input type="text" data-field="subclasses" value="{{this.subclassesText}}">
+                                    </label>
+                                </div>
+
+                                <h5 class="rdhf-sub">{{localize "RDHF.registry.expression"}}</h5>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.expressionHint"}}</p>
+                                {{!-- _renderAtomRows() appends the shortcut row here. --}}
+                                <input type="text" class="rdhf-wide" data-field="expression" value="{{this.expression}}">
+                            </details>
+                        </div>
+
+                        <footer class="rdhf-cur-actions">
+                            <p class="rdhf-cur-file-note rdhf-hint" {{#unless this.uncurated}}hidden{{/unless}}>
+                                {{localize "RDHF.curation.fileUncuratedNote"}}
+                            </p>
+                            <div class="rdhf-cur-buttons">
+                                <button type="button" class="rdhf-text-btn" data-action="curationSkip">
+                                    {{localize "RDHF.curation.skip"}} <i class="fa-solid fa-forward"></i>
+                                </button>
+                                <button type="button" class="rdhf-save-btn" data-action="curationFile"
+                                        data-tooltip="{{localize 'RDHF.curation.fileTooltip'}}">
+                                    <i class="fa-solid fa-floppy-disk"></i> {{localize "RDHF.curation.file"}}
+                                </button>
+                            </div>
+                        </footer>
+                    </div>
+                    {{/with}}
+                {{else}}
+                    <div class="rdhf-cur-done">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <p>{{localize "RDHF.curation.doneTitle"}}</p>
+                        <p class="rdhf-hint">{{localize "RDHF.curation.doneHint"}}</p>
+                    </div>
                 {{/if}}
                 </section>
             </section>
