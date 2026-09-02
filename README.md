@@ -43,9 +43,9 @@ Requirements can demand any combination of:
 - minimum **Hit Points, Stress, Hope or Evasion** — compared against the character's *maximum*, not
   their current value
 - minimum **Traits**
-- other **Feats or Features** the character must already have
+- other **Feats or Features** the character must already have — search for one by name, drag it onto
+  the field, or type its name or UUID
 - a **Class or Subclass** (multiclass counts)
-- **Investment in a Category** — "at least 2 Alchemy feats"
 
 There is also an optional advanced expression field combining atoms with `AND` / `OR`, for example
 `classIs:Rogue AND tierAtLeast:2`.

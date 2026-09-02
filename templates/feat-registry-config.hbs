@@ -354,6 +354,16 @@
                                             <input type="text" class="rdhf-wide rdhf-droppable" data-field="features"
                                                    value="{{this.featuresText}}"
                                                    placeholder="{{localize 'RDHF.registry.featuresPlaceholder'}}">
+                                            {{!-- Search, not another data-field: the
+                                                  results list is built and the pick
+                                                  written back by _bindReferenceSearch(),
+                                                  so this box never syncs anything. --}}
+                                            <div class="rdhf-ref-search">
+                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                <input type="text" class="rdhf-ref-search-input" autocomplete="off"
+                                                       placeholder="{{localize 'RDHF.registry.featureSearchPlaceholder'}}">
+                                                <ul class="rdhf-ref-results" hidden></ul>
+                                            </div>
                                             {{!-- Filled by _renderReferenceChips(): a raw
                                                   UUID tells the GM nothing about what they
                                                   just dropped. --}}

@@ -43,6 +43,9 @@ import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+/** Longest the requirement-reference search drops down before it stops listing. */
+const MAX_REFERENCE_RESULTS = 8;
+
 /** A roll-data stand-in, so the formula preview works with no actor selected. */
 const MOCK_ACTOR = {
   system: { levelData: { level: { current: 1 } }, tier: 1, proficiency: 1 },
@@ -338,6 +341,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       row
         .querySelector('[data-field="features"]')
         ?.addEventListener('change', () => this._renderReferenceChips(row));
+      this._bindReferenceSearch(row);
     }
 
     this._renderAtomRows();
@@ -542,7 +546,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         join.addEventListener('change', () => this._syncField(join));
         line.appendChild(join);
       } else {
-        line.appendChild(document.createElement('span'));
+        // No connector, and no placeholder element standing in for one: the row drops
+        // to a three-column template instead. The 1fr category column absorbs the
+        // difference, so the count and remove controls still line up down the list.
+        line.classList.add(`${PREFIX}-investment-row--first`);
       }
 
       const category = document.createElement('select');
@@ -638,6 +645,96 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         });
       }
     }
+  }
+
+  /**
+   * Wires one feat's "Other Feats or Features" search box.
+   *
+   * Typing a UUID by hand used to be the only way to name a prerequisite that was not
+   * to hand for a drag. This searches every Feature the registry knows about by name
+   * and adds the one picked, so the GM never has to see a UUID at all.
+   *
+   * @param {HTMLElement} row  the feat's <details>
+   */
+  _bindReferenceSearch(row) {
+    const box = row.querySelector(`.${PREFIX}-ref-search`);
+    const input = box?.querySelector(`.${PREFIX}-ref-search-input`);
+    const results = box?.querySelector(`.${PREFIX}-ref-results`);
+    if (!input || !results) return;
+
+    const close = () => {
+      results.replaceChildren();
+      results.hidden = true;
+    };
+
+    const currentRefs = () =>
+      (row.querySelector('[data-field="features"]')?.value ?? '')
+        .split(',')
+        .map(v => v.trim())
+        .filter(Boolean);
+
+    const add = uuid => {
+      const refs = currentRefs();
+      if (!refs.includes(uuid)) refs.push(uuid);
+      this._setReferences(row, refs);
+      input.value = '';
+      close();
+    };
+
+    const paint = () => {
+      const query = input.value.trim().toLowerCase();
+      if (!query) return close();
+
+      // Already-referenced Feats are dropped, and so is the feat being edited — a
+      // requirement on itself could never be met.
+      const taken = new Set(currentRefs());
+      taken.add(row.dataset.uuid);
+
+      const matches = [...this.#sourceNames]
+        .filter(([uuid, name]) => !taken.has(uuid) && String(name).toLowerCase().includes(query))
+        .sort((a, b) => String(a[1]).localeCompare(String(b[1])))
+        .slice(0, MAX_REFERENCE_RESULTS);
+
+      results.replaceChildren();
+      if (!matches.length) {
+        const empty = document.createElement('li');
+        empty.className = `${PREFIX}-ref-result-empty`;
+        empty.textContent = game.i18n.localize('RDHF.registry.featureSearchEmpty');
+        results.appendChild(empty);
+      }
+      for (const [uuid, name] of matches) {
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `${PREFIX}-ref-result`;
+        button.dataset.uuid = uuid;
+        button.textContent = name;
+        // mousedown, not click: the input's blur tears the list down before a click
+        // would ever land on it.
+        button.addEventListener('mousedown', event => {
+          event.preventDefault();
+          add(uuid);
+        });
+        item.appendChild(button);
+        results.appendChild(item);
+      }
+      results.hidden = false;
+    };
+
+    input.addEventListener('input', paint);
+    input.addEventListener('focus', paint);
+    input.addEventListener('blur', close);
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        input.value = '';
+        close();
+      } else if (event.key === 'Enter') {
+        // The box sits inside the registry form; a stray Enter would submit it.
+        event.preventDefault();
+        const first = results.querySelector(`.${PREFIX}-ref-result`);
+        if (first) add(first.dataset.uuid);
+      }
+    });
   }
 
   /** Writes a reference list back to the field and re-chips it. */
