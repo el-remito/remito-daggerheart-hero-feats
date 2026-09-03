@@ -25,6 +25,7 @@ import {
 } from '../data/actor-state.mjs';
 import { isEligible } from '../logic/requirements.mjs';
 import { matchesFilters, blankFilterState, buildSearchText, byLevelThenName } from '../logic/filters.mjs';
+import { localizeCheck } from './requirement-text.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -53,42 +54,16 @@ export function refreshCatalog(actorId) {
   openCatalogs.get(actorId)?.render();
 }
 
-/**
- * Turns a requirement descriptor into display text.
- *
- * logic/ deliberately emits keys and parts rather than sentences, so every string that
- * needs a language lives here. Investment arrives as a list of rows plus connectors and
- * is rendered as one readable chain: "Alchemy x2 and Arcana x1, or Swordmaster x3".
- */
-function localizeCheck(check) {
-  const data = { ...check.data };
-  if (data.traitKey) data.trait = game.i18n.localize(data.traitKey);
-
-  if (Array.isArray(data.parts)) {
-    data.value = data.parts
-      .map((part, index) => {
-        const row = game.i18n.format('RDHF.requirement.investmentRow', {
-          category: part.category,
-          value: part.count
-        });
-        if (!index) return row;
-        const join = game.i18n.localize(
-          part.join === 'or' ? 'RDHF.requirement.joinOr' : 'RDHF.requirement.joinAnd'
-        );
-        return `${join} ${row}`;
-      })
-      .join(' ');
-  }
-
-  return { ...check, label: game.i18n.format(check.key, data) };
-}
-
 export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(actor, options = {}) {
     super(options);
     this.actor = actor;
     this._filters = blankFilterState();
     this._openRows = new Set();
+    // Whether each collapsible rail section is expanded, keyed by data-rail rather than
+    // by index so reordering the rail cannot silently swap the two. Both start open:
+    // a filter the player cannot see is a filter they will not think to clear.
+    this._railOpen = { types: true, categories: true };
     // 'available' | 'acquired'. Switching tabs is a pure DOM toggle in _applyFilters,
     // never a re-render, so the filter rail keeps its state and the search box its focus.
     this._tab = 'available';
@@ -135,6 +110,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     openCatalogs.set(this.actor.id, this);
     this._captureOpenRows();
+    this._captureRails();
     return super.render(options);
   }
 
@@ -149,6 +125,14 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     this._openRows = new Set(
       [...this.element.querySelectorAll(`.${PREFIX}-feat[open]`)].map(el => el.dataset.uuid)
     );
+  }
+
+  /** Same, for the collapsible rail sections. Keyed by data-rail, never by index. */
+  _captureRails() {
+    if (!this.element) return;
+    for (const rail of this.element.querySelectorAll(`.${PREFIX}-rail-details[data-rail]`)) {
+      this._railOpen[rail.dataset.rail] = rail.open;
+    }
   }
 
   async _prepareContext(_options) {
@@ -205,8 +189,24 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       isAvailableTab: this._tab === 'available',
       isAcquiredTab: this._tab === 'acquired',
       hasFeats: views.length > 0,
-      categories: categories.map(c => ({ id: c.id, label: taxonomyLabel(c), icon: c.icon })),
-      types: types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon })),
+      // The rail renders its OWN state. Filtering never re-renders, so for a long time
+      // the only way a box could be ticked was the player ticking it and nothing had to
+      // be carried; but the catalog does re-render on an acquisition and on any module
+      // setting change, and without this the boxes came back empty while _applyFilters
+      // went on filtering — a rail contradicting the row count below it.
+      categories: categories.map(c => ({
+        id: c.id,
+        label: taxonomyLabel(c),
+        icon: c.icon,
+        checked: this._filters.categories.includes(c.id)
+      })),
+      types: types.map(t => ({
+        id: t.id,
+        label: taxonomyLabel(t),
+        icon: t.icon,
+        checked: this._filters.types.includes(t.id)
+      })),
+      railOpen: this._railOpen,
       filters: this._filters
     };
   }

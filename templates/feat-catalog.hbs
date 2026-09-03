@@ -39,50 +39,68 @@
             <label class="rdhf-search-wrap">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="search" class="rdhf-search" autocomplete="off" spellcheck="false"
+                       value="{{filters.search}}"
                        placeholder="{{localize 'RDHF.catalog.searchPlaceholder'}}">
             </label>
 
             <section class="rdhf-rail-section">
                 <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.levelRange"}}</h4>
                 <div class="rdhf-level-range">
-                    <input type="number" min="1" data-filter="levelMin" placeholder="{{localize 'RDHF.catalog.min'}}">
+                    <input type="number" min="1" data-filter="levelMin" value="{{filters.levelMin}}"
+                           placeholder="{{localize 'RDHF.catalog.min'}}">
                     <span class="rdhf-dash">–</span>
-                    <input type="number" min="1" data-filter="levelMax" placeholder="{{localize 'RDHF.catalog.max'}}">
+                    <input type="number" min="1" data-filter="levelMax" value="{{filters.levelMax}}"
+                           placeholder="{{localize 'RDHF.catalog.max'}}">
                 </div>
             </section>
 
-            {{#if types.length}}
-                <section class="rdhf-rail-section">
-                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.types"}}</h4>
-                    {{#each types}}
-                        <label class="rdhf-checkline">
-                            <input type="checkbox" data-filter="type" value="{{this.id}}">
-                            {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
-                            <span>{{this.label}}</span>
-                        </label>
-                    {{/each}}
-                </section>
-            {{/if}}
-
-            {{#if categories.length}}
-                <section class="rdhf-rail-section">
-                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.categories"}}</h4>
-                    {{#each categories}}
-                        <label class="rdhf-checkline">
-                            <input type="checkbox" data-filter="category" value="{{this.id}}">
-                            {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
-                            <span>{{this.label}}</span>
-                        </label>
-                    {{/each}}
-                </section>
-            {{/if}}
-
+            {{!-- Eligibility sits directly under Level because the two are read
+                  together: "what can I take" is a narrowing of "what is in reach".
+                  This is the one place the rail deliberately departs from the GM
+                  registry's order — the registry has no eligibility switch at all,
+                  so the sections the two DO share stay in the same sequence. --}}
             <section class="rdhf-rail-section">
                 <label class="rdhf-checkline">
-                    <input type="checkbox" data-filter="eligibleOnly">
+                    <input type="checkbox" data-filter="eligibleOnly" {{#if filters.eligibleOnly}}checked{{/if}}>
                     <span>{{localize "RDHF.catalog.eligibleOnly"}}</span>
                 </label>
             </section>
+
+            {{#if types.length}}
+                <details class="rdhf-rail-section rdhf-rail-details" data-rail="types"
+                         {{#if railOpen.types}}open{{/if}}>
+                    <summary class="rdhf-rail-heading">
+                        <span class="rdhf-arrow">&#9654;</span>
+                        {{localize "RDHF.catalog.types"}}
+                    </summary>
+                    {{#each types}}
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="type" value="{{this.id}}"
+                                   {{#if this.checked}}checked{{/if}}>
+                            {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                            <span>{{this.label}}</span>
+                        </label>
+                    {{/each}}
+                </details>
+            {{/if}}
+
+            {{#if categories.length}}
+                <details class="rdhf-rail-section rdhf-rail-details" data-rail="categories"
+                         {{#if railOpen.categories}}open{{/if}}>
+                    <summary class="rdhf-rail-heading">
+                        <span class="rdhf-arrow">&#9654;</span>
+                        {{localize "RDHF.catalog.categories"}}
+                    </summary>
+                    {{#each categories}}
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="category" value="{{this.id}}"
+                                   {{#if this.checked}}checked{{/if}}>
+                            {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                            <span>{{this.label}}</span>
+                        </label>
+                    {{/each}}
+                </details>
+            {{/if}}
 
             <footer class="rdhf-rail-footer">
                 <span class="rdhf-result-summary">

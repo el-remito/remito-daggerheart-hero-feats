@@ -52,10 +52,12 @@ import {
 } from '../logic/statistics.mjs';
 import { ATOMS, blankRequirements } from '../logic/requirements.mjs';
 import {
+  applyAutoInvestment,
   autoInvestmentRow,
   investmentForLevel,
   stripRedundantInvestment
 } from '../logic/automation.mjs';
+import { describeRequirements } from './requirement-text.mjs';
 import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/filters.mjs';
 import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
@@ -69,6 +71,29 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
  * exactly how Add category requirement came to be dead there.
  */
 const FEAT_HOST = `.${PREFIX}-reg-feat[data-uuid], .${PREFIX}-cur-editor[data-uuid]`;
+
+/**
+ * The fields whose value can change what a feat's collapsed "Requires" line says.
+ *
+ * Level and Category are in here not because they are shown — the line drops the Level
+ * chip and the Category is a chip of its own — but because both feed Rule Automation,
+ * which can add or remove an investment clause without any requirement field moving.
+ * `summary`, `hidden` and `type` are the only feat fields deliberately left out.
+ */
+const REQUIREMENT_FIELDS = [
+  'level',
+  'category',
+  'autoExempt',
+  'trait',
+  'resource',
+  'features',
+  'classes',
+  'subclasses',
+  'investmentCategory',
+  'investmentCount',
+  'investmentJoin',
+  'expression'
+];
 
 /** Longest the requirement-reference search drops down before it stops listing. */
 const MAX_REFERENCE_RESULTS = 8;
@@ -653,6 +678,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     for (const row of rows) {
       this._renderInvestment(row);
       this._paintAutoInvestment(row);
+      this._paintRequirementLine(row);
       this._renderReferenceChips(row);
       // On change rather than input: re-chipping every keystroke would fire a document
       // lookup for each half-typed UUID, and the chips would flicker while typing.
@@ -1325,6 +1351,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     ) {
       this._paintAutoInvestment(this._featHost(input));
     }
+
+    if (REQUIREMENT_FIELDS.includes(field)) {
+      this._paintRequirementLine(this._featHost(input));
+    }
   }
 
   /** Greys the curve table while the rule is off. Repaint, never a re-render. */
@@ -1401,6 +1431,53 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // The rule would apply but the GM's own rows take precedence. Say what it WOULD
     // have asked for, so the deviation they are authoring is visible next to it.
     say('RDHF.registry.autoInvestmentOverridden', { count: would, category }, true);
+  }
+
+  /**
+   * Writes the collapsed "Requires" line into one Feats row.
+   *
+   * The point of it is scanning: a GM curating a chain needs to see what every feat
+   * asks for while scrolling past it, not by opening each one in turn. So the line
+   * carries the same clauses, in the same order, worded the same way as the player
+   * catalog — through the very same evaluator — but with NO met/unmet colour, because
+   * there is no character here for "met" to mean anything against. The Level clause is
+   * dropped by describeRequirements: the row already wears a Level chip.
+   *
+   * Rule Automation is applied first, exactly as listFeats does for players, so the
+   * derived investment clause appears here even though it has no editable row behind
+   * it. That is the whole value of the line — it reports what the table will face, not
+   * what the GM happened to type. The read-only automation note inside the open form is
+   * where the same fact is attributed to the rule.
+   *
+   * Only the Feats tab has this element. Passed a Curation editor the querySelector
+   * misses and the call is a no-op, which is why it can sit in the shared FEAT_HOST
+   * loop unguarded.
+   *
+   * @param {HTMLElement|null} host
+   */
+  _paintRequirementLine(host) {
+    const line = host?.querySelector(`.${PREFIX}-reg-reqs`);
+    if (!line) return;
+
+    const uuid = host.dataset.uuid;
+    const feat = applyAutoInvestment(
+      normalizeFeat(uuid, this.#config.feats?.[uuid]),
+      this.#automation?.investmentByLevel
+    );
+
+    const labels = describeRequirements(feat, {
+      categoryLabels: Object.fromEntries(
+        this.#categories.map(c => [c.id, taxonomyLabel(c) || c.id])
+      ),
+      // A requirement may name another Feat by UUID; #sourceNames is the same map the
+      // reference chips resolve against, so both render the Feature's actual name.
+      featLabels: Object.fromEntries(this.#sourceNames)
+    });
+
+    // The heading is markup, not derived, so it is kept rather than rebuilt.
+    const heading = line.querySelector(`.${PREFIX}-req-label`);
+    line.replaceChildren(heading, ...labels.map(text => this._chip('req', text)));
+    line.hidden = labels.length === 0;
   }
 
   /* ── Drag and drop ───────────────────────────────────────────────────────── */
@@ -1688,6 +1765,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._renderInvestment(row);
     // Adding the first row suppresses the rule, removing the last restores it.
     this._paintAutoInvestment(row);
+    this._paintRequirementLine(row);
   }
 
   static _onRemoveInvestment(event, target) {
@@ -1699,6 +1777,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     if (row) {
       this._renderInvestment(row);
       this._paintAutoInvestment(row);
+      this._paintRequirementLine(row);
     }
   }
 

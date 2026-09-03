@@ -154,6 +154,16 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.4.1
+- **Requirements are now visible at a glance in the Feat Registry.** Every row on the Feats tab carries the same "Requires" line the players see, so you can audit a whole chain by scrolling instead of opening each Feat in turn. The chips are neutral — there is no character here to be measured against — and the Feat's own Level is left off, since the row already shows it
+- **That line includes what Rule Automation adds**, exactly as the table will see it, so a derived investment requirement is part of the scan and not something you have to open the Feat to find
+- **Advanced expressions are no longer shown to players in their own syntax.** A Feat gated on `traitAtLeast:agility:2 AND hasDomain:Blade` used to print exactly that on the requirement chip; it now reads "Agility 2 and Domain: Blade". Every atom the picker offers is covered, and an atom the module does not recognise is still shown as you typed it rather than swallowed
+- **"or" is now spelled out in requirements that accept any one of several things.** A Feat needing either Expert: Heavy Armor or Expert: Light Armor used to list them separated by a comma, which read as needing both. Same fix in the player's Feats window and in the Registry
+- **Type and Category filters collapse** in a character's Feats window, as they already did in the Registry, and stay how you left them
+- **"Only feats I qualify for" moved up**, directly under the Level range — the two are read together
+- **Feat Points per Character has one home again.** The formula was on the module's settings page *and* on the Registry's Points tab — the same world value with two editors, one writing immediately and one waiting for Save, and no way to tell which was the real one. It now lives only on the Points tab, next to its live preview. The value itself is untouched
+- **The player's filter rail no longer forgets itself.** Ticked boxes, the Level range and the search text survive a re-render (acquiring a Feat, or the GM saving the Registry); previously the rows stayed filtered while the rail came back blank
+
 ### v1.4.0
 - **New Automation tab in the Feat Registry**, for rules that derive requirements across the whole catalog instead of you typing the same one onto every Feat
 - **Default Investment by Level.** Switch it on and a Feat asks the character to already own a number of Feats in that same Category, taken from an editable Level table. Nothing is written into your Feats — switch the rule off and the catalog is exactly as you authored it

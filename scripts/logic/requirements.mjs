@@ -131,7 +131,9 @@ export function checkRequirements(feat, snapshot) {
     out.push({
       kind: 'feature',
       key: 'RDHF.requirement.feature',
-      data: { value: reqs.features.map(r => snapshot.featLabels?.[r] ?? r).join(', ') },
+      // Items, not a sentence: these are OR-ed, and the connector word is a language
+      // the app layer owns. A comma-joined string read as "all of these" and was wrong.
+      data: { items: reqs.features.map(r => snapshot.featLabels?.[r] ?? r) },
       met
     });
   }
@@ -141,7 +143,7 @@ export function checkRequirements(feat, snapshot) {
     out.push({
       kind: 'class',
       key: 'RDHF.requirement.class',
-      data: { value: reqs.classes.join(', ') },
+      data: { items: [...reqs.classes] },
       met: reqs.classes.some(
         c => sameName(c, snapshot.className) || sameName(c, snapshot.multiclassName)
       )
@@ -151,7 +153,7 @@ export function checkRequirements(feat, snapshot) {
     out.push({
       kind: 'subclass',
       key: 'RDHF.requirement.subclass',
-      data: { value: reqs.subclasses.join(', ') },
+      data: { items: [...reqs.subclasses] },
       met: reqs.subclasses.some(
         s =>
           sameName(s, snapshot.subclassName) || sameName(s, snapshot.multiclassSubclassName)
@@ -179,12 +181,16 @@ export function checkRequirements(feat, snapshot) {
     });
   }
 
-  // Free-text expression escape hatch
+  // Free-text expression escape hatch. `branches` is the parse; `value` is the GM's
+  // raw text, kept as the fallback for a caller that has nothing better to show.
   if (reqs.expression?.trim()) {
     out.push({
       kind: 'expression',
       key: 'RDHF.requirement.expression',
-      data: { value: reqs.expression.trim() },
+      data: {
+        value: reqs.expression.trim(),
+        branches: parseExpression(reqs.expression, snapshot)
+      },
       met: evaluateExpression(reqs.expression, snapshot)
     });
   }
@@ -237,6 +243,25 @@ export function isEligible(feat, snapshot, remainingPoints) {
 /* ── Expression grammar (escape hatch) ─────────────────────────────────────── */
 
 /**
+ * Splits one atom into its parts, or null when it carries no `prefix:` at all.
+ *
+ * Shared by evaluation and description on purpose: the two must never disagree about
+ * where an atom's value starts, or a player would be shown a clause that is not the
+ * one being tested.
+ *
+ * @param {string} atom
+ * @returns {{raw: string, prefix: string, value: string, first: string, second: string}|null}
+ */
+function splitAtom(atom) {
+  const raw = String(atom ?? '').trim();
+  const colon = raw.indexOf(':');
+  if (!raw || colon < 0) return null;
+  const value = raw.slice(colon + 1).trim();
+  const [first, second] = value.split(':').map(s => s?.trim());
+  return { raw, prefix: raw.slice(0, colon), value, first, second };
+}
+
+/**
  * Evaluates one atom against the snapshot.
  *
  * Unrecognized atoms fail PERMISSIVELY (return true) — a typo in a GM's expression
@@ -248,11 +273,9 @@ function evaluateAtom(atom, snapshot) {
   if (!req) return true;
   if (req === 'hasSpellcasting') return Boolean(snapshot.hasSpellcasting);
 
-  const colon = req.indexOf(':');
-  if (colon < 0) return true;
-  const prefix = req.slice(0, colon);
-  const value = req.slice(colon + 1).trim();
-  const [first, second] = value.split(':').map(s => s?.trim());
+  const parts = splitAtom(req);
+  if (!parts) return true;
+  const { prefix, value, first, second } = parts;
 
   switch (prefix) {
     case 'hasFeature':
@@ -296,6 +319,102 @@ export function evaluateExpression(expression, snapshot) {
   return String(expression)
     .split(/ OR /i)
     .some(branch => branch.split(/ AND /i).every(atom => evaluateAtom(atom, snapshot)));
+}
+
+/**
+ * Describes an expression as nested DESCRIPTORS, so it can be shown to a player in
+ * words instead of in the grammar.
+ *
+ * `hasSpellcasting AND traitAtLeast:agility:2` was printed verbatim on the requirement
+ * chip — machine syntax, in the one place a player is meant to read what a Feat costs
+ * them. This returns the same OR-of-AND shape `evaluateExpression` walks, with each
+ * atom carried as `{ key, data }`: the very shape every other clause in this file
+ * emits, so the app layer localizes it with the code it already has and `logic/` stays
+ * free of `game.i18n`.
+ *
+ * Most atoms reuse an existing key rather than inventing a synonym — `levelAtLeast:5`
+ * is the same sentence as the Level clause, and `categoryAtLeast:alchemy:3` the same as
+ * one investment row — so a GM cannot make the same requirement read two ways
+ * depending on which control they typed it into.
+ *
+ * An atom this grammar does not recognize is returned as `{ key: null, raw }` and
+ * printed as typed. That matches how `evaluateAtom` treats it: permissively, visible,
+ * never silently dropped.
+ *
+ * @param {string} expression
+ * @param {object} snapshot   consulted only for label maps
+ * @returns {Array<Array<{key: string|null, data: object, raw: string}>>}
+ */
+export function parseExpression(expression, snapshot = {}) {
+  if (!expression || !String(expression).trim()) return [];
+  return String(expression)
+    .split(/ OR /i)
+    .map(branch =>
+      branch
+        .split(/ AND /i)
+        .map(atom => describeAtom(atom, snapshot))
+        .filter(Boolean)
+    )
+    .filter(branch => branch.length);
+}
+
+/** One atom as a descriptor. @see parseExpression */
+function describeAtom(atom, snapshot) {
+  const raw = String(atom ?? '').trim();
+  if (!raw) return null;
+
+  const say = (key, data) => ({ key, data, raw });
+  if (raw === 'hasSpellcasting') return say('RDHF.requirement.atom.spellcasting', {});
+
+  const parts = splitAtom(raw);
+  if (!parts) return say(null, {});
+  const { prefix, value, first, second } = parts;
+
+  switch (prefix) {
+    // `items` rather than `value`: these read as any-of everywhere else, and the app
+    // layer's list join is what puts the word "or" in.
+    case 'hasFeature':
+      return say('RDHF.requirement.feature', { items: [value] });
+    case 'classIs':
+      return say('RDHF.requirement.class', { items: [value] });
+    case 'subclassIs':
+      return say('RDHF.requirement.subclass', { items: [value] });
+    case 'hasDomain':
+      return say('RDHF.requirement.atom.domain', { value });
+    case 'communityIs':
+      return say('RDHF.requirement.atom.community', { value });
+    case 'ancestryIs':
+      return say('RDHF.requirement.atom.ancestry', { value });
+    case 'tierAtLeast':
+      return say('RDHF.requirement.atom.tier', { value: Number(value) || 0 });
+    case 'levelAtLeast':
+      return say('RDHF.requirement.level', { value: Number(value) || 0 });
+    case 'traitAtLeast': {
+      // A trait this system does not have would localize to the literal key, so an
+      // unknown one falls back to the raw atom rather than printing "RDHF.trait.foo".
+      const trait = String(first ?? '').toLowerCase();
+      if (!TRAITS.includes(trait)) return say(null, {});
+      return say('RDHF.requirement.trait', {
+        traitKey: 'RDHF.trait.' + trait,
+        value: Number(second) || 0
+      });
+    }
+    case 'resourceAtLeast':
+      if (!(first in RESOURCE_REQS)) return say(null, {});
+      return say('RDHF.requirement.resource.' + first, { value: Number(second) || 0 });
+    case 'categoryAtLeast':
+      return say('RDHF.requirement.categoryInvestment', {
+        parts: [
+          {
+            category: snapshot.categoryLabels?.[first] ?? first,
+            count: Number(second) || 0,
+            join: null
+          }
+        ]
+      });
+    default:
+      return say(null, {});
+  }
 }
 
 /** Atom vocabulary, for the GM editor's requirement picker. */

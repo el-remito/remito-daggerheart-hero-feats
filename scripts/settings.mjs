@@ -77,17 +77,24 @@ export function registerSettings() {
     default: 0
   });
 
-  // The settings a GM may want to tweak without opening the registry app.
+  // The point formula. config: false — the Points tab of the registry app owns this,
+  // and it owns it ALONE. It was on the settings sheet as well, which gave the same
+  // world value two editors with different rules: the sheet wrote on submit, the Points
+  // tab is a working copy that needs Save, and a GM looking at both had no way to tell
+  // which one was the source of truth. The registry is the surface that can also show
+  // the live preview and explain the @-paths, so it is the one that stays.
+  //
+  // The two i18n keys are still named 'RDHF.settings.pointFormula.*' because that is
+  // where the string lives and the Points tab localizes them; only the sheet is gone.
   game.settings.register(MODULE_ID, SETTINGS.POINT_FORMULA, {
-    name: 'RDHF.settings.pointFormula.name',
-    hint: 'RDHF.settings.pointFormula.hint',
     scope: 'world',
-    config: true,
+    config: false,
     type: String,
     default: DEFAULT_POINT_FORMULA
   });
 
-  // Whether the registry shows its Statistics tab. World-scoped, so only a GM can
+  // The one setting a GM can still tweak without opening the registry app: whether the
+  // registry shows its Statistics tab. World-scoped, so only a GM can
   // reach it in the first place. Nothing is computed while this is off — the tab is
   // what triggers the actor scan.
   game.settings.register(MODULE_ID, SETTINGS.SHOW_STATS, {

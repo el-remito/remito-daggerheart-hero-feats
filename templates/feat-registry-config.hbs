@@ -272,6 +272,16 @@
                                                 {{/if}}
                                                 </span>
                                             </div>
+                                            {{!-- Filled by _paintRequirementLine(), never
+                                                  by Handlebars: the same helper has to
+                                                  repaint it on every requirement edit, and
+                                                  one implementation cannot drift from
+                                                  itself the way this markup and _buildChips
+                                                  can. Chips carry no met/unmet state — there
+                                                  is no character here to measure against. --}}
+                                            <div class="rdhf-req-line rdhf-reg-reqs" hidden>
+                                                <span class="rdhf-req-label">{{localize "RDHF.catalog.requires"}}</span>
+                                            </div>
                                             {{#if this.teaser}}
                                                 <p class="rdhf-feat-teaser">{{this.teaser}}</p>
                                             {{/if}}

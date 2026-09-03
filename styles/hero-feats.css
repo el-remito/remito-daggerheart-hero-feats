@@ -1955,3 +1955,13 @@ details[open] > summary .rdhf-arrow {
 .rdhf-cur-done p {
     margin: 0;
 }
+
+/* ── v1.4.1: the GM's collapsed requirement line ─────────────────────── */
+
+/* Neutral by construction. .rdhf-chip--req carries is-met / is-unmet in the player
+   catalog; here it is emitted with neither, so it falls back to the base chip and is
+   muted a shade further — the registry has no character to measure a requirement
+   against, and a coloured verdict would be inventing one. */
+.rdhf-reg-reqs .rdhf-chip--req {
+    color: var(--rdhf-ink-muted);
+}

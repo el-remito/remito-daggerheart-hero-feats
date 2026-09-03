@@ -51,12 +51,15 @@ scripts/
     curation.mjs            the Curation queue's membership rule and advance order
     automation.mjs          Rule Automation: the derived-requirement rules
   apps/
+    requirement-text.mjs    the ONLY place a requirement descriptor becomes display text
     feat-catalog.mjs        player + GM catalog (one instance per actor, tracked in openCatalogs)
-    feat-registry-config.mjs  GM registry (6 tabs), registered via registerMenu
+    feat-registry-config.mjs  GM registry (7 tabs), registered via registerMenu
   badge/badge.mjs           renderActorSheetV2 injection next to Level
 ```
 
-Import direction is one-way: `apps/` → `data/` → `logic/` → `constants.mjs`.
+Import direction is one-way: `apps/` → `data/` → `logic/` → `constants.mjs`. `requirement-text.mjs`
+is the one module inside `apps/` that another app imports; it is a leaf (it reaches only `logic/`),
+so the direction still holds and there is no cycle.
 
 ## Data shapes
 
@@ -197,12 +200,71 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **The GM registry mirrors the player catalog** — same rail, same row shape, same `matchesFilters`
   predicate, so curation happens against the view the table sees. Only the player-facing switches
   (eligibility, hide-acquired) are left out, replaced by "uncurated only" / "hidden only". The
-  section order is part of the mirror and is **search, Level, Type, Category, then the switches** in
-  both templates — the registry's are `<details>` and the catalog's are plain `<section>`s, so
-  nothing but source order keeps them agreeing. Rail open-state is keyed by `data-rail`, never by
-  index, so reordering is safe.
+  shared sections are ordered the same way in both templates — **search, Level, Type, Category** —
+  and nothing but source order keeps them agreeing. Type and Category are `<details>` in both since
+  v1.4.1; rail open-state is keyed by `data-rail`, never by index, so reordering is safe. The
+  catalog's own **eligibility switch sits between Level and Type** rather than with the trailing
+  switches, which is the one deliberate departure: the registry has no eligibility switch at all,
+  so the sections the two actually share are still in the same sequence.
+- **A rail renders its own state, in both apps.** `filters.search`, the level values, each box's
+  `checked` and `railOpen` all travel through the context. Filtering never re-renders, so for a
+  long time nothing had to be carried — but both windows re-render for other reasons (an
+  acquisition, a saved setting, a tab switch), and without this the rail came back blank while
+  `_applyFilters` went on filtering: a rail contradicting the row count beneath it. The catalog
+  was missing this until v1.4.1; `_onClearFilters` still resets by writing the DOM rather than
+  re-rendering, and both paths have to stay in step.
 - **Requirement checks return descriptors, not strings.** `{ kind, key, data, met }` — the app layer
-  localizes. That is what keeps `logic/` free of `game.i18n` and testable in node.
+  localizes. That is what keeps `logic/` free of `game.i18n` and testable in node. A descriptor
+  whose clause is a LIST must carry the list, never a pre-joined string: `data.items` for the
+  any-of clauses (features / classes / subclasses) and `data.parts` for the investment chain.
+  `checkRequirements` ORs the any-of lists, and joining them with a comma in `logic/` shipped
+  "Has Expert: Heavy Armor, Expert: Light Armor" for a requirement either one satisfied — the
+  connector is a word, so it belongs to the language layer. The third list is
+  `data.branches`, the parsed free-text expression — an OR of ANDs whose atoms are
+  themselves `{ key, data }` descriptors, so `localizeCheck` recurses one level into
+  them and terminates because an atom carries no branches of its own. All three joins
+  live in `apps/requirement-text.mjs`.
+- **The expression escape hatch is parsed for display, and `parseExpression` shares
+  `splitAtom` with `evaluateAtom`.** `RDHF.requirement.expression` is `"{value}"`, and
+  before v1.4.1 `value` was the GM's raw text — so a player was shown
+  `traitAtLeast:agility:2 AND hasDomain:Blade`, machine grammar in the one place they
+  read what a Feat costs. `describeAtom` maps each atom onto a descriptor, and the two
+  functions must never disagree about where an atom's value starts, which is why the
+  splitter is shared rather than written twice. Most atoms deliberately **reuse an
+  existing key** — `levelAtLeast:5` is `RDHF.requirement.level`, `categoryAtLeast:a:3`
+  is one investment `part`, `classIs:` is a one-item `items` list — so the same
+  requirement cannot read two ways depending on which control the GM typed it into;
+  only spellcasting, domain, community, ancestry and tier needed new strings. An atom
+  the grammar does not recognize returns `{ key: null }` and is printed as typed, which
+  matches how `evaluateAtom` treats it: permissively and visibly. `traitAtLeast:` and
+  `resourceAtLeast:` additionally fall back when the key is not in `TRAITS` /
+  `RESOURCE_REQS`, because `game.i18n.localize` would otherwise print the literal
+  `RDHF.trait.foo` at the player.
+- **`apps/requirement-text.mjs` is the one place a descriptor becomes text**, because two apps now
+  render the same requirements: the player catalog with met/unmet state, and the GM registry's
+  Feats rows without it. `describeRequirements(feat, labels)` is the GM read — it calls
+  `checkRequirements` with a snapshot holding nothing but the label maps, discards every `met` it
+  computes, and drops the `level` clause (the row already wears a Level chip). Going through the
+  real evaluator rather than walking `feat.requirements` by hand is the point: the GM sees the same
+  clauses in the same order with the same wording the table will, and a future requirement kind
+  appears in both views without being written twice.
+- **The GM's Requires line is painted, never rendered by Handlebars.** The template emits an empty
+  `.rdhf-reg-reqs` holding only its heading, and `_paintRequirementLine(host)` fills it — on render
+  from the `FEAT_HOST` loop, and on every edit of a field in `REQUIREMENT_FIELDS`. That list
+  includes `level` and `category`, which the line does not show, because both feed Rule Automation
+  and can add or remove an investment clause with no requirement field moving. Unlike `_buildChips`
+  — which duplicates its markup in the template and has to be kept in step by eye — there is one
+  implementation here and it cannot drift from itself. It applies `applyAutoInvestment` first, as
+  `listFeats` does for players, so the derived clause is part of the scan. Passed a Curation editor
+  the `querySelector` misses and the call is a no-op, which is why it sits in the shared loop
+  unguarded.
+- **One setting, one editor.** `SETTINGS.SHOW_STATS` is the only `config: true` setting in the
+  module. `POINT_FORMULA` was one too until v1.4.1, which put the same world value behind two
+  surfaces with different rules — Foundry's sheet wrote on submit, the registry's Points tab is a
+  working copy needing Save — so a GM had no way to tell which was authoritative. It is now
+  `config: false` and the Points tab owns it, which is also the only surface that can show the
+  live `Roll` preview and explain the `@`-paths. The `RDHF.settings.pointFormula.*` keys kept
+  their names; the Points tab localizes them.
 - **Working copy, save on Save.** The registry app clones the setting into `#config`, mutates it on
   every `input`, and writes only in `_onSave`. Open `<details>` state is captured before
   `super.render()` and restored by uuid, never by index.
