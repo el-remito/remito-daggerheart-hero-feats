@@ -215,8 +215,21 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   feat views and carries `data-uuid`, so `_syncField`, `_renderInvestment`, `_renderReferenceChips`,
   `_bindReferenceSearch`, `_renderAtomRows` and `_loadFullDescription` all apply unchanged — every
   one of them takes a container and queries inside it. `_onRender`'s wiring loop selects
-  `.rdhf-reg-feat[data-uuid], .rdhf-cur-editor[data-uuid]`; `_applyRegFilters` and `_refreshRow`
-  deliberately still match only `.rdhf-reg-feat`, because the queue is not filtered.
+  `FEAT_HOST`; `_applyRegFilters` and `_refreshRow` deliberately still match only
+  `.rdhf-reg-feat`, because the queue is not filtered.
+- **An action handler that names only `.rdhf-reg-feat` is dead on the Curation tab, silently.**
+  The helpers above are host-agnostic because each is *given* its container. Action handlers are
+  not: ApplicationV2 hands them the clicked element, so every one has to walk up to the container
+  carrying `data-uuid` itself, and `target.closest('.rdhf-reg-feat')` resolves `null` on the
+  Curation tab. The handler then returns at its own `if (!uuid) return` guard — no throw, no
+  warning, nothing in the console, and a button that simply does nothing. That was v1.3.2:
+  `addInvestment`, `removeInvestment`, `removeReference` and the chip repaint in
+  `_addFeatureReference` had all shipped Feats-only. **Never write the selector at a call site.**
+  `FEAT_HOST` (`.rdhf-reg-feat[data-uuid], .rdhf-cur-editor[data-uuid]`) is declared once at the
+  top of `feat-registry-config.mjs` and `_featHost(el)` is the only way a handler should resolve
+  its feat. The same rule caught the tab badge: `querySelector('.rdhf-tab-badge')` was correct with
+  one badge and quietly stale the moment Curation grew a second, so `_paintBadges()` is the single
+  writer for all of them.
 - **Selecting a queue feat re-renders; editing one does not.** The pane is a whole form, and
   rebuilding it by hand would duplicate every control the Feats tab declares. So `render()` captures
   and restores the queue's own scroller (`.rdhf-cur-queue-scroll`) alongside `.rdhf-reg-scroll`, and

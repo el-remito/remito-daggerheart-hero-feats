@@ -154,6 +154,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.3.2
+- **Add category requirement works on the Curation tab.** It did nothing at all, with nothing in the console — the button could not tell which Feat it was editing once it was sitting on Curation rather than on Feats. Three more controls were dead the same way and are fixed with it: removing an investment row, removing a prerequisite chip, and the chips failing to redraw after you dropped a Feature onto the reference block
+- **The uncurated badge now sits on the Curation tab too**, beside the one on Feats, and both always show the same number
+
 ### v1.3.1
 - **The Curation queue lines up.** Every row is a button, and Foundry pins buttons to a fixed one-line height — so a row carrying a name above its chips was cropped, spilled over its neighbours and shoved its own text back across the icon. Rows now size to their content
 - **Table headers are readable again.** The Daggerheart system paints a table's header row solid gold in dark mode and solid dark blue in light mode, and the header text was landing pale-on-gold one way and dark-on-dark the other. The Statistics grids and the character ledger now use a deep gold band of their own, legible in both themes

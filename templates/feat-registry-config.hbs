@@ -14,6 +14,9 @@
         </button>
         <button type="button" class="rdhf-tab {{#if isCuration}}is-active{{/if}}" data-action="selectTab" data-tab="curation">
             <i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "RDHF.registry.tabs.curation"}}
+            {{!-- The same count as the Feats badge, on the tab that actually clears it.
+                  Both are painted together by _paintBadges(); see the note there. --}}
+            <span class="rdhf-tab-badge" {{#unless uncuratedCount}}hidden{{/unless}}>{{uncuratedCount}}</span>
         </button>
         <button type="button" class="rdhf-tab {{#if isTaxonomy}}is-active{{/if}}" data-action="selectTab" data-tab="taxonomy">
             <i class="fa-solid fa-tags"></i> {{localize "RDHF.registry.tabs.taxonomy"}}

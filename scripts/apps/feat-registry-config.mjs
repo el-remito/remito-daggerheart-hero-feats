@@ -52,6 +52,15 @@ import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+/**
+ * The two hosts a feat's requirement controls render into: a Feats-tab row and the
+ * Curation editor. Every lookup answering "which feat is this control editing?" has to
+ * accept BOTH — a handler that names only the Feats row resolves null on the Curation
+ * tab, returns at its own guard, and does nothing at all with nothing logged. That is
+ * exactly how Add category requirement came to be dead there.
+ */
+const FEAT_HOST = `.${PREFIX}-reg-feat[data-uuid], .${PREFIX}-cur-editor[data-uuid]`;
+
 /** Longest the requirement-reference search drops down before it stops listing. */
 const MAX_REFERENCE_RESULTS = 8;
 
@@ -594,9 +603,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // it is wired by the same loop. Every helper below takes the containing element and
     // queries inside it, and _syncField routes on the nearest [data-uuid] ancestor, so
     // none of them care which tab the controls are sitting on.
-    const rows = el.querySelectorAll(
-      `.${PREFIX}-reg-feat[data-uuid], .${PREFIX}-cur-editor[data-uuid]`
-    );
+    const rows = el.querySelectorAll(FEAT_HOST);
     for (const row of rows) {
       this._renderInvestment(row);
       this._renderReferenceChips(row);
@@ -693,16 +700,13 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const chips = row.querySelector(`.${PREFIX}-reg-chips`);
     if (chips) chips.replaceChildren(...this._buildChips(feat, uncurated));
 
-    const badge = this.element.querySelector(`.${PREFIX}-tab-badge`);
-    const outstanding = Object.keys(this.#config.feats ?? {}).length
-      ? [...this.element.querySelectorAll(`.${PREFIX}-reg-feat`)].filter(
-          r => r.dataset.uncurated === 'true'
-        ).length
-      : 0;
-    if (badge) {
-      badge.textContent = String(outstanding);
-      badge.hidden = outstanding === 0;
-    }
+    this._paintBadges(
+      Object.keys(this.#config.feats ?? {}).length
+        ? [...this.element.querySelectorAll(`.${PREFIX}-reg-feat`)].filter(
+            r => r.dataset.uncurated === 'true'
+          ).length
+        : 0
+    );
 
     this._applyRegFilters();
   }
@@ -764,12 +768,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // be read off the queue. Carried as a running total from the last render and moved
     // by this one edit — the same repaint-don't-re-render rule, one tab over.
     if (was !== uncurated) {
-      this._uncuratedTotal = Math.max(0, (this._uncuratedTotal ?? 0) + (uncurated ? 1 : -1));
-      const badge = this.element.querySelector(`.${PREFIX}-tab-badge`);
-      if (badge) {
-        badge.textContent = String(this._uncuratedTotal);
-        badge.hidden = this._uncuratedTotal === 0;
-      }
+      this._paintBadges((this._uncuratedTotal ?? 0) + (uncurated ? 1 : -1));
     }
 
     // Filing a feat that still has no Category is legal but temporary, and the GM
@@ -1084,6 +1083,39 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /** Writes a reference list back to the field and re-chips it. */
+  /**
+   * Writes the uncurated count onto EVERY tab badge and keeps the running total in
+   * step with it.
+   *
+   * There are two badges — Feats and Curation — and they must never disagree.
+   * querySelectorAll rather than querySelector is the whole point: with a single badge
+   * the singular lookup was correct, and the moment a second one existed it would have
+   * painted whichever came first in the DOM and left the other showing a stale number.
+   *
+   * @param {number} count
+   */
+  _paintBadges(count) {
+    this._uncuratedTotal = Math.max(0, count);
+    for (const badge of this.element?.querySelectorAll(`.${PREFIX}-tab-badge`) ?? []) {
+      badge.textContent = String(this._uncuratedTotal);
+      badge.hidden = this._uncuratedTotal === 0;
+    }
+  }
+
+  /**
+   * The feat host an event target sits in, on whichever tab that is.
+   *
+   * Action handlers get the clicked element, not the feat, so each one has to walk up
+   * to the container carrying data-uuid. Going through here rather than writing the
+   * selector at each call site is what stops the next handler being added Feats-only.
+   *
+   * @param {HTMLElement|null} el
+   * @returns {HTMLElement|null}
+   */
+  _featHost(el) {
+    return el?.closest(FEAT_HOST) ?? null;
+  }
+
   _setReferences(row, refs) {
     const input = row.querySelector('[data-field="features"]');
     if (!input) return;
@@ -1281,7 +1313,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // Fire input so the normal [data-field] sync listener writes it to the working copy.
     input.dispatchEvent(new Event('input', { bubbles: true }));
     this.#sourceNames.set(ref, item.name);
-    const row = input.closest(`.${PREFIX}-reg-feat`);
+    const row = this._featHost(input);
     if (row) this._renderReferenceChips(row);
     ui.notifications?.info(game.i18n.format('RDHF.notify.featureRefAdded', { name: item.name }));
   }
@@ -1482,7 +1514,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    */
   static _onAddInvestment(event, target) {
     event.preventDefault();
-    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const row = this._featHost(target);
     const uuid = row?.dataset.uuid;
     if (!uuid) return;
     const feat = (this.#config.feats[uuid] ??= blankFeat(uuid));
@@ -1499,7 +1531,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
   static _onRemoveInvestment(event, target) {
     event.preventDefault();
-    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const row = this._featHost(target);
     const uuid = row?.dataset.uuid;
     const index = Number(target.dataset.index);
     this.#config.feats[uuid]?.requirements?.categoryInvestment.splice(index, 1);
@@ -1509,7 +1541,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   /** Removes one requirement reference chip and rewrites the field behind it. */
   static _onRemoveReference(event, target) {
     event.preventDefault();
-    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const row = this._featHost(target);
     const ref = target.closest('[data-ref]')?.dataset.ref;
     const input = row?.querySelector('[data-field="features"]');
     if (!row || !input || ref === undefined) return;
@@ -1542,7 +1574,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    */
   static async _onResyncFeat(event, target) {
     event.preventDefault();
-    const row = target.closest(`.${PREFIX}-reg-feat`);
+    const row = this._featHost(target);
     const uuid = row?.dataset.uuid;
     if (!uuid) return;
 
