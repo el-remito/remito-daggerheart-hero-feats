@@ -49,6 +49,7 @@ scripts/
     filters.mjs             catalog filter predicate and sort comparators
     statistics.mjs          catalog-shape, coverage-gap and adoption derivation
     curation.mjs            the Curation queue's membership rule and advance order
+    automation.mjs          Rule Automation: the derived-requirement rules
   apps/
     feat-catalog.mjs        player + GM catalog (one instance per actor, tracked in openCatalogs)
     feat-registry-config.mjs  GM registry (6 tabs), registered via registerMenu
@@ -70,6 +71,7 @@ World setting `registry`:
       category: null,            // null === UNCURATED === withheld from players
       types: ['combat'],
       hidden: false,             // GM secret: withheld even once curated
+      autoExempt: false,         // opts this feat out of every Rule Automation rule
       summary: '',               // GM teaser; blank falls back to the description
       standalone: false,         // registered by drag and drop, not from a pack source
       requirements: {
@@ -87,6 +89,14 @@ World setting `registry`:
 World settings `categories` / `types` are `[{ id, label, icon, description }]`. A `label` starting
 with `RDHF.` is an i18n key (the seeded entries); anything else is literal GM text. Editing a seeded
 label in the Taxonomy tab converts it to literal text — that is intended.
+
+World setting `automation` is `{ investmentByLevel: { enabled, table } }`, where `table` maps a
+Level to the number of Feats required in a Category. **Its keys are strings**: the setting
+round-trips through JSON, which has no numeric keys, so reading `table[7]` works only by accident of
+coercion and `Object.keys()` yields strings either way — `investmentForLevel` normalizes both ends.
+`getAutomation()` runs every read through `normalizeAutomation`, which rebuilds the table from the
+ten default keys rather than copying the stored one, so a partial or hand-edited value cannot reach
+the rule.
 
 **`general` is a fixed Category**, seeded from `DEFAULT_CATEGORIES` and re-inserted by
 `getCategories()` if a world ever loses it. It exists so a feat can be *curated* — and therefore
@@ -250,6 +260,44 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   "reset this feat's metadata" removed it from the module. `_onResetFeat` therefore rewrites a
   standalone feat as `{ ...blankFeat(uuid), standalone: true }` — the flag has to be re-applied by
   hand, because `blankFeat` does not carry it.
+- **Rule Automation derives; it never writes.** `logic/automation.mjs` is pure and holds the whole
+  rule, and `listFeats()` is the ONE seam where it enters the world: each normalized feat goes
+  through `applyAutoInvestment` before the record is assembled. The derived row is an ordinary
+  `categoryInvestment` row, so `checkRequirements` emits the existing descriptor and the catalog
+  renders it with the existing strings — **the feature added no player-facing i18n at all**, and a
+  player cannot tell a derived requirement from an authored one. The registry app deliberately does
+  NOT go through `listFeats` (it builds its own list from `normalizeFeat`), which is what keeps the
+  GM's *editable* rows authored-only while `_paintAutoInvestment` shows the derived one read-only
+  beside them. That helper is a five-state machine — hidden / exempt / pending / General /
+  automatic / overridden — and the branch ORDER is the contract: `would === 0` short-circuits
+  first so a Level 1 feat is never annotated, and the *pending* state (uncurated, announcing what
+  filing a Category is about to add) exists because Curation is where the hint earns its keep. Switching the rule off restores the catalog exactly; there is no migration.
+- **The derived row REPLACES the investment chain, and that is only safe because the rule and
+  authored rows are mutually exclusive.** `evaluateInvestment` is left to right with AND binding
+  tighter than OR, so appending a row to an `A or B` chain silently changes its meaning —
+  `[A, B(or), D(and)]` evaluates as `A || (B && D)`, not `(A || B) && D`. Because a feat with any
+  authored row opts out, the derived row is always the only one and the hazard cannot arise. Any
+  future rule that wants to *add* to an existing chain has to solve that first.
+- **Adoption, and why the redundant row is deleted.** A single authored row that exactly equals
+  what the rule would derive means the GM applied the curve by hand, so it opts the feat IN, not
+  out. Matching on the value alone is not durable: retune the curve and the stored number stops
+  matching, and exactly the feats that looked adopted would desert the rule, frozen at the old
+  value. `#adoptRedundantInvestment()` therefore deletes the row — from `_prepareContext` while the
+  rule is on (so the GM sees it and Discard reverts it) and again inside `#commit()` and
+  `#commitFeat()` (a curve edit changes what "redundant" means without re-rendering). It only
+  touches feats that actually match, so a clean world never goes dirty from merely being opened.
+- **`authoredRows()` uses the same filter `checkRequirements` does** — `r.category && r.count`. A
+  row with a count of 0 produces no visible requirement there, so it must not silently opt a feat
+  out here. Any future reader of the investment chain owes it the same filter.
+- **The reachability audit lives in `logic/statistics.mjs` and imports `logic/automation.mjs`** —
+  the module's one sibling import inside `logic/`, taken deliberately over restating the rule where
+  it would drift from the one the catalog evaluates. `buildAutomationReach` asks whether the curve
+  is satisfiable at all: supply is feats in the same Category at or below the same Level, **minus
+  one**, because a feat can never be its own prerequisite. Hidden feats are not supply (a player
+  cannot acquire one) and are not consumers; exempt feats and feats with authored rows are supply
+  but not consumers. Requirements on the supplying feats are not modelled, so a pass means "not
+  provably impossible", never "comfortable" — the panel says so. With the seeded curve a Category
+  needs 17 feats at or below Level 10 to support a single Level 10 feat.
 - **Permissive requirement failure.** An unrecognized expression atom returns `true`. A GM's typo
   must not silently lock a feat away with no visible cause.
 - **Formula evaluation goes through `Roll`**, never `eval` or `new Function`. The registry's live
@@ -309,6 +357,12 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   an empty player catalog — the Feats tab badge counts them. Both are overridden by `keepUuids`,
   which the catalog fills with the character's own acquisitions, so a feat already owned never
   disappears from **My Feats** because the GM later hid it or cleared its Category.
+- Rule Automation scope decisions worth not re-litigating: the investment number counts **acquired
+  Feats**, not a sum of their Levels and not Feat Points (`categoryCounts` unchanged); **General is
+  exempt** by explicit design, as is any uncurated feat; the opt-out is **one boolean covering every
+  future rule**, not one per rule; and the Statistics requirement-usage bars keep counting
+  **authored** rows only — the rule reaches nearly every feat, so folding it in would peg that bar
+  at ~100% and destroy the signal the panel exists to give.
 - The Types list is free-form. The whitepaper's "Class" and "Domain" types are not auto-populated
   from `daggerheart.classes` / `CONFIG.DH.DOMAIN.allDomains()`; a GM adds the ones they want as
   ordinary types. Category is handled by its own filter section rather than as a pseudo-type.

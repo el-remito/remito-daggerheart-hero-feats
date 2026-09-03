@@ -13,9 +13,11 @@ import {
   DEFAULT_TYPES,
   DEFAULT_CATEGORIES,
   DEFAULT_POINT_FORMULA,
+  DEFAULT_INVESTMENT_BY_LEVEL,
   GENERAL_CATEGORY_ID
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
+import { normalizeAutomation } from './logic/automation.mjs';
 
 /**
  * The source list as it stood at the last invalidation, so a registry write that did
@@ -96,6 +98,21 @@ export function registerSettings() {
     type: Boolean,
     default: true
   });
+
+  // Rule Automation. config: false — like the registry and the taxonomy, this is only
+  // ever edited through the Automation tab, which can explain the curve and show what
+  // it derives; Foundry's settings sheet cannot.
+  game.settings.register(MODULE_ID, SETTINGS.AUTOMATION, {
+    scope: 'world',
+    config: false,
+    type: Object,
+    default: {
+      investmentByLevel: {
+        enabled: false,
+        table: foundry.utils.deepClone(DEFAULT_INVESTMENT_BY_LEVEL)
+      }
+    }
+  });
 }
 
 /**
@@ -122,6 +139,19 @@ export function getRegistry() {
 
 export async function setRegistry(registry) {
   return game.settings.set(MODULE_ID, SETTINGS.REGISTRY, registry);
+}
+
+/**
+ * The Rule Automation settings, normalized. Every read goes through
+ * normalizeAutomation so a partial or hand-edited stored value can never reach the
+ * rule itself — the same contract normalizeFeat gives a registry entry.
+ */
+export function getAutomation() {
+  return normalizeAutomation(game.settings.get(MODULE_ID, SETTINGS.AUTOMATION));
+}
+
+export async function setAutomation(automation) {
+  return game.settings.set(MODULE_ID, SETTINGS.AUTOMATION, normalizeAutomation(automation));
 }
 
 /**

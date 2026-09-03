@@ -13,8 +13,16 @@
  */
 
 import { MODULE_ID, ITEM_TYPES } from '../constants.mjs';
-import { getRegistry, setRegistry, getCategories, getTypes, taxonomyLabel } from '../settings.mjs';
+import {
+  getRegistry,
+  setRegistry,
+  getCategories,
+  getTypes,
+  getAutomation,
+  taxonomyLabel
+} from '../settings.mjs';
 import { blankRequirements, normalizeRequirements } from '../logic/requirements.mjs';
+import { applyAutoInvestment } from '../logic/automation.mjs';
 
 /** packId -> Promise<Map<uuid, indexEntry>>. Cleared when the registry setting changes. */
 const _packCache = new Map();
@@ -171,6 +179,7 @@ export function blankFeat(uuid) {
     types: [],
     summary: '',
     hidden: false, // GM-only: never listed for a player who has not acquired it
+    autoExempt: false, // opts this feat out of every Rule Automation rule
     requirements: blankRequirements()
   };
 }
@@ -192,6 +201,9 @@ export function normalizeFeat(uuid, stored) {
     // A deliberate GM secret. Unlike uncurated, this survives curation: the feat is
     // fully configured and simply must not be browsable yet.
     hidden: stored.hidden === true,
+    // Rule Automation derives requirements for every feat that has not opted out; this
+    // is the opt-out. See scripts/logic/automation.mjs.
+    autoExempt: stored.autoExempt === true,
     requirements: normalizeRequirements(stored.requirements)
   };
 }
@@ -218,10 +230,19 @@ export async function listFeats({ forGM = false, keepUuids = null, registry = ge
   const keep = keepUuids instanceof Set ? keepUuids : new Set(keepUuids ?? []);
   const sources = await loadAllSourceFeatures(registry);
   const categories = getCategories();
+  // Read once for the whole list, not per feat: the rule is world-level and cannot
+  // change mid-loop.
+  const rule = getAutomation().investmentByLevel;
   const out = [];
 
   for (const [uuid, source] of sources) {
-    const feat = normalizeFeat(uuid, registry.feats?.[uuid]);
+    // This is the ONE seam where Rule Automation enters the player-facing world. The
+    // derived row is an ordinary categoryInvestment row, so checkRequirements emits
+    // the existing descriptor and the catalog renders it with the existing strings —
+    // a player cannot tell a derived requirement from an authored one, which is the
+    // point. Nothing here is persisted; the registry app builds its own list from
+    // normalizeFeat so the GM's editable rows stay authored-only.
+    const feat = applyAutoInvestment(normalizeFeat(uuid, registry.feats?.[uuid]), rule);
     const uncurated = isUncurated(feat);
     if (!forGM && !keep.has(uuid) && (uncurated || feat.hidden)) continue;
     out.push({

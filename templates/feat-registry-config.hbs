@@ -1,5 +1,5 @@
 {{!--
-  GM Feat Registry. Six tabs; the whole window is also a drop target for individual
+  GM Feat Registry. Seven tabs; the whole window is also a drop target for individual
   Feature items (bound by hand in _onRender — ApplicationV2 has no dragDrop option).
 --}}
 <div class="rdhf-registry-layout">
@@ -23,6 +23,9 @@
         </button>
         <button type="button" class="rdhf-tab {{#if isPoints}}is-active{{/if}}" data-action="selectTab" data-tab="points">
             <i class="fa-solid fa-calculator"></i> {{localize "RDHF.registry.tabs.points"}}
+        </button>
+        <button type="button" class="rdhf-tab {{#if isAutomation}}is-active{{/if}}" data-action="selectTab" data-tab="automation">
+            <i class="fa-solid fa-robot"></i> {{localize "RDHF.registry.tabs.automation"}}
         </button>
         {{#if showStats}}
             <button type="button" class="rdhf-tab {{#if isStats}}is-active{{/if}}" data-action="selectTab" data-tab="stats">
@@ -261,6 +264,12 @@
                                                         <i class="fa-solid fa-hand-pointer"></i>
                                                     </span>
                                                 {{/if}}
+                                                {{#if this.autoExempt}}
+                                                    <span class="rdhf-chip rdhf-chip--exempt"
+                                                          data-tooltip="{{localize 'RDHF.registry.autoExemptTooltip'}}">
+                                                        <i class="fa-solid fa-robot"></i>
+                                                    </span>
+                                                {{/if}}
                                                 </span>
                                             </div>
                                             {{#if this.teaser}}
@@ -306,6 +315,12 @@
                                             <span>{{localize "RDHF.registry.hidden"}}</span>
                                         </label>
                                         <p class="rdhf-hint">{{localize "RDHF.registry.hiddenHint"}}</p>
+
+                                        <label class="rdhf-checkline rdhf-checkline--boxed">
+                                            <input type="checkbox" data-field="autoExempt" {{#if this.autoExempt}}checked{{/if}}>
+                                            <span>{{localize "RDHF.registry.autoExempt"}}</span>
+                                        </label>
+                                        <p class="rdhf-hint">{{localize "RDHF.registry.autoExemptHint"}}</p>
 
                                         <label class="rdhf-block-field">
                                             <span>{{localize "RDHF.registry.summary"}}</span>
@@ -410,6 +425,10 @@
 
                                             <h5 class="rdhf-sub">{{localize "RDHF.registry.investment"}}</h5>
                                             <p class="rdhf-hint">{{localize "RDHF.registry.investmentHint"}}</p>
+                                            {{!-- Filled by _paintAutoInvestment(). Outside
+                                                  the list below, which _renderInvestment
+                                                  rebuilds wholesale. --}}
+                                            <p class="rdhf-auto-invest" hidden></p>
                                             {{!-- Rows are built by _renderInvestment().
                                                   Adding one used to re-render the whole
                                                   window, which threw the GM back to the
@@ -592,6 +611,7 @@
 
                                 <h5 class="rdhf-sub">{{localize "RDHF.registry.investment"}}</h5>
                                 <p class="rdhf-hint">{{localize "RDHF.registry.investmentHint"}}</p>
+                                <p class="rdhf-auto-invest" hidden></p>
                                 {{!-- Rows are built by _renderInvestment(). --}}
                                 <div class="rdhf-investment-list"></div>
                                 <button type="button" class="rdhf-text-btn" data-action="addInvestment">
@@ -613,6 +633,12 @@
                                     <span>{{localize "RDHF.registry.hidden"}}</span>
                                 </label>
                                 <p class="rdhf-hint">{{localize "RDHF.registry.hiddenHint"}}</p>
+
+                                <label class="rdhf-checkline rdhf-checkline--boxed">
+                                    <input type="checkbox" data-field="autoExempt" {{#if this.autoExempt}}checked{{/if}}>
+                                    <span>{{localize "RDHF.registry.autoExempt"}}</span>
+                                </label>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.autoExemptHint"}}</p>
 
                                 <h5 class="rdhf-sub">{{localize "RDHF.registry.resources"}}</h5>
                                 <p class="rdhf-hint">{{localize "RDHF.registry.resourcesHint"}}</p>
@@ -736,6 +762,48 @@
                     <li><code>@prof</code> {{localize "RDHF.registry.keyProf"}}</li>
                     <li><code>@system.traits.agility.value</code> {{localize "RDHF.registry.keySystem"}}</li>
                 </ul>
+            </section>
+        {{/if}}
+
+        {{#if isAutomation}}
+            <section class="rdhf-pane">
+                <p class="rdhf-hint">{{localize "RDHF.automation.intro"}}</p>
+
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.automation.investment.name"}}</h4>
+                <label class="rdhf-checkline rdhf-checkline--boxed">
+                    <input type="checkbox" data-field="automationEnabled" {{#if autoInvestEnabled}}checked{{/if}}>
+                    <span>{{localize "RDHF.automation.investment.toggle"}}</span>
+                </label>
+                <p class="rdhf-hint">{{localize "RDHF.automation.investment.hint"}}</p>
+
+                {{!-- Exemptions are stated here, on the tab that switches the rule on,
+                      rather than only in the code: a GM reading this pane is deciding
+                      whether to enable it, and needs to know what it will NOT touch. --}}
+                <ul class="rdhf-key-list rdhf-auto-notes">
+                    <li>{{localize "RDHF.automation.exempt.general"}}</li>
+                    <li>{{localize "RDHF.automation.exempt.uncurated"}}</li>
+                    <li>{{localize "RDHF.automation.exempt.authored"}}</li>
+                    <li>{{localize "RDHF.automation.exempt.flag"}}</li>
+                </ul>
+
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.automation.table"}}</h4>
+                <p class="rdhf-hint">{{localize "RDHF.automation.tableHint"}}</p>
+                <div class="rdhf-auto-table {{#unless autoInvestEnabled}}is-disabled{{/unless}}">
+                    <div class="rdhf-auto-row rdhf-auto-row--head">
+                        <span>{{localize "RDHF.automation.levelColumn"}}</span>
+                        <span>{{localize "RDHF.automation.countColumn"}}</span>
+                    </div>
+                    {{#each automationRows}}
+                        <label class="rdhf-auto-row">
+                            <span>{{this.level}}</span>
+                            <input type="number" min="0" step="1" data-field="automationLevel"
+                                   data-level="{{this.level}}" value="{{this.count}}">
+                        </label>
+                    {{/each}}
+                </div>
+                <button type="button" class="rdhf-text-btn" data-action="resetAutomation">
+                    <i class="fa-solid fa-rotate-left"></i> {{localize "RDHF.automation.reset"}}
+                </button>
             </section>
         {{/if}}
 
@@ -885,6 +953,45 @@
                     {{/if}}
                 {{else}}
                     <p class="rdhf-hint">{{localize "RDHF.stats.noGaps"}}</p>
+                {{/if}}
+
+                {{!-- Whether the Automation curve is satisfiable at all. Sits in
+                      Coverage gaps rather than on the Automation tab: a shortfall is
+                      answered by authoring Feats, and this is the panel about what the
+                      catalog is missing. --}}
+                <h5 class="rdhf-sub">{{localize "RDHF.stats.reach"}}</h5>
+                {{#if stats.reach.enabled}}
+                    <p class="rdhf-hint">{{localize "RDHF.stats.reachHint"}}</p>
+                    {{#if stats.reach.clean}}
+                        <p class="rdhf-stats-line rdhf-reach-ok">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <span>{{localize "RDHF.stats.reachClean"}}</span>
+                            <strong>{{stats.reach.checked}}</strong>
+                        </p>
+                    {{else}}
+                        <p class="rdhf-stats-line">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>{{localize "RDHF.stats.reachBlocked"}}</span>
+                            <strong>{{stats.reach.blocked.length}}</strong> / <strong>{{stats.reach.checked}}</strong>
+                        </p>
+                        <ul class="rdhf-gap-list">
+                            {{#each stats.reach.blocked}}
+                                <li>
+                                    <button type="button" class="rdhf-gap-btn" data-action="focusCell"
+                                            data-row="{{this.category}}" data-level="{{this.level}}" data-axis="category">
+                                        {{this.label}} &middot; {{localize "RDHF.catalog.levelShort"}} {{this.level}}
+                                    </button>
+                                    <span class="rdhf-reach-detail">
+                                        {{localize "RDHF.stats.reachNeeds"}} <strong>{{this.required}}</strong>,
+                                        {{localize "RDHF.stats.reachHas"}} <strong>{{this.supply}}</strong>
+                                        ({{localize "RDHF.stats.reachShort"}} {{this.shortfall}})
+                                    </span>
+                                </li>
+                            {{/each}}
+                        </ul>
+                    {{/if}}
+                {{else}}
+                    <p class="rdhf-hint">{{localize "RDHF.stats.reachOff"}}</p>
                 {{/if}}
 
                 {{#if stats.catalog.brokenReferences.length}}

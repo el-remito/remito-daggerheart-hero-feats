@@ -19,7 +19,8 @@ export const SETTINGS = {
   POINT_FORMULA: 'pointFormula',
   MENU: 'registryMenu',
   MIGRATION: 'migration',
-  SHOW_STATS: 'showStatistics'
+  SHOW_STATS: 'showStatistics',
+  AUTOMATION: 'automation'
 };
 
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */
@@ -81,6 +82,28 @@ export const DEFAULT_TYPES = [
 ];
 
 export const DEFAULT_POINT_FORMULA = '@level * 2';
+
+/**
+ * The seeded curve for the "Default Investment by Level" automation rule: how many
+ * Feats a character must already hold in a Category before a Feat of that Level in
+ * that same Category becomes available.
+ *
+ * Keys are strings because this object is stored in a world setting and round-trips
+ * through JSON, which has no numeric keys — reading it back with a number would miss.
+ * Level 1 is 0, i.e. the entry point of every Category is always unguarded.
+ */
+export const DEFAULT_INVESTMENT_BY_LEVEL = {
+  '1': 0,
+  '2': 2,
+  '3': 2,
+  '4': 3,
+  '5': 7,
+  '6': 8,
+  '7': 10,
+  '8': 13,
+  '9': 14,
+  '10': 16
+};
 
 /**
  * Every entry here is passed to loadTemplates() at init, so each path MUST exist —

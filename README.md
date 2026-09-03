@@ -154,6 +154,15 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.4.0
+- **New Automation tab in the Feat Registry**, for rules that derive requirements across the whole catalog instead of you typing the same one onto every Feat
+- **Default Investment by Level.** Switch it on and a Feat asks the character to already own a number of Feats in that same Category, taken from an editable Level table. Nothing is written into your Feats — switch the rule off and the catalog is exactly as you authored it
+- **General is never affected**, and neither is an uncurated Feat: General is the Category a Feat sits in before you have invented a filing system, so gating its own entry point would make it unusable. The tab states this, along with every other exemption
+- **A Feat that already carries its own investment rows keeps them** and the rule stands aside. The one exception is a row that says exactly what the rule would — that Feat is adopted by the rule and the redundant row is cleared, so it follows the table if you retune it later instead of quietly freezing at its old number
+- **The Feats tab and the Curation editor both tell you what the rule is doing** to the Feat in front of you: what it will add, that your own row replaces it and what it would have asked instead, or — while a Feat is still uncurated — what filing it under a Category is about to add. Curation is where that matters most, since choosing the Category is the act that switches the rule on for that Feat
+- **Any single Feat can opt out** with "Ignore Rule Automation", on the Feats tab or in the Curation editor. Exempt Feats carry a marker chip so you can find your exceptions again
+- **Automation reach, in Statistics → Coverage gaps.** Answers whether the curve is satisfiable at all: a Level 7 Alchemy Feat needing 10 invested is unreachable by anyone if Alchemy holds only six Feats at that Level or below. Each finding names the Category, the Level, what it needs, what exists, and jumps you to the Feats it blocks
+
 ### v1.3.3
 - **The uncurated badge now sits only on the Curation tab.** It is a call to action, and Curation is the tab that answers it — Feats lists those Feats, Curation is where you clear them
 - **Filter rails are ordered the same way everywhere** — search, Level, Type, Category, then the switches — in the Feat Registry's Feats tab and in each character's Feats window. Nothing else about them changed

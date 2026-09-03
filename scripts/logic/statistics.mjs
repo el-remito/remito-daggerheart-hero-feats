@@ -13,7 +13,10 @@
  * a stack trace.
  */
 
-import { TRAITS, RESOURCE_REQS } from '../constants.mjs';
+import { TRAITS, RESOURCE_REQS, GENERAL_CATEGORY_ID } from '../constants.mjs';
+// A sibling import inside logic/ — both are pure, and the alternative is restating the
+// rule here, where it would drift from the one the catalog actually evaluates.
+import { autoInvestmentRow, investmentForLevel } from './automation.mjs';
 
 /** Levels the grid always shows, so its columns never move as a catalog grows. */
 export const LEVEL_COLUMNS = 10;
@@ -161,6 +164,89 @@ function buildGrid(rowDefs, columns, feats, belongs) {
       level,
       count: rows.reduce((sum, row) => sum + row.cells[i].count, 0)
     }))
+  };
+}
+
+/* ── Automation reach ──────────────────────────────────────────────────────── */
+
+/**
+ * Whether the Default Investment by Level rule is actually satisfiable.
+ *
+ * The rule asks a character to already own N Feats in a Category before taking a Feat
+ * of that Level in it — but a GM setting the curve has no way to see whether the
+ * Category CONTAINS N acquirable Feats below that Level. If it does not, the Feat is
+ * not merely hard to reach, it is unreachable by anyone, forever, and nothing else in
+ * the module would ever say so.
+ *
+ * Supply is Feats in the same Category at or below the same Level, minus the Feat
+ * itself — a character standing at Level L can have taken any of those and no others.
+ * Hidden Feats are excluded: a player cannot acquire one, so it cannot be investment.
+ * Requirements the supplying Feats carry are NOT modelled; this is a ceiling, so a
+ * reachable verdict means "not provably impossible", never "comfortable".
+ *
+ * @param {object} args
+ * @param {Array<object>} args.feats  normalized feats ({ uuid, level, category, hidden, autoExempt, requirements })
+ * @param {Array<{id: string, label: string}>} args.categories
+ * @param {{enabled: boolean, table: Object<string, number>}} args.rule
+ * @returns {{enabled: boolean, checked: number, blocked: Array<object>, worst: number}}
+ */
+export function buildAutomationReach({ feats = [], categories = [], rule = null } = {}) {
+  const empty = { enabled: false, checked: 0, blocked: [], worst: 0 };
+  if (!rule?.enabled) return empty;
+
+  const list = Array.isArray(feats) ? feats.filter(Boolean) : [];
+  const labels = new Map(categories.map(c => [c.id, c.label]));
+  const blocked = [];
+  let checked = 0;
+
+  for (const category of new Set(list.map(f => f.category).filter(Boolean))) {
+    if (category === GENERAL_CATEGORY_ID) continue;
+
+    // Everything a player could actually acquire in this Category, by Level.
+    const acquirable = list.filter(f => f.category === category && f.hidden !== true);
+
+    for (const level of new Set(acquirable.map(f => Number(f.level) || 1))) {
+      // Only Feats the rule actually reaches are consumers of the requirement. A Feat
+      // that opted out, or authored its own investment, proves nothing about the curve.
+      const consumers = acquirable.filter(
+        f => (Number(f.level) || 1) === level && autoInvestmentRow(f, rule)
+      );
+      if (!consumers.length) continue;
+
+      const required = investmentForLevel(level, rule.table);
+      if (!required) continue;
+
+      checked++;
+      // Minus one: a Feat can never be its own prerequisite.
+      const supply = acquirable.filter(f => (Number(f.level) || 1) <= level).length - 1;
+      if (supply >= required) continue;
+
+      blocked.push({
+        category,
+        label: labels.get(category) ?? category,
+        level,
+        required,
+        supply,
+        shortfall: required - supply,
+        feats: consumers.length
+      });
+    }
+  }
+
+  // Worst first: the biggest hole is the one to author into, and a GM scanning this
+  // panel is looking for where to spend the next hour.
+  blocked.sort(
+    (a, b) =>
+      b.shortfall - a.shortfall ||
+      String(a.label).localeCompare(String(b.label)) ||
+      a.level - b.level
+  );
+
+  return {
+    enabled: true,
+    checked,
+    blocked,
+    worst: blocked.reduce((top, b) => Math.max(top, b.shortfall), 0)
   };
 }
 

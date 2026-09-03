@@ -1025,6 +1025,10 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-ink-muted);
 }
 
+.rdhf-chip--exempt {
+    color: var(--rdhf-ink-muted);
+}
+
 .rdhf-reg-feat.is-hidden {
     border-left: 3px solid var(--rdhf-unmet);
 }
@@ -1153,6 +1157,75 @@ details[open] > summary .rdhf-arrow {
     text-transform: uppercase;
     font-size: var(--font-size-11, 0.7rem);
     color: var(--rdhf-gold);
+}
+
+/* The reachability findings sit in the Coverage gaps list, so the button keeps that
+   list's shape and the numbers trail it as a second, quieter line. */
+.rdhf-reach-detail {
+    display: block;
+    margin-left: 4px;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-stats-line.rdhf-reach-ok i {
+    color: var(--rdhf-gold);
+}
+
+/* ── Rule Automation ──────────────────────────────────────────────────────── */
+
+/* Exemptions read as prose, not as formula keys, so they lose the code colouring the
+   Points tab's list carries. */
+.rdhf-auto-notes li + li {
+    margin-top: 4px;
+}
+
+.rdhf-auto-table {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 260px;
+    margin-top: 6px;
+}
+
+/* Off, the curve is still readable and still editable — a GM may well want to set it
+   up before switching the rule on — so this dims rather than disables. */
+.rdhf-auto-table.is-disabled {
+    opacity: 0.55;
+}
+
+.rdhf-auto-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 78px;
+    align-items: center;
+    gap: 8px;
+}
+
+.rdhf-auto-row--head {
+    font-size: var(--font-size-11, 0.7rem);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--rdhf-ink-muted);
+    border-bottom: 1px solid var(--rdhf-border);
+    padding-bottom: 3px;
+}
+
+/* The derived requirement, shown to the GM where the rows they can edit are, so the
+   two are never confused. Left border rather than a chip: it is a statement about the
+   whole block below it, not a value in it. */
+.rdhf-auto-invest {
+    margin: 0 0 6px;
+    padding: 4px 8px;
+    border-left: 3px solid var(--rdhf-gold);
+    background: var(--rdhf-panel-soft);
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-ink);
+}
+
+.rdhf-auto-invest.is-overridden {
+    border-left-color: var(--rdhf-border);
+    color: var(--rdhf-ink-muted);
+    font-style: italic;
 }
 
 /* ── Taxonomy: the fixed Category ─────────────────────────────────────────── */

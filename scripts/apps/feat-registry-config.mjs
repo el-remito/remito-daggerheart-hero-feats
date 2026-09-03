@@ -15,7 +15,8 @@ import {
   RESOURCE_REQS,
   ITEM_TYPES,
   SETTINGS,
-  GENERAL_CATEGORY_ID
+  GENERAL_CATEGORY_ID,
+  DEFAULT_INVESTMENT_BY_LEVEL
 } from '../constants.mjs';
 import {
   getRegistry,
@@ -27,7 +28,9 @@ import {
   getPointFormula,
   taxonomyLabel,
   isFixedCategory,
-  getShowStatistics
+  getShowStatistics,
+  getAutomation,
+  setAutomation
 } from '../settings.mjs';
 import {
   loadAllSourceFeatures,
@@ -43,10 +46,16 @@ import { countAffected, resyncAll, resyncFeat } from '../data/resync.mjs';
 import { gatherLedger } from '../data/analytics.mjs';
 import {
   buildAdoptionStats,
+  buildAutomationReach,
   buildCatalogStats,
   UNCURATED_ROW
 } from '../logic/statistics.mjs';
 import { ATOMS, blankRequirements } from '../logic/requirements.mjs';
+import {
+  autoInvestmentRow,
+  investmentForLevel,
+  stripRedundantInvestment
+} from '../logic/automation.mjs';
 import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/filters.mjs';
 import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
@@ -84,6 +93,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   #categories = null;
   #types = null;
   #formula = null;
+  #automation = null; // working copy of the Rule Automation setting
   #dragDrop = null;
   #openFeats = new Set();
   /**
@@ -149,6 +159,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       removeType: FeatRegistryConfig._onRemoveType,
       addInvestment: FeatRegistryConfig._onAddInvestment,
       removeInvestment: FeatRegistryConfig._onRemoveInvestment,
+      resetAutomation: FeatRegistryConfig._onResetAutomation,
       exportRegistry: FeatRegistryConfig._onExport,
       importRegistry: FeatRegistryConfig._onImport,
       pruneOrphans: FeatRegistryConfig._onPrune,
@@ -213,7 +224,15 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.#categories ??= foundry.utils.deepClone(getCategories());
     this.#types ??= foundry.utils.deepClone(getTypes());
     this.#formula ??= getPointFormula();
+    this.#automation ??= foundry.utils.deepClone(getAutomation());
     this.#baseline ??= foundry.utils.deepClone(this.#snapshot());
+
+    // Absorb rows that merely restate the rule, so a GM who applied this curve by hand
+    // before switching the rule on is adopted by it rather than excluded from it. Only
+    // feats that actually match are touched, so a world with nothing redundant never
+    // goes dirty; one that does becomes dirty exactly once, and the close prompt is
+    // this app's existing way of saying there is a real pending change.
+    this.#adoptRedundantInvestment();
 
     // The working copy, so a source added or a Feature dropped this session shows up
     // immediately instead of only after Save-and-reopen.
@@ -313,6 +332,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       isCuration: this._tab === 'curation',
       isTaxonomy: this._tab === 'taxonomy',
       isPoints: this._tab === 'points',
+      isAutomation: this._tab === 'automation',
+      autoInvestEnabled: this.#automation.investmentByLevel.enabled === true,
+      // Descending, so the table reads like a progression ceiling downwards and matches
+      // how the curve was specified. Precomputed because Handlebars has no `eq` here.
+      automationRows: Object.keys(this.#automation.investmentByLevel.table)
+        .map(Number)
+        .sort((a, b) => b - a)
+        .map(level => ({ level, count: this.#automation.investmentByLevel.table[String(level)] })),
       sources: (this.#config.sources ?? []).map(s => {
         const label = game.packs.get(s.packId)?.metadata?.label ?? s.packId;
         return {
@@ -425,6 +452,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       types: view.types,
       hidden: view.hidden,
       standalone: view.standalone,
+      // Load-bearing for buildAutomationReach: without it every exempt feat would be
+      // audited as though the rule still reached it.
+      autoExempt: view.autoExempt,
       requirements: view.requirements,
       resolves: true
     }));
@@ -440,17 +470,33 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       records.push({ ...feat, label: uuid, resolves: false });
     }
 
+    const localCategories = this.#categories.map(c => ({
+      id: c.id,
+      label: taxonomyLabel(c),
+      icon: c.icon
+    }));
+
     const catalog = buildCatalogStats({
       feats: records,
-      categories: this.#categories.map(c => ({ id: c.id, label: taxonomyLabel(c), icon: c.icon })),
+      categories: localCategories,
       types: this.#types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon })),
       uncuratedLabel: game.i18n.localize('RDHF.catalog.uncurated')
     });
 
     const adoption = buildAdoptionStats({ feats: records, ledger: await gatherLedger() });
 
+    // Reads the working copy of BOTH the registry and the automation curve, so a
+    // Category filed or a table value retuned a moment ago is already reflected —
+    // the same contract every other figure on this tab honours.
+    const reach = buildAutomationReach({
+      feats: records,
+      categories: localCategories,
+      rule: this.#automation.investmentByLevel
+    });
+
     return {
       catalog: this._decorateCatalog(catalog),
+      reach: { ...reach, clean: reach.enabled && reach.blocked.length === 0 },
       adoption: {
         ...adoption,
         recent: adoption.recent.map(entry => ({
@@ -606,6 +652,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const rows = el.querySelectorAll(FEAT_HOST);
     for (const row of rows) {
       this._renderInvestment(row);
+      this._paintAutoInvestment(row);
       this._renderReferenceChips(row);
       // On change rather than input: re-chipping every keystroke would fire a document
       // lookup for each half-typed UUID, and the chips would flicker while typing.
@@ -827,6 +874,16 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         this._chip('standalone', '', {
           icon: 'fa-solid fa-hand-pointer',
           tooltip: game.i18n.localize('RDHF.registry.standaloneTooltip')
+        })
+      );
+    }
+    // An exempt feat is an exception to a world-level rule, and the whole point of an
+    // exception is being able to find it again in a long list.
+    if (feat.autoExempt) {
+      chips.push(
+        this._chip('exempt', '', {
+          icon: 'fa-solid fa-robot',
+          tooltip: game.i18n.localize('RDHF.registry.autoExemptTooltip')
         })
       );
     }
@@ -1176,6 +1233,20 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
+    // App-level Rule Automation fields. Like pointFormula they belong to no feat, so
+    // they must be handled before the uuid guard below.
+    if (field === 'automationEnabled') {
+      this.#automation.investmentByLevel.enabled = value === true;
+      this._paintAutomationState();
+      return;
+    }
+
+    if (field === 'automationLevel') {
+      const level = String(Math.floor(Number(input.dataset.level) || 1));
+      this.#automation.investmentByLevel.table[level] = Math.max(0, Math.floor(Number(value) || 0));
+      return;
+    }
+
     if (field.startsWith('category.') || field.startsWith('type.')) {
       const [kind, prop] = field.split('.');
       const list = kind === 'category' ? this.#categories : this.#types;
@@ -1200,6 +1271,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         break;
       case 'hidden':
         feat.hidden = value === true;
+        break;
+      case 'autoExempt':
+        feat.autoExempt = value === true;
         break;
       case 'investmentJoin':
         feat.requirements.categoryInvestment[Number(input.dataset.index)].join =
@@ -1238,10 +1312,95 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
     // Every one of these can change what the row's chips say, so repaint them now
     // rather than waiting for the next full render.
-    if (['level', 'category', 'type', 'hidden'].includes(field)) {
+    if (['level', 'category', 'type', 'hidden', 'autoExempt'].includes(field)) {
       this._refreshRow(uuid);
       this._refreshCurationRow(uuid);
     }
+
+    // These five are exactly the fields that can flip whether Rule Automation applies
+    // to this feat. Painted, never re-rendered: _renderInvestment rebuilds the whole
+    // row list, which would steal focus from a count input mid-keystroke.
+    if (
+      ['level', 'category', 'autoExempt', 'investmentCount', 'investmentCategory'].includes(field)
+    ) {
+      this._paintAutoInvestment(this._featHost(input));
+    }
+  }
+
+  /** Greys the curve table while the rule is off. Repaint, never a re-render. */
+  _paintAutomationState() {
+    const pane = this.element?.querySelector(`.${PREFIX}-auto-table`);
+    if (!pane) return;
+    pane.classList.toggle('is-disabled', this.#automation.investmentByLevel.enabled !== true);
+  }
+
+  /**
+   * Writes the read-only "this feat's requirement comes from the rule" line into one
+   * feat host.
+   *
+   * It lives OUTSIDE .rdhf-investment-list on purpose — that list is rebuilt wholesale
+   * by _renderInvestment, so folding this line into it would tie a passive note to a
+   * destructive repaint. The host is resolved through _featHost, never a call-site
+   * selector, so it works on the Curation editor as well as a Feats row.
+   *
+   * @param {HTMLElement|null} host
+   */
+  _paintAutoInvestment(host) {
+    const line = host?.querySelector(`.${PREFIX}-auto-invest`);
+    if (!line) return;
+
+    const say = (key, data, muted) => {
+      line.textContent = data ? game.i18n.format(key, data) : game.i18n.localize(key);
+      line.classList.toggle('is-overridden', muted);
+      line.hidden = false;
+    };
+
+    const uuid = host.dataset.uuid;
+    const rule = this.#automation?.investmentByLevel;
+    const feat = normalizeFeat(uuid, this.#config.feats?.[uuid]);
+
+    // Off, or a Level the curve asks nothing of: there is nothing to announce, and a
+    // note on every Level 1 feat would be noise on the row the GM reads most.
+    const would = rule?.enabled === true ? investmentForLevel(feat.level, rule.table) : 0;
+    if (!would) {
+      line.textContent = '';
+      line.classList.remove('is-overridden');
+      line.hidden = true;
+      return;
+    }
+
+    if (feat.autoExempt) {
+      say('RDHF.registry.autoInvestmentExempt', { count: would }, true);
+      return;
+    }
+
+    // Uncurated, and therefore mid-curation: this is the moment the hint is worth the
+    // most, because filing the Category is exactly the act that turns the rule on for
+    // this feat. Said forward-looking, since the Category is not chosen yet.
+    if (!feat.category) {
+      say('RDHF.registry.autoInvestmentPending', { count: would, level: feat.level }, true);
+      return;
+    }
+
+    // General is exempt by design. Stated rather than left blank, so a GM filing under
+    // General learns why this feat is the one without an automatic requirement.
+    if (feat.category === GENERAL_CATEGORY_ID) {
+      say('RDHF.registry.autoInvestmentGeneral', null, true);
+      return;
+    }
+
+    const category =
+      taxonomyLabel(this.#categories.find(c => c.id === feat.category)) || feat.category;
+    const row = autoInvestmentRow(feat, rule);
+
+    if (row) {
+      say('RDHF.registry.autoInvestment', { count: row.count, category, level: feat.level }, false);
+      return;
+    }
+
+    // The rule would apply but the GM's own rows take precedence. Say what it WOULD
+    // have asked for, so the deviation they are authoring is visible next to it.
+    say('RDHF.registry.autoInvestmentOverridden', { count: would, category }, true);
   }
 
   /* ── Drag and drop ───────────────────────────────────────────────────────── */
@@ -1527,6 +1686,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       join: 'and'
     });
     this._renderInvestment(row);
+    // Adding the first row suppresses the rule, removing the last restores it.
+    this._paintAutoInvestment(row);
   }
 
   static _onRemoveInvestment(event, target) {
@@ -1535,7 +1696,17 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const uuid = row?.dataset.uuid;
     const index = Number(target.dataset.index);
     this.#config.feats[uuid]?.requirements?.categoryInvestment.splice(index, 1);
-    if (row) this._renderInvestment(row);
+    if (row) {
+      this._renderInvestment(row);
+      this._paintAutoInvestment(row);
+    }
+  }
+
+  /** Restores the seeded investment curve. Still a working copy until Save. */
+  static _onResetAutomation(event) {
+    event.preventDefault();
+    this.#automation.investmentByLevel.table = foundry.utils.deepClone(DEFAULT_INVESTMENT_BY_LEVEL);
+    this.render();
   }
 
   /** Removes one requirement reference chip and rewrites the field behind it. */
@@ -1785,8 +1956,41 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       registry: this.#config,
       categories: this.#categories,
       types: this.#types,
-      formula: this.#formula
+      formula: this.#formula,
+      automation: this.#automation
     };
+  }
+
+  /**
+   * Absorbs investment rows that merely restate the Rule Automation curve.
+   *
+   * A row equal to what the rule would derive, in the feat's own Category, means the
+   * GM applied the curve by hand — so the feat opts IN rather than out. Matching on
+   * the value alone is not durable, though: retune the curve and the stored number no
+   * longer matches, and the feat would quietly desert the rule frozen at its old
+   * value. Removing the row is what makes the adoption permanent.
+   *
+   * Run from _prepareContext (so the GM sees it, and Discard reverts it) and again
+   * inside both commit paths (a curve edit changes what "redundant" means without
+   * re-rendering, and Save must not persist a row the rule has just absorbed).
+   *
+   * @param {string|null} only  restrict to one uuid, for the single-feat commit
+   * @returns {boolean}  whether anything changed
+   */
+  #adoptRedundantInvestment(only = null) {
+    const rule = this.#automation?.investmentByLevel;
+    if (!rule?.enabled || !this.#config?.feats) return false;
+
+    let changed = false;
+    for (const [uuid, entry] of Object.entries(this.#config.feats)) {
+      if (only && uuid !== only) continue;
+      const feat = normalizeFeat(uuid, entry);
+      const stripped = stripRedundantInvestment(feat, rule);
+      if (stripped === feat) continue;
+      entry.requirements = stripped.requirements;
+      changed = true;
+    }
+    return changed;
   }
 
   /**
@@ -1818,10 +2022,12 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
   /** Writes all four working copies through, and rebases so the app is clean again. */
   async #commit() {
+    this.#adoptRedundantInvestment();
     await setRegistry(this.#config);
     await setCategories(this.#categories);
     await setTypes(this.#types);
     await game.settings.set(MODULE_ID, SETTINGS.POINT_FORMULA, this.#formula);
+    await setAutomation(this.#automation);
     invalidatePackCache();
     this.#baseline = foundry.utils.deepClone(this.#snapshot());
     ui.notifications?.info(game.i18n.localize('RDHF.notify.saved'));
@@ -1841,6 +2047,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   async #commitFeat(uuid) {
     const entry = this.#config.feats?.[uuid];
     if (!entry || !this.#baseline) return false;
+
+    // Before the comparison, not after: a row the rule has absorbed must not be what
+    // makes this write look unnecessary, nor be persisted by it.
+    this.#adoptRedundantInvestment(uuid);
 
     const saved = this.#baseline.registry?.feats?.[uuid];
     if (saved && this.#stableJson(saved) === this.#stableJson(entry)) return false;
