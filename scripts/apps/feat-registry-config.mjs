@@ -1087,10 +1087,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * Writes the uncurated count onto EVERY tab badge and keeps the running total in
    * step with it.
    *
-   * There are two badges — Feats and Curation — and they must never disagree.
-   * querySelectorAll rather than querySelector is the whole point: with a single badge
-   * the singular lookup was correct, and the moment a second one existed it would have
-   * painted whichever came first in the DOM and left the other showing a stale number.
+   * The badge sits on Curation — the tab that clears the count. querySelectorAll rather
+   * than querySelector because a nav is free to grow a second badge: the singular lookup
+   * would paint whichever came first in the DOM and leave the other stale, which is a
+   * silent wrong number rather than a visible break.
    *
    * @param {number} count
    */

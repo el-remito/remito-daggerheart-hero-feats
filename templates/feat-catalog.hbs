@@ -51,12 +51,12 @@
                 </div>
             </section>
 
-            {{#if categories.length}}
+            {{#if types.length}}
                 <section class="rdhf-rail-section">
-                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.categories"}}</h4>
-                    {{#each categories}}
+                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.types"}}</h4>
+                    {{#each types}}
                         <label class="rdhf-checkline">
-                            <input type="checkbox" data-filter="category" value="{{this.id}}">
+                            <input type="checkbox" data-filter="type" value="{{this.id}}">
                             {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                             <span>{{this.label}}</span>
                         </label>
@@ -64,12 +64,12 @@
                 </section>
             {{/if}}
 
-            {{#if types.length}}
+            {{#if categories.length}}
                 <section class="rdhf-rail-section">
-                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.types"}}</h4>
-                    {{#each types}}
+                    <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.categories"}}</h4>
+                    {{#each categories}}
                         <label class="rdhf-checkline">
-                            <input type="checkbox" data-filter="type" value="{{this.id}}">
+                            <input type="checkbox" data-filter="category" value="{{this.id}}">
                             {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                             <span>{{this.label}}</span>
                         </label>

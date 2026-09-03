@@ -2,7 +2,7 @@
     "id": "remito-daggerheart-hero-feats",
     "title": "Remito Daggerheart Hero Feats",
     "description": "Lets the GM designate Daggerheart Features as Feats — abilities untied to any Domain, carrying a Category, Level, Types and Requirements — and lets player characters spend Feat Points to acquire them from a filterable catalog.",
-    "version": "1.3.2",
+    "version": "1.3.3",
     "compatibility": {
         "minimum": "14.364",
         "verified": "14.365"

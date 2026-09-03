@@ -186,7 +186,11 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   registry's tabs *do* re-render, because each is a different form.
 - **The GM registry mirrors the player catalog** — same rail, same row shape, same `matchesFilters`
   predicate, so curation happens against the view the table sees. Only the player-facing switches
-  (eligibility, hide-acquired) are left out, replaced by "uncurated only" / "hidden only".
+  (eligibility, hide-acquired) are left out, replaced by "uncurated only" / "hidden only". The
+  section order is part of the mirror and is **search, Level, Type, Category, then the switches** in
+  both templates — the registry's are `<details>` and the catalog's are plain `<section>`s, so
+  nothing but source order keeps them agreeing. Rail open-state is keyed by `data-rail`, never by
+  index, so reordering is safe.
 - **Requirement checks return descriptors, not strings.** `{ kind, key, data, met }` — the app layer
   localizes. That is what keeps `logic/` free of `game.i18n` and testable in node.
 - **Working copy, save on Save.** The registry app clones the setting into `#config`, mutates it on
@@ -227,9 +231,9 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `_addFeatureReference` had all shipped Feats-only. **Never write the selector at a call site.**
   `FEAT_HOST` (`.rdhf-reg-feat[data-uuid], .rdhf-cur-editor[data-uuid]`) is declared once at the
   top of `feat-registry-config.mjs` and `_featHost(el)` is the only way a handler should resolve
-  its feat. The same rule caught the tab badge: `querySelector('.rdhf-tab-badge')` was correct with
-  one badge and quietly stale the moment Curation grew a second, so `_paintBadges()` is the single
-  writer for all of them.
+  its feat. `_paintBadges()` exists for the same reason one rail below: the uncurated badge sits on
+  Curation (the tab that clears it, not the one that lists it), and a `querySelector` for it would
+  paint only the first badge a nav ever grows.
 - **Selecting a queue feat re-renders; editing one does not.** The pane is a whole form, and
   rebuilding it by hand would duplicate every control the Feats tab declares. So `render()` captures
   and restores the queue's own scroller (`.rdhf-cur-queue-scroll`) alongside `.rdhf-reg-scroll`, and

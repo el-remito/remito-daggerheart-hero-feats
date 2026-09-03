@@ -154,6 +154,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.3.3
+- **The uncurated badge now sits only on the Curation tab.** It is a call to action, and Curation is the tab that answers it — Feats lists those Feats, Curation is where you clear them
+- **Filter rails are ordered the same way everywhere** — search, Level, Type, Category, then the switches — in the Feat Registry's Feats tab and in each character's Feats window. Nothing else about them changed
+
 ### v1.3.2
 - **Add category requirement works on the Curation tab.** It did nothing at all, with nothing in the console — the button could not tell which Feat it was editing once it was sitting on Curation rather than on Feats. Three more controls were dead the same way and are fixed with it: removing an investment row, removing a prerequisite chip, and the chips failing to redraw after you dropped a Feature onto the reference block
 - **The uncurated badge now sits on the Curation tab too**, beside the one on Feats, and both always show the same number

@@ -10,12 +10,12 @@
         </button>
         <button type="button" class="rdhf-tab {{#if isFeats}}is-active{{/if}}" data-action="selectTab" data-tab="feats">
             <i class="fa-solid fa-list-check"></i> {{localize "RDHF.registry.tabs.feats"}}
-            <span class="rdhf-tab-badge" {{#unless uncuratedCount}}hidden{{/unless}}>{{uncuratedCount}}</span>
         </button>
         <button type="button" class="rdhf-tab {{#if isCuration}}is-active{{/if}}" data-action="selectTab" data-tab="curation">
             <i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "RDHF.registry.tabs.curation"}}
-            {{!-- The same count as the Feats badge, on the tab that actually clears it.
-                  Both are painted together by _paintBadges(); see the note there. --}}
+            {{!-- The uncurated count lives here rather than on Feats: it is a call to
+                  action, and this is the tab that answers it. Painted by _paintBadges(),
+                  which writes every badge in the nav rather than the first one. --}}
             <span class="rdhf-tab-badge" {{#unless uncuratedCount}}hidden{{/unless}}>{{uncuratedCount}}</span>
         </button>
         <button type="button" class="rdhf-tab {{#if isTaxonomy}}is-active{{/if}}" data-action="selectTab" data-tab="taxonomy">
@@ -144,24 +144,6 @@
                         </div>
                     </section>
 
-                    {{#if filterCategories.length}}
-                        <details class="rdhf-rail-section rdhf-rail-details" data-rail="categories"
-                                 {{#if railOpen.categories}}open{{/if}}>
-                            <summary class="rdhf-rail-heading">
-                                <span class="rdhf-arrow">&#9654;</span>
-                                {{localize "RDHF.catalog.categories"}}
-                            </summary>
-                            {{#each filterCategories}}
-                                <label class="rdhf-checkline">
-                                    <input type="checkbox" data-filter="category" value="{{this.id}}"
-                                           {{#if this.checked}}checked{{/if}}>
-                                    {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
-                                    <span>{{this.label}}</span>
-                                </label>
-                            {{/each}}
-                        </details>
-                    {{/if}}
-
                     {{#if filterTypes.length}}
                         <details class="rdhf-rail-section rdhf-rail-details" data-rail="types"
                                  {{#if railOpen.types}}open{{/if}}>
@@ -172,6 +154,24 @@
                             {{#each filterTypes}}
                                 <label class="rdhf-checkline">
                                     <input type="checkbox" data-filter="type" value="{{this.id}}"
+                                           {{#if this.checked}}checked{{/if}}>
+                                    {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
+                                    <span>{{this.label}}</span>
+                                </label>
+                            {{/each}}
+                        </details>
+                    {{/if}}
+
+                    {{#if filterCategories.length}}
+                        <details class="rdhf-rail-section rdhf-rail-details" data-rail="categories"
+                                 {{#if railOpen.categories}}open{{/if}}>
+                            <summary class="rdhf-rail-heading">
+                                <span class="rdhf-arrow">&#9654;</span>
+                                {{localize "RDHF.catalog.categories"}}
+                            </summary>
+                            {{#each filterCategories}}
+                                <label class="rdhf-checkline">
+                                    <input type="checkbox" data-filter="category" value="{{this.id}}"
                                            {{#if this.checked}}checked{{/if}}>
                                     {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                                     <span>{{this.label}}</span>
