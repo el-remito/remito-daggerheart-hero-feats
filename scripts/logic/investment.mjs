@@ -17,6 +17,7 @@ import { evaluateInvestment } from './requirements.mjs';
 // only — the trailing forward tier below — and ruleAppliesToCategory is taken rather
 // than restated so the General carve-out has a single statement.
 import { investmentForLevel, ruleAppliesToCategory } from './automation.mjs';
+import { GENERAL_CATEGORY_ID } from '../constants.mjs';
 
 /**
  * How many tiers ahead a Category shows. Two — the next one and the one after — is
@@ -51,8 +52,17 @@ export function buildInvestmentSummary({
 
   // Only Categories the character has actually put Feats into. A Category at zero is
   // the catalog's job to advertise, not this tab's — this one is about standing.
+  //
+  // General never gets a card. It exists so a Feat can be curated without the GM
+  // inventing a filing system first, which makes it a holding bucket rather than a track
+  // a character advances along: "General — 7 invested" reports where Feats were filed,
+  // not where the player stands. This reads GENERAL_CATEGORY_ID directly rather than
+  // borrowing ruleAppliesToCategory, because it is a DISPLAY decision and that one is
+  // about what the rule DERIVES — the reach audit still checks General when a Feat
+  // authors a chain on it, and must go on doing so. A chain naming General is still
+  // evaluated here exactly as before; it simply never earns a card of its own.
   const invested = Object.entries(counts ?? {})
-    .filter(([, n]) => Number(n) > 0)
+    .filter(([category, n]) => Number(n) > 0 && category !== GENERAL_CATEGORY_ID)
     .map(([category, n]) => ({ category, invested: Number(n) }));
 
   return invested
@@ -135,6 +145,8 @@ function tiersFor(feats, category, counts, limit, rule) {
  * carries `unlocks: 0` by construction, and `forward: true` so the row can say so.
  */
 function forwardTiers(category, counts, room, rule, real) {
+  // The General test is redundant now that the summary never lists it, and kept because
+  // it is the correct statement for this function read on its own.
   if (room <= 0 || !rule?.enabled || !ruleAppliesToCategory(category)) return [];
 
   const have = Number(counts?.[category]) || 0;

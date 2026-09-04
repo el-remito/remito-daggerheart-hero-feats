@@ -136,6 +136,13 @@
                                placeholder="{{localize 'RDHF.registry.searchPlaceholder'}}">
                     </label>
 
+                    {{!-- Mirrors the catalog rail, which is the whole point of this rail:
+                          same control, same place. Prune and Re-sync all stay in the
+                          footer — neither is a filter. --}}
+                    <button type="button" class="rdhf-text-btn rdhf-clear-filters" data-action="clearRegFilters">
+                        <i class="fa-solid fa-filter-circle-xmark"></i> {{localize "RDHF.catalog.clearFilters"}}
+                    </button>
+
                     <section class="rdhf-rail-section">
                         <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.levelRange"}}</h4>
                         <div class="rdhf-level-range">
@@ -212,9 +219,6 @@
                             <strong class="rdhf-reg-count">{{featCount}}</strong>
                             {{localize "RDHF.catalog.shown"}}
                         </span>
-                        <button type="button" class="rdhf-text-btn" data-action="clearRegFilters">
-                            {{localize "RDHF.catalog.clearFilters"}}
-                        </button>
                         <button type="button" class="rdhf-text-btn" data-action="pruneOrphans">
                             <i class="fa-solid fa-broom"></i> {{localize "RDHF.registry.prune"}}
                         </button>
@@ -759,6 +763,17 @@
                             </label>
                             {{#unless this.fixed}}
                                 <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeCategory">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            {{else}}
+                                {{!-- General may not be deleted, but its row still has to
+                                      line up with the ones under it. The placeholder is the
+                                      real button's markup made inert and invisible, so it is
+                                      exactly as wide as the thing it stands in for however
+                                      that button is later restyled. `hidden` would not do:
+                                      a display:none element occupies no width at all. --}}
+                                <button type="button" class="rdhf-icon-btn rdhf-taxonomy-spacer"
+                                        disabled tabindex="-1" aria-hidden="true">
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
                             {{/unless}}

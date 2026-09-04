@@ -154,6 +154,12 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.5.3
+- **The catalog’s tab strip no longer leaks.** Scrolling a long list showed slivers of Feat rows above and below the Catalog / My Feats / My Investments bar, as though the bar had come loose from the top of the pane
+- **Clear filters moved to where it is wanted.** It was in the rail’s footer, below every filter section and so off screen exactly when you needed it; it now sits directly under the search box, in the player catalog and in the GM Feats tab alike. Prune and Re-sync all stay in the footer — neither is a filter
+- **“My Investments” no longer reports General.** General is where a Feat goes so it can be curated without inventing a filing system first — a holding bucket, not a track a character advances along, and a “General — 7 invested” card said where Feats were filed rather than where the player stands. A requirement that names General is still read exactly as before
+- **Taxonomy rows line up.** The eye icon no longer crowds its own checkbox, and General — which has no delete button, because it cannot be deleted — no longer sits a button’s width out of line with every entry beneath it
+
 ### v1.5.2
 - **"My Investments" now says what each mark opens.** A row read `NEXT · 4/6 · 2 more · unblocks 4` and never named the thing being bought; it now reads `NEXT · Lv 5`. The Level comes from the Feats that mark actually gates, so it is right whether or not Rule Automation is on, and a mark opening several Levels says so
 - **A Category that showed no THEN was telling you nothing, and looked like it was telling you something.** A missing second row meant only that no Feat in that Category asks for more than the first — almost always because nothing is filed at the higher Levels yet, not because you had unlocked everything. With Rule Automation on, THEN now shows the next mark from your curve, greyed and marked *nothing there yet*; with it off, where there is no curve to read, the card says so in words

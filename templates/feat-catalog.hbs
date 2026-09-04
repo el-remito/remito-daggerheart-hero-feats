@@ -43,6 +43,14 @@
                        placeholder="{{localize 'RDHF.catalog.searchPlaceholder'}}">
             </label>
 
+            {{!-- Directly under the search rather than in the rail footer: the footer
+                  sits below every filter section, which in a rail this long is off
+                  screen at exactly the moment the button is wanted. One control, moved
+                  — not a second one added. --}}
+            <button type="button" class="rdhf-text-btn rdhf-clear-filters" data-action="clearFilters">
+                <i class="fa-solid fa-filter-circle-xmark"></i> {{localize "RDHF.catalog.clearFilters"}}
+            </button>
+
             <section class="rdhf-rail-section">
                 <h4 class="rdhf-rail-heading">{{localize "RDHF.catalog.levelRange"}}</h4>
                 <div class="rdhf-level-range">
@@ -120,9 +128,6 @@
                     <strong class="rdhf-result-count">0</strong>
                     {{localize "RDHF.catalog.shown"}}
                 </span>
-                <button type="button" class="rdhf-text-btn" data-action="clearFilters">
-                    {{localize "RDHF.catalog.clearFilters"}}
-                </button>
             </footer>
         </aside>
 

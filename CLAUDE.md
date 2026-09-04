@@ -453,6 +453,16 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `statistics.mjs` does — the precedence rule gets stated once — which makes that evaluator the
   module's most-shared piece of logic, read by the catalog, the GM row painter, the reach audit and
   this.
+- **General is never a card on My Investments** (v1.5.3), and the exclusion reads
+  `GENERAL_CATEGORY_ID` directly rather than borrowing `ruleAppliesToCategory`. It is a Category
+  that exists so a Feat can be *curated* without a filing system, which makes it a holding bucket
+  rather than a track, and "General — 7 invested" reported filing rather than standing. Borrowing
+  the rule's carve-out would have conflated two different questions: that one governs what the rule
+  DERIVES, which is why the reach audit still checks General when a Feat authors a chain on it. The
+  exclusion is about the CARD only — a chain naming General is still evaluated, so an Alchemy mark
+  that pays off only alongside General is still correctly withheld. `forwardTiers` keeps its own
+  `ruleAppliesToCategory` test, now unreachable for General and kept because it is the correct
+  statement for that function read alone.
 - **Tiers come from the FEATS, not from the curve.** With Rule Automation on the two lists are
   identical, because the curve is what put those numbers on the feats and `listFeats` has already
   applied it — but reading the feats also works with the rule off, and can never advertise a tier
@@ -489,6 +499,23 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   window — and the catalog's broad `updateSetting` hook (which re-renders every open catalog for
   any module setting) skips this key, so a cosmetic click cannot throw away scroll position and
   open rows to paint what is already on screen.
+- **A sticky element is pinned by its MARGIN box, not its border box.** The catalog's tab strip
+  scrolls inside `.rdhf-list-pane` and wears negative margins to reach the pane's padding edges. With
+  `top: 0` the negative *top* margin therefore pushed the STUCK strip 8px down — the margin box is
+  what meets the scrollport — opening a transparent band above it that Feat rows travelled through,
+  and its 8px bottom margin was a second such band. That was the v1.5.3 report: a header that looked
+  detached from the top of its pane. `top` now carries the same negative offset, cancelling it. The
+  general shape: **a sticky element's spacing must be painted by the element, never left as margin**,
+  so the gap below the strip is `padding-top` on `.rdhf-section` — content spacing that scrolls away
+  under the strip rather than a window onto what passes beneath. It is the same class of bug as the
+  `display: none` grid track one bullet down: both are cases where the box the browser reasons about
+  is not the one the rule appears to be about.
+- **A control that is correctly absent still owes its neighbours its width.** The fixed Category has
+  no delete button, and the `flex: 1` label field simply swallowed the freed space, taking the icon
+  field and the hide toggle out of line with every row beneath it. `.rdhf-taxonomy-spacer` is the
+  real button's markup made inert and `visibility: hidden` — a real button rather than a hand-sized
+  spacer, so it stays exactly as wide as the thing it stands in for however that button is later
+  restyled, and `visibility` rather than `hidden`, which would occupy nothing at all.
 - **My Investments is a summary, so the rail is hidden while it shows.** `_applyFilters` toggles
   `.rdhf-rail` **and `is-summary` on `.rdhf-catalog-body`** — hiding the rail alone was the v1.5.1
   bug: the body is a two-track grid (`230px minmax(0, 1fr)`) with the rail as item 1, and a grid
