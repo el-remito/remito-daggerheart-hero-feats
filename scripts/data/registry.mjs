@@ -182,7 +182,7 @@ export function blankFeat(uuid) {
     autoExempt: false,
     // When this feat was last given a Category. 0 = never curated. Drives the
     // "Newly added" filter, and nothing else reads it.
-    curatedAt: 0, // opts this feat out of every Rule Automation rule
+    curatedAt: 0,
     requirements: blankRequirements()
   };
 }
