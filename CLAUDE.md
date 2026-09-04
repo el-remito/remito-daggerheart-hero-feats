@@ -379,16 +379,93 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   authoring an investment requirement while `checkRequirements` emitted no clause for it and
   `authoredRows()` filtered it out — counted as authored and absorbed by the rule at the same time.
   Three readers, one filter; `usage-smoke.mjs` now asserts they agree.
-- **The reachability audit lives in `logic/statistics.mjs` and imports `logic/automation.mjs`** —
-  the module's one sibling import inside `logic/`, taken deliberately over restating the rule where
-  it would drift from the one the catalog evaluates. `buildAutomationReach` asks whether the curve
-  is satisfiable at all: supply is feats in the same Category at or below the same Level, **minus
-  one**, because a feat can never be its own prerequisite. Hidden feats are not supply (a player
-  cannot acquire one) and are not consumers; exempt feats and feats with authored rows are supply
-  but not consumers. Requirements on the supplying feats are not modelled, so a pass means "not
-  provably impossible", never "comfortable" — the panel says so. With the seeded curve a Category
-  needs 15 feats at or below Level 10 to support a single Level 10 feat (it was 17 until the v1.4.2
-  retune; `reach-smoke.mjs` derives the figure rather than restating it).
+- **The reachability audit is a LEAST FIXPOINT, and that is the whole design.**
+  `buildInvestmentReach` (`logic/statistics.mjs`) asks whether a Feat can ever be acquired at all.
+  It used to measure supply as "feats in the Category at or below this Level, minus one" — which
+  counts feats that are themselves unreachable, so two Level 5 feats each demanding six from a
+  Category holding five each counted the **other** as supply and the pair passed, though neither
+  can be acquired first. Any Category more than one feat wide at its top Level hid its own
+  shortfall that way. Nothing is supply now until it is known reachable: start from the feats that
+  require nothing, grow until a whole pass adds none, and a feat is never its own prerequisite for
+  free because it is only ever tested while outside the set. The cumulative `level → category →
+  count` table is rebuilt once per **pass**, not once per feat — that is the difference between
+  linear-ish and cubic on a few hundred feats.
+- **It audits the EFFECTIVE chain, authored or derived**, via `applyAutoInvestment` — one
+  expression settling the question, because that function already returns the derived row when the
+  rule reaches a feat, the feat's own rows when it does not, and the feat untouched when the rule
+  is off. So it runs with Rule Automation **off**, and `enabled` is gone from its return. Before
+  v1.5.0 it audited only feats the rule reached, which meant a hand-authored row — the likelier
+  place for the mistake — was never checked at all. General is audited when it authors a chain: the
+  carve-out governs what the *rule derives*, not what is *checked*, which falls out of iterating
+  feats rather than Categories.
+- **`logic/statistics.mjs` now imports two siblings inside `logic/`** — `automation.mjs` and
+  `requirements.mjs` (`evaluateInvestment`) — both taken deliberately over restating a rule where
+  it would drift from the one the catalog evaluates. The evaluator matters most: the audit has to
+  read an AND/OR chain exactly as `checkRequirements` does, so OR-of-ANDs precedence is stated once
+  and cross-Category rows need no special case, being just another key in the `categoryCounts` map.
+  `chainShortfall` groups the chain the same way, and reports the **cheapest** fix: the minimum
+  over AND-groups of the summed deficits, which reduces to `required - supply` for a single row —
+  the number the panel has always printed.
+- **Supply is what a player can ACQUIRE, so all four withholds drop out**, not just `feat.hidden`.
+  The app collapses them into a single `withheld` per record in `_buildStats`, because reading the
+  taxonomy is the app's job and not `logic/`'s; uncurated is folded in there too, which is why the
+  audit carries no separate branch for it. Exempt feats and feats with authored rows are still
+  supply.
+- **Findings group by *(Category, Level, requirement)*** and are ordered **lowest Level first**
+  inside a Category, Categories by their worst shortfall. Under a fixpoint a blockage cascades —
+  unreachable Level 5 feats make the Level 6 ones unreachable too, with a bigger shortfall — so the
+  old worst-shortfall-first sort would have put the symptom above the cause. The summary line
+  counts blocked **feats**, not findings, because `checked` counts feats.
+- Requirements other than investment on the supplying feats — Trait minimums, prerequisites, class
+  — are still not modelled, so a pass means "not provably impossible", never "comfortable"; the
+  panel says so. With the seeded curve a Category still needs 15 feats at or below Level 10 to
+  support a single Level 10 feat (17 before the v1.4.2 retune; `reach-smoke.mjs` derives the figure
+  rather than restating it).
+- **"Newly added" is a property of the SET, and that is why nothing is stored per feat.**
+  `curatedAt` on a registry entry is a timestamp, stamped in `_syncField`'s `category` case for the
+  moment a feat gained a Category (and cleared to 0 when it loses one) — but *membership* of the
+  newest ten is decided by `newestCurated()` over the whole list, once per render, because the
+  tenth-newest feat stops being new when an eleventh is filed with nothing about it changing. So
+  the flag reaching the row is `isNew`, derived, never persisted, and `matchesFilters` stays a
+  per-row predicate reading `view.isNew` — which is what lets both windows filter from `data-*`
+  attributes with no context object. The player catalog measures the window over the list the
+  PLAYER receives, so a withheld feat never occupies one of the ten slots. **No migration**:
+  `normalizeFeat`'s inline default reads an entry written before v1.5.0 as `curatedAt: 0`, and 0 is
+  never new.
+- **Curating one feat repaints two rows.** `_recomputeNewFeats()` returns the uuids whose
+  membership changed, and `_syncField` repaints each — the arrival gains the chip and whatever was
+  tenth loses it. Repainting only the edited row left the second wearing a stale chip until the
+  next full render, the exact lag the rest of `_refreshRow` exists to prevent.
+- **The Statistics ledger's exclude toggle re-renders, and the other two toggles do not.**
+  `_onStatsAxis` and `_onToggleGaps` change which rows are *shown*; `_onToggleLedgerActor` changes
+  what the figures *are* — Most taken, Recent and every counter — so there is no repaint short of
+  rebuilding the panel, and rebuilding it by hand would duplicate markup the template declares.
+  `buildAdoptionStats` keeps `characters` as the FULL list with an `excluded` flag per row and
+  counts only the rest, and the app's `hasPlayData` reads `characters.length`, not
+  `charactersWithFeats` — otherwise excluding every character would swap the table for the "nobody
+  has taken a Feat" empty state and take away the only control that puts them back. The set is
+  session-local on the app, like `_statsAxis` and `_showAllGaps`: this tab derives everything and
+  stores nothing.
+- **`logic/investment.mjs` is the Investment chain read from the PLAYER's end**, and it is a
+  separate module rather than a function on `filters.mjs` because it answers a different question
+  with the same data: not "does this character meet this Feat's requirement" but "what is the next
+  mark in this Category worth". It imports `evaluateInvestment` for the same reason
+  `statistics.mjs` does — the precedence rule gets stated once — which makes that evaluator the
+  module's most-shared piece of logic, read by the catalog, the GM row painter, the reach audit and
+  this.
+- **Tiers come from the FEATS, not from the curve.** With Rule Automation on the two lists are
+  identical, because the curve is what put those numbers on the feats and `listFeats` has already
+  applied it — but reading the feats also works with the rule off, and can never advertise a tier
+  no feat actually gates. A candidate threshold earns a row only if raising *this* Category to it
+  (holding every other Category where it stands) actually flips a blocked feat's chain, which is
+  what stops an AND chain wanting a second Category from being shown as a promise this Category
+  alone can keep. It is a **fifth** reader of the shared `r.category && Number(r.count)` filter.
+- **My Investments is a summary, so the rail is hidden while it shows.** `_applyFilters` toggles
+  `.rdhf-rail` — not a re-render, because tab switching in the catalog must never re-render (the
+  rail would lose its state). Its rows are not `.rdhf-feat`, so the tab contributes 0 to the result
+  count and its own empty state is rendered by Handlebars and skipped by the `[data-empty]` sweep.
+  It lists only Categories the character has actually invested in: a Category at zero is the
+  catalog's job to advertise, and this tab is about standing.
 - **Permissive requirement failure.** An unrecognized expression atom returns `true`. A GM's typo
   must not silently lock a feat away with no visible cause.
 - **Formula evaluation goes through `Roll`**, never `eval` or `new Function`. The registry's live
@@ -439,10 +516,23 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   least one Feat** (so a character sitting on unspent points but no Feats does not appear), and
   there is deliberately **no never-taken list** — at a few hundred feats it is the catalog again,
   and it conflates "not reached yet", "nobody qualifies" and "actually passed over". Separating the
-  third needs the same feat × character eligibility pass as the deferred reachability audit.
+  third needs a feat × character eligibility pass, which is also what the Unreachable Feats audit
+  would need before it could model the supplying feats’ non-investment requirements.
 - The heat grid shades against **its own busiest cell**, not a figure shared between grids: a shared
   maximum flattens a catalog with one crowded Category into near-identical squares. The count is
   always printed on top of the shade, never conveyed by shade alone.
+- **`MAX_GAP_ROWS` is a default view, not a ceiling.** The Coverage gaps list truncated at twelve and
+  printed "30 more not listed", which told a GM that thirty combinations were missing and gave them
+  no way to learn which — the one question the panel exists to answer. Since v1.5.0 every gap is
+  rendered; rows past the cap carry `data-gap-overflow="true"` and start `hidden`, and
+  `_onToggleGaps` unhides them **in place**. Re-rendering to show them would rerun the whole
+  statistics pass, which reads every actor in the world, to reveal rows already in the DOM. The
+  overflow can never be more markup than the heat grid directly above it, which already draws one
+  cell per Category × Level. The flag also travels through the context (`gaps.showAll`, and a
+  per-row `hidden`) because switching tabs rebuilds the pane: without it an expanded list came back
+  collapsed under a button still reading "Show fewer" — the rail-renders-its-own-state trap, one
+  panel down. Both button labels are in the markup with one hidden, so the handler toggles
+  visibility and never writes a display string.
 - **Four things are withheld from players, and `listFeats` applies all four**: uncurated feats (no
   Category), feats the GM flagged `hidden`, feats whose Category is flagged hidden, and feats
   carrying **any** hidden Type. A GM who registers a large pack and forgets to curate will see an

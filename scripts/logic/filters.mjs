@@ -8,6 +8,12 @@
  * row visibility in place), so these must stay cheap and allocation-light.
  */
 
+/**
+ * How many Feats "Newly added" shows. A recency window, not a page: the point is
+ * "what did I just file", so it stays small enough to read at a glance.
+ */
+export const NEW_FEATS_LIMIT = 10;
+
 /** The filter state a fresh catalog opens with. */
 export function blankFilterState() {
   return {
@@ -17,8 +23,35 @@ export function blankFilterState() {
     categories: [], // empty = no category constraint
     types: [], // empty = no type constraint
     eligibleOnly: false,
-    hideOwned: false
+    hideOwned: false,
+    newOnly: false
   };
+}
+
+/**
+ * The most recently curated Feats, newest first.
+ *
+ * Recency is a property of the SET, not of a row — the tenth-newest Feat stops being
+ * new when an eleventh is filed, without anything about it changing. So membership is
+ * decided once per render and stamped onto the views as `isNew`, which is what lets
+ * matchesFilters stay a per-row predicate and lets both windows filter from data
+ * attributes without a context object.
+ *
+ * A Feat that has never been curated carries 0 and is never new: "newly added" means
+ * newly made available to players, which is the moment it gained a Category.
+ *
+ * @param {Array<object>} views  feat views carrying `uuid` and `curatedAt`
+ * @param {number} [limit]
+ * @returns {Set<string>} uuids
+ */
+export function newestCurated(views, limit = NEW_FEATS_LIMIT) {
+  return new Set(
+    (views ?? [])
+      .filter(v => Number(v?.curatedAt) > 0)
+      .sort((a, b) => Number(b.curatedAt) - Number(a.curatedAt))
+      .slice(0, Math.max(0, limit))
+      .map(v => v.uuid)
+  );
 }
 
 /**
@@ -32,6 +65,7 @@ export function matchesFilters(view, state) {
 
   if (s.hideOwned && view.owned) return false;
   if (s.eligibleOnly && !view.eligible && !view.owned) return false;
+  if (s.newOnly && !view.isNew) return false;
 
   const min = s.levelMin;
   const max = s.levelMax;

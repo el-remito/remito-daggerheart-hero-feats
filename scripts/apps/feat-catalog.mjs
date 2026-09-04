@@ -24,7 +24,8 @@ import {
   setPointAdjustment
 } from '../data/actor-state.mjs';
 import { isEligible } from '../logic/requirements.mjs';
-import { matchesFilters, blankFilterState, buildSearchText, byLevelThenName } from '../logic/filters.mjs';
+import { matchesFilters, newestCurated, blankFilterState, buildSearchText, byLevelThenName } from '../logic/filters.mjs';
+import { buildInvestmentSummary } from '../logic/investment.mjs';
 import { localizeCheck } from './requirement-text.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -158,6 +159,12 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     // rather than as a raw "Compendium.pack.Item.abc123".
     snapshot.featLabels = Object.fromEntries(feats.map(f => [f.uuid, f.name]));
 
+    // Recency is a property of the SET, decided once here rather than per row: the
+    // tenth-newest Feat stops being new when an eleventh is curated, with nothing about
+    // it changing. Measured over the list the PLAYER receives, so a Feat withheld from
+    // them never occupies one of the ten slots.
+    const fresh = newestCurated(feats);
+
     const views = feats
       .map(feat => {
         const evaluation = isEligible(feat, snapshot, pool.remaining);
@@ -173,6 +180,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           unmetCount: evaluation.failures.length,
           free: acquisitionOf(state, feat.uuid)?.free === true,
           hidden: feat.hidden === true,
+          isNew: fresh.has(feat.uuid),
           isOpen: this._openRows.has(feat.uuid)
         };
         view.searchText = buildSearchText(view);
@@ -193,6 +201,15 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       tab: this._tab,
       isAvailableTab: this._tab === 'available',
       isAcquiredTab: this._tab === 'acquired',
+      isInvestmentsTab: this._tab === 'investments',
+      // The same views the two Feat tabs are built from, read from the other end:
+      // listFeats has already applied Rule Automation, so a derived requirement is a
+      // tier here exactly as it is a requirement there, and neither view can drift.
+      investments: buildInvestmentSummary({
+        feats: views,
+        counts: snapshot.categoryCounts,
+        categoryLabels: snapshot.categoryLabels
+      }),
       hasFeats: views.length > 0,
       // The rail renders its OWN state. Filtering never re-renders, so for a long time
       // the only way a box could be ticked was the player ticking it and nothing had to
@@ -236,7 +253,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       input.addEventListener('change', () => {
         if (kind === 'levelMin' || kind === 'levelMax') {
           this._filters[kind] = input.value === '' ? null : Number(input.value);
-        } else if (kind === 'eligibleOnly' || kind === 'hideOwned') {
+        } else if (kind === 'eligibleOnly' || kind === 'hideOwned' || kind === 'newOnly') {
           this._filters[kind] = input.checked;
         } else if (kind === 'category' || kind === 'type') {
           const bucket = kind === 'category' ? 'categories' : 'types';
@@ -269,6 +286,13 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!el) return;
     let visible = 0;
 
+    // My Investments is a per-Category summary, not a Feat list, so the rail would be
+    // four controls filtering nothing. Hidden here rather than by re-rendering, for the
+    // same reason tab switching never re-renders: the rail would lose its state.
+    const summary = this._tab === 'investments';
+    const rail = el.querySelector(`.${PREFIX}-rail`);
+    if (rail) rail.hidden = summary;
+
     for (const section of el.querySelectorAll(`.${PREFIX}-section`)) {
       const active = section.dataset.section === this._tab;
       section.hidden = !active;
@@ -283,8 +307,10 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     // Each tab explains its own emptiness: "nothing matches" versus "nothing acquired".
+    // The summary tab has no rows to count, so its own empty state is rendered by
+    // Handlebars and left alone here.
     for (const empty of el.querySelectorAll('[data-empty]')) {
-      empty.hidden = visible > 0 || empty.dataset.empty !== this._tab;
+      empty.hidden = summary || visible > 0 || empty.dataset.empty !== this._tab;
     }
     const count = el.querySelector(`.${PREFIX}-result-count`);
     if (count) count.textContent = String(visible);
@@ -298,6 +324,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       types: (row.dataset.types || '').split('|').filter(Boolean),
       owned: row.dataset.owned === 'true',
       eligible: row.dataset.eligible === 'true',
+      isNew: row.dataset.new === 'true',
       searchText: row.dataset.search || ''
     };
   }
@@ -448,7 +475,9 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
    */
   static _onSelectTab(event, target) {
     event.preventDefault();
-    this._tab = target.dataset.tab === 'acquired' ? 'acquired' : 'available';
+    this._tab = ['acquired', 'investments'].includes(target.dataset.tab)
+      ? target.dataset.tab
+      : 'available';
     for (const tab of this.element.querySelectorAll(`.${PREFIX}-tab[data-tab]`)) {
       tab.classList.toggle('is-active', tab.dataset.tab === this._tab);
     }

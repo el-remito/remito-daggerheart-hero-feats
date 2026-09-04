@@ -17,6 +17,7 @@
              data-owned="{{this.owned}}"
              data-free="{{this.free}}"
              data-eligible="{{this.eligible}}"
+             data-new="{{this.isNew}}"
              data-search="{{this.searchText}}"
              {{#if this.isOpen}}open{{/if}}>
         <summary class="rdhf-feat-summary">
@@ -33,6 +34,12 @@
                     {{#each this.typeLabels}}
                         <span class="rdhf-chip rdhf-chip--type">{{this}}</span>
                     {{/each}}
+                    {{#if this.isNew}}
+                        <span class="rdhf-chip rdhf-chip--new"
+                              data-tooltip="{{localize 'RDHF.catalog.newTooltip'}}">
+                            {{localize "RDHF.catalog.new"}}
+                        </span>
+                    {{/if}}
                     {{#if this.uncurated}}
                         <span class="rdhf-chip rdhf-chip--uncurated"
                               data-tooltip="{{localize 'RDHF.catalog.uncuratedTooltip'}}">

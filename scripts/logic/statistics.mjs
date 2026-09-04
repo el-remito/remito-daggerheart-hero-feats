@@ -13,10 +13,13 @@
  * a stack trace.
  */
 
-import { TRAITS, RESOURCE_REQS, GENERAL_CATEGORY_ID } from '../constants.mjs';
-// A sibling import inside logic/ — both are pure, and the alternative is restating the
-// rule here, where it would drift from the one the catalog actually evaluates.
-import { autoInvestmentRow, investmentForLevel } from './automation.mjs';
+import { TRAITS, RESOURCE_REQS } from '../constants.mjs';
+// Sibling imports inside logic/ — every one is pure, and the alternative is restating
+// those rules here, where they would drift from the ones the catalog actually
+// evaluates. evaluateInvestment above all: the reach audit has to read an AND/OR chain
+// exactly as checkRequirements does, and that precedence gets stated once.
+import { applyAutoInvestment } from './automation.mjs';
+import { evaluateInvestment } from './requirements.mjs';
 
 /** Levels the grid always shows, so its columns never move as a catalog grows. */
 export const LEVEL_COLUMNS = 10;
@@ -167,87 +170,235 @@ function buildGrid(rowDefs, columns, feats, belongs) {
   };
 }
 
-/* ── Automation reach ──────────────────────────────────────────────────────── */
+/* ── Investment reach ──────────────────────────────────────────────────── */
 
 /**
- * Whether the Default Investment by Level rule is actually satisfiable.
+ * Which Feats can never be acquired by anyone, because their Investment in Category
+ * requirement can never be satisfied.
  *
- * The rule asks a character to already own N Feats in a Category before taking a Feat
- * of that Level in it — but a GM setting the curve has no way to see whether the
- * Category CONTAINS N acquirable Feats below that Level. If it does not, the Feat is
- * not merely hard to reach, it is unreachable by anyone, forever, and nothing else in
- * the module would ever say so.
+ * Every investment requirement is audited, whether the GM typed it or the Automation
+ * curve derived it: `applyAutoInvestment` already answers "authored or derived" — it
+ * returns the derived row when the rule reaches the Feat, the Feat's own rows when it
+ * does not, and the Feat untouched when the rule is off. An earlier version audited
+ * only the Feats the rule reached, which meant a hand-authored row — the more likely
+ * place for the mistake, since the curve is applied uniformly by machine while
+ * authored numbers are typed one at a time — was never checked at all.
  *
- * Supply is Feats in the same Category at or below the same Level, minus the Feat
- * itself — a character standing at Level L can have taken any of those and no others.
- * Hidden Feats are excluded: a player cannot acquire one, so it cannot be investment.
- * Requirements the supplying Feats carry are NOT modelled; this is a ceiling, so a
- * reachable verdict means "not provably impossible", never "comfortable".
+ * **Reachability is a least fixpoint, and that is the whole point.** Measuring supply
+ * as "Feats in the Category at or below this Level, minus one" counts Feats that are
+ * themselves unreachable, so two Level 5 Feats each demanding six from a Category
+ * holding five each counted the OTHER as available and the pair passed — although
+ * neither can ever be acquired first. Any Category more than one Feat wide at its top
+ * Level hid its own shortfall that way, and the wider it was the more it hid. So
+ * nothing is supply until it is known reachable, starting from the Feats that require
+ * nothing and growing until no more can be added. A Feat is never its own prerequisite
+ * for free: it is only ever tested while outside the reachable set.
+ *
+ * What is still NOT modelled is the supplying Feats' OTHER requirements — Trait
+ * minimums, prerequisites, class. So a reachable verdict means "not provably
+ * impossible", never "comfortable", and the panel says so.
  *
  * @param {object} args
- * @param {Array<object>} args.feats  normalized feats ({ uuid, level, category, hidden, autoExempt, requirements })
+ * @param {Array<object>} args.feats  normalized feats ({ uuid, level, category, withheld, autoExempt, requirements })
  * @param {Array<{id: string, label: string}>} args.categories
  * @param {{enabled: boolean, table: Object<string, number>}} args.rule
- * @returns {{enabled: boolean, checked: number, blocked: Array<object>, worst: number}}
+ * @returns {{checked: number, blocked: Array<object>, worst: number}}
  */
-export function buildAutomationReach({ feats = [], categories = [], rule = null } = {}) {
-  const empty = { enabled: false, checked: 0, blocked: [], worst: 0 };
-  if (!rule?.enabled) return empty;
-
+export function buildInvestmentReach({ feats = [], categories = [], rule = null } = {}) {
   const list = Array.isArray(feats) ? feats.filter(Boolean) : [];
   const labels = new Map(categories.map(c => [c.id, c.label]));
-  const blocked = [];
+
+  // Supply is what a player could actually acquire, so every withhold drops out: the
+  // per-Feat Hidden flag, a hidden Category, a hidden Type and uncurated alike. The app
+  // collapses all four into `withheld`, because it is the layer that can see the
+  // taxonomy; `hidden` is still honoured for a caller that has not.
+  const candidates = list.filter(f => f.withheld !== true && f.hidden !== true);
+
+  const chains = new Map();
+  for (const feat of candidates) chains.set(feat, effectiveInvestment(feat, rule));
+
+  const reachable = reachableSet(candidates, chains);
+
+  // The supply that actually exists, measured once the set has settled. This is what
+  // the findings report, and what their shortfalls are computed against.
+  const supply = cumulativeCounts(candidates.filter(f => reachable.has(f)));
+
+  const groups = new Map();
   let checked = 0;
 
-  for (const category of new Set(list.map(f => f.category).filter(Boolean))) {
-    if (category === GENERAL_CATEGORY_ID) continue;
+  for (const feat of candidates) {
+    const chain = chains.get(feat);
+    if (!chain.length) continue; // requires nothing: never a finding, never interesting
+    checked++;
+    if (reachable.has(feat)) continue;
 
-    // Everything a player could actually acquire in this Category, by Level.
-    const acquirable = list.filter(f => f.category === category && f.hidden !== true);
+    const level = featLevel(feat);
+    const counts = countsAt(supply, level);
+    const parts = chain.map(r => ({
+      category: r.category,
+      count: Number(r.count),
+      join: r.join ?? null
+    }));
+    const key = `${feat.category ?? ''}|${level}|${JSON.stringify(parts)}`;
 
-    for (const level of new Set(acquirable.map(f => Number(f.level) || 1))) {
-      // Only Feats the rule actually reaches are consumers of the requirement. A Feat
-      // that opted out, or authored its own investment, proves nothing about the curve.
-      const consumers = acquirable.filter(
-        f => (Number(f.level) || 1) === level && autoInvestmentRow(f, rule)
-      );
-      if (!consumers.length) continue;
-
-      const required = investmentForLevel(level, rule.table);
-      if (!required) continue;
-
-      checked++;
-      // Minus one: a Feat can never be its own prerequisite.
-      const supply = acquirable.filter(f => (Number(f.level) || 1) <= level).length - 1;
-      if (supply >= required) continue;
-
-      blocked.push({
-        category,
-        label: labels.get(category) ?? category,
-        level,
-        required,
-        supply,
-        shortfall: required - supply,
-        feats: consumers.length
-      });
+    const existing = groups.get(key);
+    if (existing) {
+      existing.feats++;
+      continue;
     }
+
+    groups.set(key, {
+      category: feat.category ?? null,
+      label: labels.get(feat.category) ?? feat.category ?? '',
+      level,
+      feats: 1,
+      derived: chain.derived === true,
+      parts,
+      // One entry per distinct Category the chain names, so a cross-Category row is
+      // reported against the Category it actually asks for.
+      supplyParts: [...new Set(parts.map(p => p.category))].map(id => ({
+        category: id,
+        label: labels.get(id) ?? id,
+        supply: counts[id] ?? 0
+      })),
+      shortfall: chainShortfall(parts, counts)
+    });
   }
 
-  // Worst first: the biggest hole is the one to author into, and a GM scanning this
-  // panel is looking for where to spend the next hour.
+  const blocked = [...groups.values()];
+
+  // Lowest Level first inside a Category, Categories worst-shortfall first. A blockage
+  // CASCADES under a fixpoint — unreachable Level 5 Feats make the Level 6 ones
+  // unreachable too, with a bigger shortfall — so sorting by shortfall alone would put
+  // the symptom above the cause. The earliest blocked Level is where to author.
+  const worstIn = new Map();
+  for (const b of blocked) {
+    worstIn.set(b.category, Math.max(worstIn.get(b.category) ?? 0, b.shortfall));
+  }
   blocked.sort(
     (a, b) =>
-      b.shortfall - a.shortfall ||
+      (worstIn.get(b.category) ?? 0) - (worstIn.get(a.category) ?? 0) ||
       String(a.label).localeCompare(String(b.label)) ||
-      a.level - b.level
+      a.level - b.level ||
+      b.shortfall - a.shortfall
   );
 
   return {
-    enabled: true,
     checked,
     blocked,
     worst: blocked.reduce((top, b) => Math.max(top, b.shortfall), 0)
   };
+}
+
+/** A Feat's Level as a number, defaulted the way every other reader here defaults it. */
+function featLevel(feat) {
+  return Number(feat?.level) || 1;
+}
+
+/**
+ * The investment chain a Feat actually carries, derived or authored, filtered by the
+ * SAME test checkRequirements applies — `r.category && Number(r.count)`. A row with no
+ * Category or a count of 0 produces no visible requirement there, so it must not
+ * produce a finding here. Four readers now share that filter, and usage-smoke asserts
+ * they agree.
+ *
+ * The array carries a `derived` marker so a finding can say where its number came from
+ * without the caller having to ask the rule a second time.
+ */
+function effectiveInvestment(feat, rule) {
+  const applied = applyAutoInvestment(feat, rule);
+  const rows = applied.requirements?.categoryInvestment;
+  const chain = (Array.isArray(rows) ? rows : []).filter(r => r?.category && Number(r.count));
+  chain.derived = applied !== feat;
+  return chain;
+}
+
+/**
+ * The least fixpoint: start with nothing reachable and keep adding any Feat whose chain
+ * is satisfied by what is reachable already, until a whole pass adds none.
+ *
+ * The cumulative table is rebuilt once per PASS rather than once per Feat — that is
+ * the difference between linear-ish and cubic on a catalog of a few hundred.
+ */
+function reachableSet(candidates, chains) {
+  const reachable = new Set();
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    const counts = cumulativeCounts(candidates.filter(f => reachable.has(f)));
+    for (const feat of candidates) {
+      if (reachable.has(feat)) continue;
+      // evaluateInvestment returns true for an empty chain, so a Feat that requires
+      // nothing joins on the first pass and seeds everything else.
+      const met = evaluateInvestment(chains.get(feat), {
+        categoryCounts: countsAt(counts, featLevel(feat))
+      });
+      if (!met) continue;
+      reachable.add(feat);
+      changed = true;
+    }
+  }
+
+  return reachable;
+}
+
+/**
+ * `level -> category -> count` for the given Feats, cumulative up each Level, so
+ * countsAt() is a lookup rather than a rescan.
+ */
+function cumulativeCounts(feats) {
+  const byLevel = new Map();
+  let top = 0;
+  for (const feat of feats) {
+    const level = featLevel(feat);
+    top = Math.max(top, level);
+    const row = byLevel.get(level) ?? {};
+    row[feat.category] = (row[feat.category] ?? 0) + 1;
+    byLevel.set(level, row);
+  }
+
+  const cumulative = [];
+  let running = {};
+  for (let level = 1; level <= top; level++) {
+    running = { ...running };
+    for (const [id, n] of Object.entries(byLevel.get(level) ?? {})) {
+      running[id] = (running[id] ?? 0) + n;
+    }
+    cumulative[level] = running;
+  }
+  return cumulative;
+}
+
+/** Everything acquirable at or below a Level. Above the highest present, that one. */
+function countsAt(cumulative, level) {
+  if (cumulative.length < 2) return {};
+  const top = cumulative.length - 1;
+  return cumulative[Math.min(Math.max(level, 1), top)] ?? {};
+}
+
+/**
+ * The smallest number of extra Feats that would satisfy the chain: the minimum, over
+ * the chain's AND-groups, of the summed deficits inside that group.
+ *
+ * The grouping is evaluateInvestment's own — left to right, AND binding tighter than
+ * OR — so this reads the chain the way the catalog reads it. A single-row chain
+ * reduces to `required - supply`, which is the number this panel has always printed.
+ */
+function chainShortfall(parts, counts) {
+  const groups = [[]];
+  parts.forEach((part, index) => {
+    if (index && part.join === 'or') groups.push([]);
+    groups[groups.length - 1].push(part);
+  });
+
+  return groups.reduce((best, group) => {
+    const deficit = group.reduce(
+      (sum, part) => sum + Math.max(0, Number(part.count) - (counts[part.category] ?? 0)),
+      0
+    );
+    return Math.min(best, deficit);
+  }, Infinity);
 }
 
 /* ── Spread and demand ─────────────────────────────────────────────────────── */
@@ -429,9 +580,21 @@ export function isUuidLike(ref) {
  * @param {number} [args.recentLimit]
  * @returns {object}
  */
-export function buildAdoptionStats({ feats = [], ledger = [], recentLimit = 12 } = {}) {
+export function buildAdoptionStats({
+  feats = [],
+  ledger = [],
+  recentLimit = 12,
+  excluded = null
+} = {}) {
   const byUuid = new Map(feats.map(f => [f.uuid, f]));
   const label = uuid => byUuid.get(uuid)?.label ?? uuid;
+  // A character the GM has set aside — a retired PC, an NPC sheet, a test dummy —
+  // still appears in the ledger, greyed, because the row IS the control that puts
+  // them back. Only the DERIVED figures below drop them. `characters` therefore
+  // stays the full list and `charactersWithFeats` counts the included ones, which is
+  // the pair the caller needs to render a table nobody can get stranded in.
+  const skip = excluded instanceof Set ? excluded : new Set(excluded ?? []);
+  const counted = ledger.filter(entry => !skip.has(entry.actorId));
 
   const characters = ledger.map(entry => {
     const pool = entry.pool ?? {};
@@ -446,6 +609,7 @@ export function buildAdoptionStats({ feats = [], ledger = [], recentLimit = 12 }
       free: pool.free ?? 0,
       remaining: pool.remaining ?? 0,
       overspent: pool.overspent === true,
+      excluded: skip.has(entry.actorId),
       // Only feats still in the registry: a character can be carrying an acquisition
       // for a feat the GM has since unregistered.
       categoryCounts: countCategories(entry.acquired ?? [], byUuid)
@@ -454,7 +618,7 @@ export function buildAdoptionStats({ feats = [], ledger = [], recentLimit = 12 }
 
   const takes = new Map();
   const recent = [];
-  for (const entry of ledger) {
+  for (const entry of counted) {
     for (const acquisition of entry.acquired ?? []) {
       takes.set(acquisition.uuid, (takes.get(acquisition.uuid) ?? 0) + 1);
       recent.push({
@@ -488,7 +652,8 @@ export function buildAdoptionStats({ feats = [], ledger = [], recentLimit = 12 }
     // which is where a 0 belongs.
     recent: recent.sort((a, b) => b.at - a.at).slice(0, recentLimit),
     acquisitions: recent.length,
-    charactersWithFeats: characters.length
+    charactersWithFeats: counted.length,
+    excludedCount: characters.length - counted.length
   };
 }
 

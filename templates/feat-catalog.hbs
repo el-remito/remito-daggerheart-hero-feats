@@ -106,6 +106,15 @@
                 </details>
             {{/if}}
 
+            {{!-- Appended after Category in BOTH windows, so the sections the two
+                  share stay in the same sequence. --}}
+            <section class="rdhf-rail-section">
+                <label class="rdhf-checkline">
+                    <input type="checkbox" data-filter="newOnly" {{#if filters.newOnly}}checked{{/if}}>
+                    <span>{{localize "RDHF.catalog.newOnly"}}</span>
+                </label>
+            </section>
+
             <footer class="rdhf-rail-footer">
                 <span class="rdhf-result-summary">
                     <strong class="rdhf-result-count">0</strong>
@@ -128,6 +137,10 @@
                     <i class="fa-solid fa-award"></i> {{localize "RDHF.catalog.tabs.acquired"}}
                     {{#if acquiredCount}}<span class="rdhf-tab-badge rdhf-tab-badge--count">{{acquiredCount}}</span>{{/if}}
                 </button>
+                <button type="button" class="rdhf-tab {{#if isInvestmentsTab}}is-active{{/if}}"
+                        data-action="selectTab" data-tab="investments">
+                    <i class="fa-solid fa-layer-group"></i> {{localize "RDHF.catalog.tabs.investments"}}
+                </button>
             </nav>
 
             {{#if hasFeats}}
@@ -147,6 +160,58 @@
                             {{> "modules/remito-daggerheart-hero-feats/templates/partials/feat-row.hbs"}}
                         {{/each}}
                     </ul>
+                </section>
+
+                {{!-- A per-Category summary rather than a Feat list, which is why
+                      _applyFilters hides the rail while it is showing and counts no
+                      rows for it. --}}
+                <section class="rdhf-section" data-section="investments" hidden>
+                    {{#if investments.length}}
+                        <p class="rdhf-hint">{{localize "RDHF.catalog.investmentsHint"}}</p>
+                        <ul class="rdhf-invest-list">
+                            {{#each investments}}
+                                <li class="rdhf-invest">
+                                    <div class="rdhf-invest-head">
+                                        <span class="rdhf-invest-name">{{this.label}}</span>
+                                        <span class="rdhf-chip rdhf-chip--owned">
+                                            {{localize "RDHF.catalog.investedCount" count=this.invested}}
+                                        </span>
+                                    </div>
+                                    {{#if this.tiers.length}}
+                                        <ul class="rdhf-invest-tiers">
+                                            {{#each this.tiers}}
+                                                <li class="rdhf-invest-tier">
+                                                    <span class="rdhf-invest-when">
+                                                        {{#if @first}}
+                                                            {{localize "RDHF.catalog.investNext"}}
+                                                        {{else}}
+                                                            {{localize "RDHF.catalog.investThen"}}
+                                                        {{/if}}
+                                                    </span>
+                                                    <span class="rdhf-bar">
+                                                        <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
+                                                    </span>
+                                                    <span class="rdhf-invest-at">
+                                                        {{this.have}}&thinsp;/&thinsp;{{this.required}}
+                                                    </span>
+                                                    <span class="rdhf-invest-need">
+                                                        {{localize "RDHF.catalog.investMore" count=this.more}}
+                                                    </span>
+                                                    <span class="rdhf-invest-opens">
+                                                        {{localize "RDHF.catalog.investUnlocks" count=this.unlocks}}
+                                                    </span>
+                                                </li>
+                                            {{/each}}
+                                        </ul>
+                                    {{else}}
+                                        <p class="rdhf-invest-done">{{localize "RDHF.catalog.investNone"}}</p>
+                                    {{/if}}
+                                </li>
+                            {{/each}}
+                        </ul>
+                    {{else}}
+                        <p class="rdhf-empty">{{localize "RDHF.catalog.noInvestments"}}</p>
+                    {{/if}}
                 </section>
 
                 <p class="rdhf-empty" data-empty="available" hidden>{{localize "RDHF.catalog.noMatches"}}</p>

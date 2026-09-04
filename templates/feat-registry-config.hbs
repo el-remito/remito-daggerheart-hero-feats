@@ -187,6 +187,15 @@
                         </details>
                     {{/if}}
 
+                    {{!-- Appended after Category in BOTH windows, so the sections the
+                          two share stay in the same sequence. --}}
+                    <section class="rdhf-rail-section">
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="newOnly" {{#if newOnly}}checked{{/if}}>
+                            <span>{{localize "RDHF.catalog.newOnly"}}</span>
+                        </label>
+                    </section>
+
                     <section class="rdhf-rail-section">
                         <label class="rdhf-checkline">
                             <input type="checkbox" data-filter="uncuratedOnly" {{#if uncuratedOnly}}checked{{/if}}>
@@ -226,6 +235,7 @@
                                          data-search="{{this.searchText}}"
                                          data-uncurated="{{this.uncurated}}"
                                          data-hidden="{{this.hidden}}"
+                                         data-new="{{this.isNew}}"
                                          data-level="{{this.level}}"
                                          data-category="{{this.category}}"
                                          data-types="{{this.typesAttr}}"
@@ -257,6 +267,10 @@
                                                         {{this.label}}
                                                     </span>
                                                 {{/each}}
+                                                {{#if this.isNew}}
+                                                    <span class="rdhf-chip rdhf-chip--new"
+                                                          data-tooltip="{{localize 'RDHF.catalog.newTooltip'}}">{{localize "RDHF.catalog.new"}}</span>
+                                                {{/if}}
                                                 {{#if this.uncurated}}
                                                     <span class="rdhf-chip rdhf-chip--uncurated"
                                                           data-tooltip="{{localize 'RDHF.catalog.uncuratedTooltip'}}">
@@ -969,11 +983,14 @@
                     </p>
                 {{/if}}
 
-                {{#if stats.catalog.gaps.shownCells.length}}
+                {{#if stats.catalog.gaps.cells.length}}
                     <p class="rdhf-stats-line"><span>{{localize "RDHF.stats.emptyCells"}}</span></p>
+                    {{!-- Every gap is rendered. The ones past the cap are marked
+                          data-gap-overflow and start hidden; toggleGaps unhides them in
+                          place, the same way the axis buttons swap the heat grids. --}}
                     <ul class="rdhf-gap-list">
-                        {{#each stats.catalog.gaps.shownCells}}
-                            <li>
+                        {{#each stats.catalog.gaps.cells}}
+                            <li data-gap-overflow="{{this.overflow}}" {{#if this.hidden}}hidden{{/if}}>
                                 <button type="button" class="rdhf-gap-btn" data-action="focusCell"
                                         data-row="{{this.id}}" data-level="{{this.level}}" data-axis="category">
                                     {{this.label}} &middot; {{localize "RDHF.catalog.levelShort"}} {{this.level}}
@@ -982,20 +999,28 @@
                         {{/each}}
                     </ul>
                     {{#if stats.catalog.gaps.moreCells}}
-                        <p class="rdhf-hint">
-                            {{stats.catalog.gaps.moreCells}} {{localize "RDHF.stats.moreCells"}}
-                        </p>
+                        <button type="button" class="rdhf-gap-toggle" data-action="toggleGaps">
+                            <i data-gaps-icon
+                               class="fa-solid {{#if stats.catalog.gaps.showAll}}fa-chevron-up{{else}}fa-chevron-down{{/if}}"></i>
+                            <span data-gaps-label="more" {{#if stats.catalog.gaps.showAll}}hidden{{/if}}>
+                                {{localize "RDHF.stats.showAllCells" count=stats.catalog.gaps.moreCells}}
+                            </span>
+                            <span data-gaps-label="fewer" {{#unless stats.catalog.gaps.showAll}}hidden{{/unless}}>
+                                {{localize "RDHF.stats.showFewerCells"}}
+                            </span>
+                        </button>
                     {{/if}}
                 {{else}}
                     <p class="rdhf-hint">{{localize "RDHF.stats.noGaps"}}</p>
                 {{/if}}
 
-                {{!-- Whether the Automation curve is satisfiable at all. Sits in
-                      Coverage gaps rather than on the Automation tab: a shortfall is
-                      answered by authoring Feats, and this is the panel about what the
-                      catalog is missing. --}}
+                {{!-- Which Feats can never be acquired at all. Sits in Coverage gaps
+                      rather than on the Automation tab: a shortfall is answered by
+                      authoring Feats, and this is the panel about what the catalog is
+                      missing. It audits authored and derived requirements alike, so it
+                      is NOT gated on Rule Automation being on. --}}
                 <h5 class="rdhf-sub">{{localize "RDHF.stats.reach"}}</h5>
-                {{#if stats.reach.enabled}}
+                {{#if stats.reach.checked}}
                     <p class="rdhf-hint">{{localize "RDHF.stats.reachHint"}}</p>
                     {{#if stats.reach.clean}}
                         <p class="rdhf-stats-line rdhf-reach-ok">
@@ -1007,7 +1032,7 @@
                         <p class="rdhf-stats-line">
                             <i class="fa-solid fa-triangle-exclamation"></i>
                             <span>{{localize "RDHF.stats.reachBlocked"}}</span>
-                            <strong>{{stats.reach.blocked.length}}</strong> / <strong>{{stats.reach.checked}}</strong>
+                            <strong>{{stats.reach.blockedFeats}}</strong> / <strong>{{stats.reach.checked}}</strong>
                         </p>
                         <ul class="rdhf-gap-list">
                             {{#each stats.reach.blocked}}
@@ -1017,8 +1042,9 @@
                                         {{this.label}} &middot; {{localize "RDHF.catalog.levelShort"}} {{this.level}}
                                     </button>
                                     <span class="rdhf-reach-detail">
-                                        {{localize "RDHF.stats.reachNeeds"}} <strong>{{this.required}}</strong>,
-                                        {{localize "RDHF.stats.reachHas"}} <strong>{{this.supply}}</strong>
+                                        {{this.requirement}} &mdash;
+                                        {{localize "RDHF.stats.reachSupply"}}
+                                        {{#each this.supplyParts}}{{#unless @first}}, {{/unless}}{{this.label}} <strong>{{this.supply}}</strong>{{/each}}
                                         ({{localize "RDHF.stats.reachShort"}} {{this.shortfall}})
                                     </span>
                                 </li>
@@ -1026,7 +1052,7 @@
                         </ul>
                     {{/if}}
                 {{else}}
-                    <p class="rdhf-hint">{{localize "RDHF.stats.reachOff"}}</p>
+                    <p class="rdhf-hint">{{localize "RDHF.stats.reachNone"}}</p>
                 {{/if}}
 
                 {{#if stats.catalog.brokenReferences.length}}
@@ -1090,11 +1116,23 @@
                 {{#unless stats.hasPlayData}}
                     <p class="rdhf-empty">{{localize "RDHF.stats.noPlayData"}}</p>
                 {{else}}
-                    <p class="rdhf-hint">{{localize "RDHF.stats.ledgerHint"}}</p>
+                    <p class="rdhf-hint">
+                        {{localize "RDHF.stats.ledgerHint"}}
+                        {{localize "RDHF.stats.ledgerExcludeHint"}}
+                    </p>
+                    {{#if stats.adoption.excludedCount}}
+                        <p class="rdhf-stats-line">
+                            <i class="fa-solid fa-user-slash"></i>
+                            <span>{{localize "RDHF.stats.ledgerExcluded"}}</span>
+                            <strong>{{stats.adoption.excludedCount}}</strong> /
+                            <strong>{{stats.adoption.characters.length}}</strong>
+                        </p>
+                    {{/if}}
                     <div class="rdhf-ledger-scroll">
                         <table class="rdhf-ledger">
                             <thead>
                                 <tr>
+                                    <th scope="col"><span class="rdhf-sr-only">{{localize "RDHF.stats.ledgerInclude"}}</span></th>
                                     <th scope="col">{{localize "RDHF.stats.character"}}</th>
                                     <th scope="col">{{localize "RDHF.catalog.levelShort"}}</th>
                                     <th scope="col">{{localize "RDHF.stats.feats"}}</th>
@@ -1106,7 +1144,14 @@
                             </thead>
                             <tbody>
                                 {{#each stats.adoption.characters}}
-                                    <tr {{#if this.overspent}}class="is-bad"{{/if}}>
+                                    <tr class="{{#if this.overspent}}is-bad{{/if}} {{#if this.excluded}}is-excluded{{/if}}">
+                                        <td class="rdhf-ledger-toggle">
+                                            <button type="button" class="rdhf-icon-btn" data-action="toggleLedgerActor"
+                                                    data-actor-id="{{this.actorId}}"
+                                                    data-tooltip="{{#if this.excluded}}{{localize 'RDHF.stats.ledgerInclude'}}{{else}}{{localize 'RDHF.stats.ledgerExclude'}}{{/if}}">
+                                                <i class="fa-solid {{#if this.excluded}}fa-user-slash{{else}}fa-user-check{{/if}}"></i>
+                                            </button>
+                                        </td>
                                         <th scope="row" class="rdhf-ledger-who">
                                             {{#if this.img}}
                                                 <img class="rdhf-feat-img rdhf-feat-img--small" src="{{this.img}}" alt="">

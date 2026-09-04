@@ -46,7 +46,7 @@ import { countAffected, resyncAll, resyncFeat } from '../data/resync.mjs';
 import { gatherLedger } from '../data/analytics.mjs';
 import {
   buildAdoptionStats,
-  buildAutomationReach,
+  buildInvestmentReach,
   buildCatalogStats,
   UNCURATED_ROW
 } from '../logic/statistics.mjs';
@@ -57,8 +57,13 @@ import {
   investmentForLevel,
   stripRedundantInvestment
 } from '../logic/automation.mjs';
-import { describeRequirements } from './requirement-text.mjs';
-import { byCurationThenLevel, matchesFilters, blankFilterState } from '../logic/filters.mjs';
+import { describeRequirements, localizeCheck } from './requirement-text.mjs';
+import {
+  byCurationThenLevel,
+  matchesFilters,
+  blankFilterState,
+  newestCurated
+} from '../logic/filters.mjs';
 import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -147,6 +152,18 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._railOpen = { categories: true, types: true };
     // Which axis the statistics grid is showing. Swapping it repaints, never renders.
     this._statsAxis = 'category';
+    // uuids of the most recently curated feats. Recency belongs to the SET, not to a
+    // feat — the tenth-newest stops being new when an eleventh is filed, with nothing
+    // about it changing — so it is decided once and read by both the chips and the
+    // filter, which is what keeps them from disagreeing.
+    this._newFeats = new Set();
+    // Actor ids the GM has set aside from the adoption figures. Session-local, like
+    // every other thing this tab knows: the Statistics tab derives everything and
+    // stores nothing, so there is no setting, no flag and no migration here either.
+    this._excludedActors = new Set();
+    // Whether the Coverage gaps list is showing past its default cap. Same deal: the
+    // rows are all in the DOM, and the toggle unhides them rather than re-rendering.
+    this._showAllGaps = false;
 
     /* Curation queue state. All three are session-local by design: the queue is
        DERIVED from "has no Category", so anything left half-done is simply back the
@@ -198,6 +215,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       curationFile: FeatRegistryConfig._onCurationFile,
       curationSkip: FeatRegistryConfig._onCurationSkip,
       focusCell: FeatRegistryConfig._onFocusCell,
+      toggleLedgerActor: FeatRegistryConfig._onToggleLedgerActor,
+      toggleGaps: FeatRegistryConfig._onToggleGaps,
       save: FeatRegistryConfig._onSave
     }
   };
@@ -297,6 +316,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       checked: this._filters.types.includes(o.id)
     }));
 
+    // Decided once for the whole list, before the views are built, because recency is
+    // a property of the set: the tenth-newest feat stops being new when an eleventh is
+    // filed without anything about it changing.
+    this._recomputeNewFeats();
+
     const feats = [...sources.values()]
       .map(source => {
         const feat = normalizeFeat(source.uuid, this.#config.feats?.[source.uuid]);
@@ -304,6 +328,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
           ...feat,
           ...source,
           uncurated: isUncurated(feat),
+          isNew: this._newFeats.has(source.uuid),
           isOpen: this.#openFeats.has(source.uuid),
           registered: Boolean(this.#config.feats?.[source.uuid]),
           categoryOptions: categoryOptions.map(o => ({ ...o, selected: o.id === feat.category })),
@@ -412,6 +437,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       filters: this._filters,
       uncuratedOnly: this._uncuratedOnly,
       hiddenOnly: this._hiddenOnly,
+      newOnly: this._filters.newOnly,
       sourceSearch: this._sourceSearch,
       railOpen: this._railOpen,
       showStats,
@@ -487,6 +513,20 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * @param {Array<object>} feats  the feat views from _prepareContext
    */
   async _buildStats(feats) {
+    // The same four withholds listFeats applies. buildInvestmentReach measures supply
+    // as what a player could actually ACQUIRE, and a Feat withheld by its Category or
+    // by one of its Types is no more acquirable than one flagged Hidden outright — so
+    // the audit is given the collapsed answer rather than the taxonomy, which is the
+    // app's to read and not logic/'s. Uncurated is in here for the same reason, which
+    // is why the audit carries no separate branch for it.
+    const hiddenCategories = new Set(this.#categories.filter(c => c?.hidden).map(c => c.id));
+    const hiddenTypes = new Set(this.#types.filter(t => t?.hidden).map(t => t.id));
+    const withheld = feat =>
+      feat.hidden === true ||
+      !feat.category ||
+      hiddenCategories.has(feat.category) ||
+      (feat.types ?? []).some(t => hiddenTypes.has(t));
+
     const records = feats.map(view => ({
       uuid: view.uuid,
       label: view.name,
@@ -494,8 +534,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       category: view.category,
       types: view.types,
       hidden: view.hidden,
+      withheld: withheld(view),
       standalone: view.standalone,
-      // Load-bearing for buildAutomationReach: without it every exempt feat would be
+      // Load-bearing for buildInvestmentReach: without it every exempt feat would be
       // audited as though the rule still reached it.
       autoExempt: view.autoExempt,
       requirements: view.requirements,
@@ -510,7 +551,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     for (const [uuid, stored] of Object.entries(this.#config.feats ?? {})) {
       if (seen.has(uuid)) continue;
       const feat = normalizeFeat(uuid, stored);
-      records.push({ ...feat, label: uuid, resolves: false });
+      records.push({ ...feat, label: uuid, withheld: withheld(feat), resolves: false });
     }
 
     const localCategories = this.#categories.map(c => ({
@@ -526,20 +567,47 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       uncuratedLabel: game.i18n.localize('RDHF.catalog.uncurated')
     });
 
-    const adoption = buildAdoptionStats({ feats: records, ledger: await gatherLedger() });
+    const adoption = buildAdoptionStats({
+      feats: records,
+      ledger: await gatherLedger(),
+      excluded: this._excludedActors
+    });
 
     // Reads the working copy of BOTH the registry and the automation curve, so a
     // Category filed or a table value retuned a moment ago is already reflected —
     // the same contract every other figure on this tab honours.
-    const reach = buildAutomationReach({
+    const reach = buildInvestmentReach({
       feats: records,
       categories: localCategories,
       rule: this.#automation.investmentByLevel
     });
+    const categoryLabels = Object.fromEntries(localCategories.map(c => [c.id, c.label]));
 
     return {
       catalog: this._decorateCatalog(catalog),
-      reach: { ...reach, clean: reach.enabled && reach.blocked.length === 0 },
+      reach: {
+        ...reach,
+        clean: reach.checked > 0 && reach.blocked.length === 0,
+        // Feats, not findings: `checked` counts Feats, and a finding can stand for
+        // several of them, so the summary line would otherwise divide one unit by
+        // another.
+        blockedFeats: reach.blocked.reduce((n, b) => n + b.feats, 0),
+        // Each finding says what the requirement IS, in the words the player is shown
+        // for it — same descriptor shape, same connectors, through the one place a
+        // descriptor becomes text. Writing a second wording of the same clause here is
+        // exactly what apps/requirement-text.mjs exists to prevent.
+        blocked: reach.blocked.map(b => ({
+          ...b,
+          requirement: localizeCheck({
+            kind: 'categoryInvestment',
+            key: 'RDHF.requirement.categoryInvestment',
+            data: {
+              parts: b.parts.map(p => ({ ...p, category: categoryLabels[p.category] ?? p.category }))
+            },
+            met: false
+          }).label
+        }))
+      },
       adoption: {
         ...adoption,
         recent: adoption.recent.map(entry => ({
@@ -551,7 +619,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         }))
       },
       hasFeats: records.length > 0,
-      hasPlayData: adoption.charactersWithFeats > 0
+      // The full list, not the counted one: excluding every character must grey the
+      // table, never replace it with the "nobody has taken a Feat" empty state, which
+      // would take away the only control that puts them back.
+      hasPlayData: adoption.characters.length > 0
     };
   }
 
@@ -608,10 +679,25 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       },
       gaps: {
         ...catalog.gaps,
-        // Capped: a brand-new catalog is nothing BUT empty cells, and a thousand-row
-        // list is not a finding. The count is reported either way.
-        shownCells: catalog.gaps.emptyCells.slice(0, MAX_GAP_ROWS),
-        moreCells: Math.max(0, catalog.gaps.emptyCells.length - MAX_GAP_ROWS)
+        // Capped, because a brand-new catalog is nothing BUT empty cells and a
+        // thousand-row list is not a finding — but the cap is a default view, not a
+        // ceiling. Slicing the overflow away left a GM able to read that thirty
+        // combinations were missing and with no way to learn WHICH, which is the one
+        // question this panel exists to answer. Every row is rendered; the ones past
+        // the cap start hidden and the toggle unhides them in place, so revealing them
+        // costs nothing — no part of the statistics pass runs a second time.
+        //
+        // `hidden` is written here AND by _onToggleGaps, so the flag has to travel
+        // through the context: switching tabs rebuilds this pane, and without it an
+        // expanded list would come back collapsed while the toggle still read "Show
+        // fewer". Same contract the axis buttons keep one panel above.
+        cells: catalog.gaps.emptyCells.map((cell, i) => ({
+          ...cell,
+          overflow: i >= MAX_GAP_ROWS,
+          hidden: i >= MAX_GAP_ROWS && !this._showAllGaps
+        })),
+        moreCells: Math.max(0, catalog.gaps.emptyCells.length - MAX_GAP_ROWS),
+        showAll: this._showAllGaps
       }
     };
   }
@@ -659,6 +745,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       input.addEventListener('change', () => {
         if (kind === 'uncuratedOnly') this._uncuratedOnly = input.checked;
         else if (kind === 'hiddenOnly') this._hiddenOnly = input.checked;
+        else if (kind === 'newOnly') this._filters.newOnly = input.checked;
         else if (kind === 'levelMin' || kind === 'levelMax') {
           this._filters[kind] = input.value === '' ? null : Number(input.value);
         } else if (kind === 'category' || kind === 'type') {
@@ -785,6 +872,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     row.dataset.types = (feat.types ?? []).join('|');
     row.dataset.uncurated = String(uncurated);
     row.dataset.hidden = String(feat.hidden);
+    // The filter reads this attribute, the chip below reads the same set. Repainting
+    // the chip without the attribute would leave "Newly added Feats" filtering on the
+    // answer from the last full render.
+    row.dataset.new = String(this._newFeats.has(uuid));
     row.classList.toggle('is-uncurated', uncurated);
     row.classList.toggle('is-hidden', feat.hidden);
 
@@ -921,6 +1012,13 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       chips.push(
         this._chip('uncurated', game.i18n.localize('RDHF.catalog.uncurated'), {
           tooltip: game.i18n.localize('RDHF.catalog.uncuratedTooltip')
+        })
+      );
+    }
+    if (this._newFeats.has(feat.uuid)) {
+      chips.push(
+        this._chip('new', game.i18n.localize('RDHF.catalog.new'), {
+          tooltip: game.i18n.localize('RDHF.catalog.newTooltip')
         })
       );
     }
@@ -1267,6 +1365,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         types: (row.dataset.types || '').split('|').filter(Boolean),
         owned: false,
         eligible: true,
+        isNew: row.dataset.new === 'true',
         searchText: row.dataset.search || ''
       };
       const show =
@@ -1337,6 +1436,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         break;
       case 'category':
         feat.category = value === '' ? null : String(value);
+        // "Newly added" measures the moment a feat became available to players, which
+        // is the moment it gained a Category. Re-filing a curated feat re-stamps it:
+        // the filter says "recently curated", not "first curated ever".
+        feat.curatedAt = feat.category ? Date.now() : 0;
         break;
       case 'summary':
         feat.summary = String(value);
@@ -1385,8 +1488,12 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // Every one of these can change what the row's chips say, so repaint them now
     // rather than waiting for the next full render.
     if (['level', 'category', 'type', 'hidden', 'autoExempt'].includes(field)) {
+      // Curating changes the newest-ten set, which can add a chip to this row and take
+      // one off another. Recompute first so _refreshRow below paints the new answer.
+      const moved = field === 'category' ? this._recomputeNewFeats() : [];
       this._refreshRow(uuid);
       this._refreshCurationRow(uuid);
+      for (const other of moved) if (other !== uuid) this._refreshRow(other);
     }
 
     // These five are exactly the fields that can flip whether Rule Automation applies
@@ -1401,6 +1508,27 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     if (REQUIREMENT_FIELDS.includes(field)) {
       this._paintRequirementLine(this._featHost(input));
     }
+  }
+
+  /**
+   * Recomputes which feats count as newly curated, and returns the uuids whose
+   * membership changed so the caller can repaint exactly those rows.
+   *
+   * Filing one feat can move two rows: the new arrival gains the chip and whatever was
+   * tenth loses it. Repainting only the row being edited would leave that second row
+   * wearing a stale chip until the next full render — the same class of lag the rest of
+   * _refreshRow exists to prevent.
+   */
+  _recomputeNewFeats() {
+    const before = this._newFeats;
+    const after = newestCurated(
+      Object.entries(this.#config.feats ?? {}).map(([uuid, stored]) => ({
+        uuid,
+        curatedAt: Number(stored?.curatedAt) || 0
+      }))
+    );
+    this._newFeats = after;
+    return [...new Set([...before, ...after])].filter(uuid => before.has(uuid) !== after.has(uuid));
   }
 
   /** Greys the curve table while the rule is off. Repaint, never a re-render. */
@@ -1618,6 +1746,48 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     for (const grid of this.element.querySelectorAll(`.${PREFIX}-heat[data-axis]`)) {
       grid.hidden = grid.dataset.axis !== this._statsAxis;
     }
+  }
+
+  /**
+   * Reveals the Coverage gaps rows held back by MAX_GAP_ROWS, and puts them back.
+   *
+   * Repainted, never re-rendered — and here that is not only the usual scroll-and-focus
+   * argument. Rebuilding this context runs the whole statistics pass, which reads every
+   * actor in the world; asking to see the rest of a list already sitting in the DOM has
+   * no business costing that. The rows and both button labels render their own state
+   * from `_showAllGaps`, so this is only the in-place half of the same switch.
+   */
+  static _onToggleGaps(event, target) {
+    event.preventDefault();
+    this._showAllGaps = !this._showAllGaps;
+    for (const li of this.element.querySelectorAll('li[data-gap-overflow="true"]')) {
+      li.hidden = !this._showAllGaps;
+    }
+    // Both labels are in the markup and one of them is hidden, so the script stays
+    // free of display strings exactly as the rest of the module does.
+    for (const label of target.querySelectorAll('[data-gaps-label]')) {
+      label.hidden = (label.dataset.gapsLabel === 'fewer') !== this._showAllGaps;
+    }
+    target.querySelector('[data-gaps-icon]')?.classList.toggle('fa-chevron-up', this._showAllGaps);
+    target.querySelector('[data-gaps-icon]')?.classList.toggle('fa-chevron-down', !this._showAllGaps);
+  }
+
+  /**
+   * Sets one character aside from the adoption figures, or puts them back.
+   *
+   * This one DOES re-render, unlike the axis and gap toggles beside it: the numbers
+   * themselves move — Most taken, Recent acquisitions and every counter — so there is
+   * no repaint short of rebuilding the panel, and rebuilding it by hand would duplicate
+   * markup the template already declares. The scroll position is preserved by render()
+   * as it is for every other action here.
+   */
+  static _onToggleLedgerActor(event, target) {
+    event.preventDefault();
+    const id = target.dataset.actorId;
+    if (!id) return;
+    if (this._excludedActors.has(id)) this._excludedActors.delete(id);
+    else this._excludedActors.add(id);
+    this.render();
   }
 
   /**

@@ -179,7 +179,10 @@ export function blankFeat(uuid) {
     types: [],
     summary: '',
     hidden: false, // GM-only: never listed for a player who has not acquired it
-    autoExempt: false, // opts this feat out of every Rule Automation rule
+    autoExempt: false,
+    // When this feat was last given a Category. 0 = never curated. Drives the
+    // "Newly added" filter, and nothing else reads it.
+    curatedAt: 0, // opts this feat out of every Rule Automation rule
     requirements: blankRequirements()
   };
 }
@@ -204,6 +207,7 @@ export function normalizeFeat(uuid, stored) {
     // Rule Automation derives requirements for every feat that has not opted out; this
     // is the opt-out. See scripts/logic/automation.mjs.
     autoExempt: stored.autoExempt === true,
+    curatedAt: Number(stored.curatedAt) || 0,
     requirements: normalizeRequirements(stored.requirements)
   };
 }

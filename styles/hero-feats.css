@@ -132,6 +132,20 @@
     color: var(--rdhf-ink-muted);
 }
 
+/* The one FILLED chip, which is the point: "new" is not a state of the Feat the way
+   owned, uncurated and withheld are, so it gets its own channel rather than a fourth
+   colour competing with them. Gold is the module's attention tone and is not otherwise
+   spoken for — unmet-red means withheld, met-green means owned. */
+.rdhf-chip--new {
+    border-color: var(--rdhf-gold);
+    background: var(--rdhf-gold-dim);
+    color: var(--rdhf-gold);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: var(--font-size-10, 0.63rem);
+}
+
 .rdhf-chip--req.is-met {
     border-color: color-mix(in srgb, var(--rdhf-met) 45%, transparent);
     color: var(--rdhf-met);
@@ -1584,6 +1598,36 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-gold);
 }
 
+/* Reveals the gaps held back by the default cap. Core's `a.button, button, kbd` rule
+   makes every button --button-size tall and centres it; this one is a single line of
+   text sitting under a list, so it gives the height back and aligns left like the hint
+   it replaced. */
+.rdhf-gap-toggle {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    margin: 2px 0 4px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 5px;
+    border: none;
+    background: transparent;
+    color: var(--rdhf-ink-muted);
+    font-family: inherit;
+    font-size: var(--font-size-11, 0.7rem);
+    cursor: pointer;
+}
+
+.rdhf-gap-toggle:hover {
+    color: var(--rdhf-gold);
+}
+
+.rdhf-gap-toggle i {
+    font-size: 0.85em;
+}
+
 /* ── Bars ─────────────────────────────────────────────────────────────────── */
 
 .rdhf-bars {
@@ -1654,6 +1698,42 @@ details[open] > summary .rdhf-arrow {
 
 .rdhf-ledger thead th {
     white-space: nowrap;
+}
+
+/* A column heading for the exclude toggle: the column has no visible header, but the
+   table is read row by row and an unlabelled control column is a dead end for anyone
+   using a screen reader. */
+.rdhf-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Set aside, not removed: the row is the control that puts them back, so it stays
+   legible rather than being hidden or struck through. */
+.rdhf-ledger tr.is-excluded td,
+.rdhf-ledger tr.is-excluded th {
+    opacity: 0.45;
+}
+
+.rdhf-ledger tr.is-excluded .rdhf-ledger-toggle {
+    opacity: 1;
+}
+
+.rdhf-ledger-toggle {
+    width: 1px;
+    padding-right: 0;
+    white-space: nowrap;
+}
+
+.rdhf-ledger tr.is-excluded .rdhf-ledger-toggle i {
+    color: var(--rdhf-ink-muted);
 }
 
 .rdhf-ledger-who {
@@ -2038,4 +2118,83 @@ details[open] > summary .rdhf-arrow {
     font-size: var(--font-size-11, 0.7rem);
     color: var(--rdhf-unmet);
     opacity: 0.85;
+}
+
+/* ── My Investments ───────────────────────────────────────────────────────── */
+
+/* A per-Category summary, not a Feat list: no rail beside it, so the pane is free to
+   use the full width and the rows can be wide and shallow. */
+.rdhf-invest-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.rdhf-invest {
+    padding: 8px 10px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 6px;
+    background: var(--rdhf-panel-soft);
+}
+
+.rdhf-invest-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rdhf-invest-name {
+    font-family: var(--rdhf-heading);
+    font-weight: 600;
+}
+
+.rdhf-invest-tiers {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Label, bar, distance, payoff. The bar is the same .rdhf-bar the statistics panels
+   use, so progress reads the same way on both sides of the module. */
+.rdhf-invest-tier {
+    display: grid;
+    grid-template-columns: 3.5rem minmax(60px, 1fr) auto auto auto;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-size-11, 0.7rem);
+}
+
+.rdhf-invest-at {
+    font-variant-numeric: tabular-nums;
+    color: var(--rdhf-ink-muted);
+    white-space: nowrap;
+}
+
+.rdhf-invest-when {
+    color: var(--rdhf-ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.rdhf-invest-need {
+    font-weight: 600;
+    color: var(--rdhf-gold);
+    white-space: nowrap;
+}
+
+.rdhf-invest-opens {
+    color: var(--rdhf-ink-muted);
+    white-space: nowrap;
+}
+
+.rdhf-invest-done {
+    margin: 6px 0 0;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-met);
 }
