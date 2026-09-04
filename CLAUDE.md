@@ -89,9 +89,16 @@ World setting `registry`:
 }
 ```
 
-World settings `categories` / `types` are `[{ id, label, icon, description }]`. A `label` starting
-with `RDHF.` is an i18n key (the seeded entries); anything else is literal GM text. Editing a seeded
-label in the Taxonomy tab converts it to literal text — that is intended.
+World settings `categories` / `types` are `[{ id, label, icon, description, hidden }]`. A `label`
+starting with `RDHF.` is an i18n key (the seeded entries); anything else is literal GM text. Editing
+a seeded label in the Taxonomy tab converts it to literal text — that is intended.
+
+`hidden` (v1.4.2) withholds the entry's Feats from players. **No migration**: an entry written
+before v1.4.2 has no such key, and `undefined` is falsy, which is the same inline-default mechanism
+`normalizeFeat` uses for a new feat field. The **accessors do not filter it** — `getCategories()`
+and `getTypes()` still return hidden entries, because the GM has to be able to file into one and the
+Taxonomy tab has to render its own checkbox. The filtering lives at exactly two call sites: the
+withhold in `listFeats`, and the player half of the catalog rail.
 
 World setting `automation` is `{ investmentByLevel: { enabled, table } }`, where `table` maps a
 Level to the number of Feats required in a Category. **Its keys are strings**: the setting
@@ -359,7 +366,8 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   cannot acquire one) and are not consumers; exempt feats and feats with authored rows are supply
   but not consumers. Requirements on the supplying feats are not modelled, so a pass means "not
   provably impossible", never "comfortable" — the panel says so. With the seeded curve a Category
-  needs 17 feats at or below Level 10 to support a single Level 10 feat.
+  needs 15 feats at or below Level 10 to support a single Level 10 feat (it was 17 until the v1.4.2
+  retune; `reach-smoke.mjs` derives the figure rather than restating it).
 - **Permissive requirement failure.** An unrecognized expression atom returns `true`. A GM's typo
   must not silently lock a feat away with no visible cause.
 - **Formula evaluation goes through `Roll`**, never `eval` or `new Function`. The registry's live
@@ -414,11 +422,19 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - The heat grid shades against **its own busiest cell**, not a figure shared between grids: a shared
   maximum flattens a catalog with one crowded Category into near-identical squares. The count is
   always printed on top of the shade, never conveyed by shade alone.
-- Two things are withheld from players, and `listFeats` applies both: uncurated feats (no Category)
-  and feats the GM flagged `hidden`. A GM who registers a large pack and forgets to curate will see
-  an empty player catalog — the Feats tab badge counts them. Both are overridden by `keepUuids`,
+- **Four things are withheld from players, and `listFeats` applies all four**: uncurated feats (no
+  Category), feats the GM flagged `hidden`, feats whose Category is flagged hidden, and feats
+  carrying **any** hidden Type. A GM who registers a large pack and forgets to curate will see an
+  empty player catalog — the Feats tab badge counts them. All four are overridden by `keepUuids`,
   which the catalog fills with the character's own acquisitions, so a feat already owned never
   disappears from **My Feats** because the GM later hid it or cleared its Category.
+  The Type test is **any, not all**, and that is a decision, not an oversight: a feat tagged both
+  Combat and Downtime is withheld the moment Downtime is hidden. The symmetric reading was chosen
+  so a Type can withdraw a slice of the catalog outright — the alternative (a hidden Type only
+  tidies the rail) makes Category and Type mean different things and leaves no way to pull a
+  cross-cutting slice. A player-facing rail entry that can only ever match zero rows is worse than
+  absent, so `feat-catalog._prepareContext` drops hidden entries from the rail for players and keeps
+  every entry for a GM, who is also the person who has to find what they just withdrew.
 - Rule Automation scope decisions worth not re-litigating: the investment number counts **acquired
   Feats**, not a sum of their Levels and not Feat Points (`categoryCounts` unchanged); **General is
   exempt** by explicit design, as is any uncurated feat; the opt-out is **one boolean covering every

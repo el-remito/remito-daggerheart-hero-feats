@@ -712,7 +712,7 @@
                     <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.categories"}}</h4>
                     <p class="rdhf-hint">{{localize "RDHF.registry.categoriesHint"}}</p>
                     {{#each categories}}
-                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}}" data-entry-id="{{this.id}}">
+                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}} {{#if this.hidden}}is-hidden{{/if}}" data-entry-id="{{this.id}}">
                             {{#if this.fixed}}
                                 {{!-- General is the Category that lets a feat be curated
                                       without inventing a filing system, so it may not be
@@ -724,6 +724,12 @@
                             {{/if}}
                             <input type="text" class="rdhf-icon-input" data-field="category.icon" value="{{this.icon}}"
                                    placeholder="fa-solid fa-flask">
+                            <label class="rdhf-taxonomy-hide"
+                                   data-tooltip="{{localize 'RDHF.registry.taxonomyHiddenHint'}}">
+                                <input type="checkbox" data-field="category.hidden"
+                                       {{#if this.hidden}}checked{{/if}}>
+                                <i class="fa-solid fa-eye-slash"></i>
+                            </label>
                             {{#unless this.fixed}}
                                 <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeCategory">
                                     <i class="fa-solid fa-trash"></i>
@@ -740,10 +746,16 @@
                     <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.types"}}</h4>
                     <p class="rdhf-hint">{{localize "RDHF.registry.typesHint"}}</p>
                     {{#each types}}
-                        <div class="rdhf-taxonomy-row" data-entry-id="{{this.id}}">
+                        <div class="rdhf-taxonomy-row {{#if this.hidden}}is-hidden{{/if}}" data-entry-id="{{this.id}}">
                             <input type="text" data-field="type.label" value="{{this.resolved}}">
                             <input type="text" class="rdhf-icon-input" data-field="type.icon" value="{{this.icon}}"
                                    placeholder="fa-solid fa-tag">
+                            <label class="rdhf-taxonomy-hide"
+                                   data-tooltip="{{localize 'RDHF.registry.taxonomyHiddenHint'}}">
+                                <input type="checkbox" data-field="type.hidden"
+                                       {{#if this.hidden}}checked{{/if}}>
+                                <i class="fa-solid fa-eye-slash"></i>
+                            </label>
                             <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeType">
                                 <i class="fa-solid fa-trash"></i>
                             </button>

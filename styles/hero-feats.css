@@ -1965,3 +1965,47 @@ details[open] > summary .rdhf-arrow {
 .rdhf-reg-reqs .rdhf-chip--req {
     color: var(--rdhf-ink-muted);
 }
+
+/* ── v1.4.2: hiding a Category or Type ────────────────────────────────────── */
+
+/* The taxonomy row is a flex line, so the toggle only has to refuse to stretch —
+   the label field keeps flex: 1 and gives up the width. Core sizes a bare checkbox
+   generously, hence the explicit box. */
+.rdhf-taxonomy-hide {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 0 4px;
+    color: var(--rdhf-ink-muted);
+    cursor: pointer;
+}
+
+.rdhf-taxonomy-hide input[type='checkbox'] {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+.rdhf-taxonomy-hide i {
+    font-size: var(--font-size-11, 0.7rem);
+    opacity: 0.55;
+}
+
+/* Lit once the entry is actually withheld, so the state reads down the column at a
+   glance rather than one checkbox at a time. */
+.rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-hide {
+    color: var(--rdhf-gold);
+}
+
+.rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-hide i {
+    opacity: 1;
+}
+
+/* The entry still belongs to the GM's filing system, so it is dimmed, never struck
+   through: it is withheld from players, not retired. */
+.rdhf-taxonomy-row.is-hidden input[type='text'] {
+    opacity: 0.6;
+    border-style: dashed;
+}

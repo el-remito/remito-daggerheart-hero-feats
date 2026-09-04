@@ -1277,7 +1277,16 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       const [kind, prop] = field.split('.');
       const list = kind === 'category' ? this.#categories : this.#types;
       const entry = list.find(e => e.id === input.closest('[data-entry-id]')?.dataset.entryId);
-      if (entry) entry[prop] = String(value);
+      // Every other taxonomy field is text; `hidden` is the one checkbox, and
+      // String(true) would store the word rather than the flag.
+      if (entry) entry[prop] = prop === 'hidden' ? value === true : String(value);
+      // Repainted, not re-rendered — the Taxonomy tab is a form the GM may be several
+      // fields into, and render() would reset its scroll and steal focus. The class
+      // drives the dimmed row and the lit eye, so without this the state only appears
+      // on the next render for some other reason.
+      if (entry && prop === 'hidden') {
+        input.closest('[data-entry-id]')?.classList.toggle('is-hidden', entry.hidden === true);
+      }
       return;
     }
 
@@ -1686,7 +1695,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       id: foundry.utils.randomID(),
       label: game.i18n.localize('RDHF.registry.newCategory'),
       icon: 'fa-solid fa-flask',
-      description: ''
+      description: '',
+      hidden: false
     });
     this.render();
   }
@@ -1724,7 +1734,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.#types.push({
       id: foundry.utils.randomID(),
       label: game.i18n.localize('RDHF.registry.newType'),
-      icon: 'fa-solid fa-tag'
+      icon: 'fa-solid fa-tag',
+      hidden: false
     });
     this.render();
   }

@@ -140,8 +140,13 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     const snapshot = buildActorSnapshot(this.actor);
     const pool = await getPointPool(this.actor);
     const state = getState(this.actor);
-    const categories = getCategories();
-    const types = getTypes();
+    // A hidden taxonomy entry is dropped from the rail for players, because listFeats
+    // has already withheld everything it could have matched — an entry that can only
+    // ever filter to zero rows is worse than absent. The GM keeps every entry: they
+    // are also the person who has to find the feats they just withdrew.
+    const showAll = isGM;
+    const categories = getCategories().filter(c => showAll || !c?.hidden);
+    const types = getTypes().filter(t => showAll || !t?.hidden);
 
     // keepUuids: a feat this character already owns stays listed even if the GM has
     // since hidden it or cleared its Category. Otherwise "My Feats" would lose rows.

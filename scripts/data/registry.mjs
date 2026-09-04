@@ -230,6 +230,12 @@ export async function listFeats({ forGM = false, keepUuids = null, registry = ge
   const keep = keepUuids instanceof Set ? keepUuids : new Set(keepUuids ?? []);
   const sources = await loadAllSourceFeatures(registry);
   const categories = getCategories();
+  // Taxonomy entries a GM has flagged hidden. Read once for the whole list, like the
+  // rule below: both are world-level and cannot change mid-loop. The ACCESSORS still
+  // return hidden entries — the GM has to be able to file into one — so the withholding
+  // lives here, on the one seam every player-facing record passes through.
+  const hiddenCategories = new Set(categories.filter(c => c?.hidden).map(c => c.id));
+  const hiddenTypes = new Set(getTypes().filter(t => t?.hidden).map(t => t.id));
   // Read once for the whole list, not per feat: the rule is world-level and cannot
   // change mid-loop.
   const rule = getAutomation().investmentByLevel;
@@ -244,7 +250,15 @@ export async function listFeats({ forGM = false, keepUuids = null, registry = ge
     // normalizeFeat so the GM's editable rows stay authored-only.
     const feat = applyAutoInvestment(normalizeFeat(uuid, registry.feats?.[uuid]), rule);
     const uncurated = isUncurated(feat);
-    if (!forGM && !keep.has(uuid) && (uncurated || feat.hidden)) continue;
+    // Four withholds now, all overridden by keepUuids so a feat a character already
+    // owns never vanishes from My Feats: uncurated, the per-feat flag, and either half
+    // of the taxonomy being hidden. The Type test is deliberately ANY, not ALL — a
+    // hidden Type withholds a feat that also carries a visible one, which is the
+    // symmetric reading and means a Type can be used to withdraw a slice of the
+    // catalog outright.
+    const hiddenByTaxonomy =
+      hiddenCategories.has(feat.category) || (feat.types ?? []).some(t => hiddenTypes.has(t));
+    if (!forGM && !keep.has(uuid) && (uncurated || feat.hidden || hiddenByTaxonomy)) continue;
     out.push({
       ...feat,
       ...source,

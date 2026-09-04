@@ -154,6 +154,11 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.4.2
+- **Categories and Types can be hidden from players.** A checkbox on each row of the Taxonomy tab withholds every Feat filed under that Category, or carrying that Type, from the player catalog, and drops the entry from their filter rail. You still see it and can still file into it — the row simply dims and its eye lights up. A Feat a character already owns stays in their My Feats either way
+- Note that hiding a **Type** withholds a Feat even when its other Types are visible: a Feat tagged both Combat and Downtime disappears the moment Downtime is hidden. That is deliberate, so a Type can be used to withdraw a cross-cutting slice of the catalog in one move
+- **Retuned the seeded Investment by Level curve** to 0 · 1 · 2 · 4 · 7 · 8 · 9 · 12 · 13 · 14 for Levels 1–10, a smoother ramp with the old jump between Tiers 2 and 3 flattened out. **Worlds that have already saved an Automation curve keep theirs** — the new numbers reach new worlds, worlds that never opened the tab, and the Reset to defaults button. A single Level 10 Feat now needs a Category of 15 Feats rather than 17, which the Statistics reachability panel reports
+
 ### v1.4.1
 - **Requirements are now visible at a glance in the Feat Registry.** Every row on the Feats tab carries the same "Requires" line the players see, so you can audit a whole chain by scrolling instead of opening each Feat in turn. The chips are neutral — there is no character here to be measured against — and the Feat's own Level is left off, since the row already shows it
 - **That line includes what Rule Automation adds**, exactly as the table will see it, so a derived investment requirement is part of the scan and not something you have to open the Feat to find
