@@ -203,13 +203,17 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
         id: c.id,
         label: taxonomyLabel(c),
         icon: c.icon,
-        checked: this._filters.categories.includes(c.id)
+        checked: this._filters.categories.includes(c.id),
+        // Only a GM ever reaches this branch: the list above already dropped hidden
+        // entries for players, so the marker needs no isGM test of its own.
+        hidden: c.hidden === true
       })),
       types: types.map(t => ({
         id: t.id,
         label: taxonomyLabel(t),
         icon: t.icon,
-        checked: this._filters.types.includes(t.id)
+        checked: this._filters.types.includes(t.id),
+        hidden: t.hidden === true
       })),
       railOpen: this._railOpen,
       filters: this._filters

@@ -272,9 +272,15 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const categoryOptions = this.#categories.map(c => ({
       id: c.id,
       label: taxonomyLabel(c),
-      icon: c.icon
+      icon: c.icon,
+      hidden: c.hidden === true
     }));
-    const typeOptions = this.#types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon }));
+    const typeOptions = this.#types.map(t => ({
+      id: t.id,
+      label: taxonomyLabel(t),
+      icon: t.icon,
+      hidden: t.hidden === true
+    }));
 
     // The rail's own controls carry their filter state into the markup. Until the
     // statistics grid could set a filter programmatically this was invisible — filters
@@ -330,6 +336,17 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
           categoryLabel: feat.category
             ? taxonomyLabel(this.#categories.find(c => c.id === feat.category)) || feat.category
             : null,
+          // A feat withheld because its Category or one of its Types is hidden looked
+          // exactly like a visible one until v1.4.4 — the Hidden chip only ever tracked
+          // the per-feat flag. The state is carried per CHIP rather than as one row-level
+          // "withheld" marker so the row says WHICH entry is doing it; on a feat carrying
+          // four Types a bare marker would just start a hunt.
+          categoryHidden:
+            this.#categories.find(c => c.id === feat.category)?.hidden === true,
+          typeChips: feat.types.map(id => {
+            const entry = this.#types.find(t => t.id === id);
+            return { label: taxonomyLabel(entry) || id, hidden: entry?.hidden === true };
+          }),
           typeLabels: feat.types.map(
             id => taxonomyLabel(this.#types.find(t => t.id === id)) || id
           ),
@@ -444,6 +461,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         img: feat.img,
         level: feat.level,
         categoryLabel: feat.categoryLabel,
+        categoryHidden: feat.categoryHidden,
         uncurated: feat.uncurated,
         isCurrent: feat.uuid === this._curationUuid
       })),
@@ -815,6 +833,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       const entry = this.#categories.find(c => c.id === feat.category);
       category.textContent = feat.category ? taxonomyLabel(entry) || feat.category : '';
       category.hidden = !feat.category;
+      const withheld = Boolean(feat.category) && entry?.hidden === true;
+      category.classList.toggle('is-hidden', withheld);
+      if (withheld) category.dataset.tooltip = game.i18n.localize('RDHF.registry.withheldByCategory');
+      else delete category.dataset.tooltip;
     }
 
     // The header counts what is still outstanding, so it moves the moment a Category
@@ -853,9 +875,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /** One chip element. Kept tiny because _buildChips calls it six times a row. */
-  _chip(modifier, text, { icon = null, tooltip = null } = {}) {
+  _chip(modifier, text, { icon = null, tooltip = null, withheld = false } = {}) {
     const chip = document.createElement('span');
-    chip.className = `${PREFIX}-chip ${PREFIX}-chip--${modifier}`;
+    chip.className = `${PREFIX}-chip ${PREFIX}-chip--${modifier}${withheld ? ' is-hidden' : ''}`;
     if (tooltip) chip.dataset.tooltip = tooltip;
     if (icon) {
       const i = document.createElement('i');
@@ -872,13 +894,28 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       this._chip('level', `${game.i18n.localize('RDHF.catalog.levelShort')} ${feat.level}`)
     ];
 
+    // A hidden Category or Type withholds the feat from players just as feat.hidden
+    // does, so the chip that causes it says so. Marked per chip, not once per row: the
+    // GM needs to know which entry to untick.
     if (feat.category) {
       const entry = this.#categories.find(c => c.id === feat.category);
-      chips.push(this._chip('category', taxonomyLabel(entry) || feat.category));
+      chips.push(
+        this._chip('category', taxonomyLabel(entry) || feat.category, {
+          withheld: entry?.hidden === true,
+          icon: entry?.hidden ? 'fa-solid fa-eye-slash' : null,
+          tooltip: entry?.hidden ? game.i18n.localize('RDHF.registry.withheldByCategory') : null
+        })
+      );
     }
     for (const id of feat.types ?? []) {
       const entry = this.#types.find(t => t.id === id);
-      chips.push(this._chip('type', taxonomyLabel(entry) || id));
+      chips.push(
+        this._chip('type', taxonomyLabel(entry) || id, {
+          withheld: entry?.hidden === true,
+          icon: entry?.hidden ? 'fa-solid fa-eye-slash' : null,
+          tooltip: entry?.hidden ? game.i18n.localize('RDHF.registry.withheldByType') : null
+        })
+      );
     }
     if (uncurated) {
       chips.push(

@@ -155,11 +155,13 @@
                                 {{localize "RDHF.catalog.types"}}
                             </summary>
                             {{#each filterTypes}}
-                                <label class="rdhf-checkline">
+                                <label class="rdhf-checkline {{#if this.hidden}}is-hidden{{/if}}"
+                                       {{#if this.hidden}}data-tooltip="{{localize 'RDHF.registry.withheldByType'}}"{{/if}}>
                                     <input type="checkbox" data-filter="type" value="{{this.id}}"
                                            {{#if this.checked}}checked{{/if}}>
                                     {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                                     <span>{{this.label}}</span>
+                                    {{#if this.hidden}}<i class="fa-solid fa-eye-slash rdhf-rail-withheld"></i>{{/if}}
                                 </label>
                             {{/each}}
                         </details>
@@ -173,11 +175,13 @@
                                 {{localize "RDHF.catalog.categories"}}
                             </summary>
                             {{#each filterCategories}}
-                                <label class="rdhf-checkline">
+                                <label class="rdhf-checkline {{#if this.hidden}}is-hidden{{/if}}"
+                                       {{#if this.hidden}}data-tooltip="{{localize 'RDHF.registry.withheldByCategory'}}"{{/if}}>
                                     <input type="checkbox" data-filter="category" value="{{this.id}}"
                                            {{#if this.checked}}checked{{/if}}>
                                     {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                                     <span>{{this.label}}</span>
+                                    {{#if this.hidden}}<i class="fa-solid fa-eye-slash rdhf-rail-withheld"></i>{{/if}}
                                 </label>
                             {{/each}}
                         </details>
@@ -240,10 +244,18 @@
                                                 <span class="rdhf-reg-chips">
                                                 <span class="rdhf-chip rdhf-chip--level">{{localize "RDHF.catalog.levelShort"}} {{this.level}}</span>
                                                 {{#if this.categoryLabel}}
-                                                    <span class="rdhf-chip rdhf-chip--category">{{this.categoryLabel}}</span>
+                                                    <span class="rdhf-chip rdhf-chip--category {{#if this.categoryHidden}}is-hidden{{/if}}"
+                                                          {{#if this.categoryHidden}}data-tooltip="{{localize 'RDHF.registry.withheldByCategory'}}"{{/if}}>
+                                                        {{#if this.categoryHidden}}<i class="fa-solid fa-eye-slash"></i>{{/if}}
+                                                        {{this.categoryLabel}}
+                                                    </span>
                                                 {{/if}}
-                                                {{#each this.typeLabels}}
-                                                    <span class="rdhf-chip rdhf-chip--type">{{this}}</span>
+                                                {{#each this.typeChips}}
+                                                    <span class="rdhf-chip rdhf-chip--type {{#if this.hidden}}is-hidden{{/if}}"
+                                                          {{#if this.hidden}}data-tooltip="{{localize 'RDHF.registry.withheldByType'}}"{{/if}}>
+                                                        {{#if this.hidden}}<i class="fa-solid fa-eye-slash"></i>{{/if}}
+                                                        {{this.label}}
+                                                    </span>
                                                 {{/each}}
                                                 {{#if this.uncurated}}
                                                     <span class="rdhf-chip rdhf-chip--uncurated"
@@ -503,7 +515,8 @@
                                                 <span class="rdhf-cur-row-name">{{this.name}}</span>
                                                 <span class="rdhf-cur-row-chips">
                                                     <span class="rdhf-chip rdhf-chip--level rdhf-cur-row-level">{{localize "RDHF.catalog.levelShort"}} {{this.level}}</span>
-                                                    <span class="rdhf-chip rdhf-chip--category rdhf-cur-row-category"
+                                                    <span class="rdhf-chip rdhf-chip--category rdhf-cur-row-category {{#if this.categoryHidden}}is-hidden{{/if}}"
+                                                          {{#if this.categoryHidden}}data-tooltip="{{localize 'RDHF.registry.withheldByCategory'}}"{{/if}}
                                                           {{#unless this.categoryLabel}}hidden{{/unless}}>{{this.categoryLabel}}</span>
                                                 </span>
                                             </span>

@@ -1996,7 +1996,7 @@ details[open] > summary .rdhf-arrow {
 /* Lit once the entry is actually withheld, so the state reads down the column at a
    glance rather than one checkbox at a time. */
 .rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-hide {
-    color: var(--rdhf-gold);
+    color: var(--rdhf-unmet);
 }
 
 .rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-hide i {
@@ -2008,4 +2008,34 @@ details[open] > summary .rdhf-arrow {
 .rdhf-taxonomy-row.is-hidden input[type='text'] {
     opacity: 0.6;
     border-style: dashed;
+}
+
+/* ── v1.4.4: which entry is withholding a Feat ────────────────────────────── */
+
+/* Two facts, two channels, so they compose rather than compete: --rdhf-unmet is the
+   module's "withheld from players" tone, already worn by .rdhf-chip--hidden for the
+   per-feat flag; the dashed edge is .rdhf-chip--uncurated's "not stated on this Feat"
+   tone. A chip withheld by its Category or Type is both — withheld, but not by
+   anything set on the Feat itself — so it takes both and cannot be confused with
+   either parent. */
+.rdhf-chip--category.is-hidden,
+.rdhf-chip--type.is-hidden {
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--rdhf-unmet) 45%, transparent);
+    color: var(--rdhf-unmet);
+}
+
+/* The rails. Only a GM ever sees a hidden entry here, so this needs no permission
+   test — the player's list never contains one. Muted rather than coloured through,
+   because a rail is a long list being scanned and the eye is the signal; the label
+   still has to read as a label. */
+.rdhf-checkline.is-hidden {
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-rail-withheld {
+    margin-left: auto;
+    font-size: var(--font-size-11, 0.7rem);
+    color: var(--rdhf-unmet);
+    opacity: 0.85;
 }

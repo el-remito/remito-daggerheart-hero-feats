@@ -74,11 +74,13 @@
                         {{localize "RDHF.catalog.types"}}
                     </summary>
                     {{#each types}}
-                        <label class="rdhf-checkline">
+                        <label class="rdhf-checkline {{#if this.hidden}}is-hidden{{/if}}"
+                               {{#if this.hidden}}data-tooltip="{{localize 'RDHF.registry.withheldByType'}}"{{/if}}>
                             <input type="checkbox" data-filter="type" value="{{this.id}}"
                                    {{#if this.checked}}checked{{/if}}>
                             {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                             <span>{{this.label}}</span>
+                            {{#if this.hidden}}<i class="fa-solid fa-eye-slash rdhf-rail-withheld"></i>{{/if}}
                         </label>
                     {{/each}}
                 </details>
@@ -92,11 +94,13 @@
                         {{localize "RDHF.catalog.categories"}}
                     </summary>
                     {{#each categories}}
-                        <label class="rdhf-checkline">
+                        <label class="rdhf-checkline {{#if this.hidden}}is-hidden{{/if}}"
+                               {{#if this.hidden}}data-tooltip="{{localize 'RDHF.registry.withheldByCategory'}}"{{/if}}>
                             <input type="checkbox" data-filter="category" value="{{this.id}}"
                                    {{#if this.checked}}checked{{/if}}>
                             {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                             <span>{{this.label}}</span>
+                            {{#if this.hidden}}<i class="fa-solid fa-eye-slash rdhf-rail-withheld"></i>{{/if}}
                         </label>
                     {{/each}}
                 </details>

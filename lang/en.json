@@ -190,6 +190,8 @@
   "RDHF.registry.categories": "Categories",
   "RDHF.registry.categoriesHint": "A Feat belongs to exactly one Category. Categories drive the catalog filters and Investment requirements. Hide one to withhold every Feat filed under it.",
   "RDHF.registry.typesHint": "Types are free-form tags. Add Class or Domain names here to tag feats with them. Hide one to withhold every Feat carrying it, even if its other Types are visible.",
+  "RDHF.registry.withheldByCategory": "This Category is hidden, so players do not see this Feat. Untick it on the Taxonomy tab to restore it.",
+  "RDHF.registry.withheldByType": "This Type is hidden, so players do not see this Feat even if its other Types are visible. Untick it on the Taxonomy tab to restore it.",
   "RDHF.registry.taxonomyHiddenHint": "Hidden from players. Feats are withheld from the catalog and this entry is dropped from the filter rail. You still see and file into it, and a character keeps any Feat they already own.",
   "RDHF.registry.addCategory": "Add category",
   "RDHF.registry.addType": "Add type",

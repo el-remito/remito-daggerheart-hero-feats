@@ -272,6 +272,22 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `config: false` and the Points tab owns it, which is also the only surface that can show the
   live `Roll` preview and explain the `@`-paths. The `RDHF.settings.pointFormula.*` keys kept
   their names; the Points tab localizes them.
+- **A withheld feat says which entry withholds it.** `hidden` on a Category or Type withholds a
+  feat exactly as the per-feat flag does, but until v1.4.4 the registry row looked identical to a
+  visible one — the Hidden chip only ever tracked `feat.hidden`, and a GM auditing by scrolling (the
+  reason the Feats tab carries requirements at all) had no way to see it. The state is carried **per
+  chip**, not as one row-level marker: on a feat with four Types a bare "withheld" badge starts a
+  hunt for which one. `_buildChips` and the template mirror each other here as they already do for
+  the rest of the row, and the Curation queue's Category chip is repainted the same way by
+  `_refreshCurationRow` — the queue is a second host and gets forgotten by default.
+  Both rails mark the entry too, and neither needs an `isGM` test: the player's list has already
+  had hidden entries removed, so only a GM can reach a marked one.
+- **One colour, one meaning: `--rdhf-unmet` is "withheld from players", wherever it is reported.**
+  It was already the per-feat Hidden chip's tone; v1.4.4 gives it to the taxonomy-withheld chips,
+  the rail markers and the Taxonomy tab's lit eye (which was gold until then — a third signal for a
+  fact the module already had a colour for). The dashed edge is a second, orthogonal channel meaning
+  "not stated on this feat", borrowed from `.rdhf-chip--uncurated`; a chip withheld by its Category
+  wears both, so it reads as withheld-but-not-by-this-feat and cannot be mistaken for either parent.
 - **Working copy, save on Save.** The registry app clones the setting into `#config`, mutates it on
   every `input`, and writes only in `_onSave`. Open `<details>` state is captured before
   `super.render()` and restored by uuid, never by index.

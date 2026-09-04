@@ -154,6 +154,11 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.4.4
+- **A Feat withheld by a hidden Category or Type now says so, and says which one.** The offending chip on the Registry row turns red, goes dashed and grows an eye-slash, with a tooltip telling you where to untick it — so you can audit by scrolling instead of holding the Taxonomy tab in your head. Same marking on the Curation queue's Category chip
+- **Hidden Categories and Types are marked in the filter rails**, in the Registry and in a GM's own Feats window: the entry dims and carries an eye-slash at the right edge. Players never see a hidden entry there at all, so this is GM-only by construction
+- The Taxonomy tab's lit eye changed from gold to the module's withheld-red, so one colour means one thing across the module
+
 ### v1.4.3
 - **The Statistics tab now says what "Requirement kinds in use" is counting.** It counts what you authored on each Feat, and while Rule Automation is on it says so and points you at the reachability audit — which is where the rule's demands are actually reported. The bar was always about authorship; nothing on screen said so, and with the rule on a low Investment count looked like the panel had missed it
 - **Fixed a Feat being counted as authoring an Investment requirement when it does not.** An investment row left with no Category, or a count of 0, produces no requirement anywhere in the module and Rule Automation correctly derives right past it — but the Statistics bar still counted it. Three readers of the investment chain, one filter, and this one had drifted. Your Investment figure may drop slightly as a result, and the smaller number is the honest one
