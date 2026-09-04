@@ -460,8 +460,41 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   (holding every other Category where it stands) actually flips a blocked feat's chain, which is
   what stops an AND chain wanting a second Category from being shown as a promise this Category
   alone can keep. It is a **fifth** reader of the shared `r.category && Number(r.count)` filter.
+  A tier's `levels` — which Levels the mark opens, added in v1.5.2 — is read off the feats it
+  unblocks for the same reason, so it is right with the rule off and can never name a Level no
+  feat occupies.
+- **The FORWARD tier is the one deliberate exception, and it is marked as one.** A missing THEN
+  meant only "no feat in this Category asks for more than NEXT" — which is almost always "nothing
+  is filed at the higher Levels yet", not "you have unlocked everything", and the tab rendered the
+  two identically. That the two are indistinguishable is provable rather than incidental:
+  `evaluateInvestment` tests `count >= required`, so satisfaction is **monotone** in
+  `categoryCounts` and `unlocks` is non-decreasing in `required` — once one tier is emitted every
+  higher candidate is too, so a missing THEN can only ever mean no higher threshold was asked for.
+  `forwardTiers` therefore appends the next curve marks past everything the feats ask for. It is
+  the ONLY place the tab reads the curve; it exists only while the rule is **on**, because with the
+  rule off the curve governs nothing and the number would be a threshold the catalog itself
+  contradicts (the template says so in words there instead); it carries `unlocks: 0` by
+  construction and `forward: true` so the row can say "nothing there yet"; and **General never gets
+  one**, since the rule derives nothing for it.
+- **The General carve-out is exported, not restated.** `eligibleForRule` is private and takes a
+  *feat*; `forwardTiers` has only a Category id. `ruleAppliesToCategory(category)` in
+  `logic/automation.mjs` holds the test and `eligibleForRule` calls it — one statement, two
+  readers, instead of a copy in `investment.mjs` that drifts the next time General is revisited.
+- **`SETTINGS.INVEST_LAYOUT` is the module's only `client` setting, and it is `config: false`.**
+  It is a display preference on a *player's* window, so a world setting would let a GM impose it on
+  people it does not affect them to change; and the toggle lives on the My Investments tab, where
+  the change is visible as it is made, rather than in Foundry's settings sheet. Same "one setting,
+  one editor" rule that moved `POINT_FORMULA` to the Points tab. `_onInvestLayout` writes the
+  setting and toggles `is-grid` **in place** — the write is only so the choice survives closing the
+  window — and the catalog's broad `updateSetting` hook (which re-renders every open catalog for
+  any module setting) skips this key, so a cosmetic click cannot throw away scroll position and
+  open rows to paint what is already on screen.
 - **My Investments is a summary, so the rail is hidden while it shows.** `_applyFilters` toggles
-  `.rdhf-rail` — not a re-render, because tab switching in the catalog must never re-render (the
+  `.rdhf-rail` **and `is-summary` on `.rdhf-catalog-body`** — hiding the rail alone was the v1.5.1
+  bug: the body is a two-track grid (`230px minmax(0, 1fr)`) with the rail as item 1, and a grid
+  does not reflow around a `display: none` item, it shifts the next one into the vacated track. The
+  whole pane, tab bar included, was squeezed into the rail's 230px while the `1fr` track sat empty.
+  Not a re-render, because tab switching in the catalog must never re-render (the
   rail would lose its state). Its rows are not `.rdhf-feat`, so the tab contributes 0 to the result
   count and its own empty state is rendered by Handlebars and skipped by the `[data-empty]` sweep.
   It lists only Categories the character has actually invested in: a Category at zero is the

@@ -14,7 +14,8 @@ import {
   DEFAULT_CATEGORIES,
   DEFAULT_POINT_FORMULA,
   DEFAULT_INVESTMENT_BY_LEVEL,
-  GENERAL_CATEGORY_ID
+  GENERAL_CATEGORY_ID,
+  INVEST_LAYOUTS
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
 import { normalizeAutomation } from './logic/automation.mjs';
@@ -104,6 +105,17 @@ export function registerSettings() {
     config: true,
     type: Boolean,
     default: true
+  });
+
+  // How My Investments lays out. client, so every player keeps their own; config: false
+  // because the toggle lives on the tab it affects, where the change is visible as it is
+  // made. Foundry's settings sheet would show a GM a choice that governs nobody but
+  // themselves, which is exactly the confusion "one setting, one editor" exists to avoid.
+  game.settings.register(MODULE_ID, SETTINGS.INVEST_LAYOUT, {
+    scope: 'client',
+    config: false,
+    type: String,
+    default: INVEST_LAYOUTS[0]
   });
 
   // Rule Automation. config: false — like the registry and the taxonomy, this is only
@@ -216,6 +228,20 @@ export function getPointFormula() {
 /** Whether the registry offers its Statistics tab. */
 export function getShowStatistics() {
   return game.settings.get(MODULE_ID, SETTINGS.SHOW_STATS) !== false;
+}
+
+/**
+ * This user's My Investments layout. Normalized on the way out as well as in, so a
+ * hand-edited client value can never reach the template as a stray class name.
+ */
+export function getInvestmentsLayout() {
+  const stored = game.settings.get(MODULE_ID, SETTINGS.INVEST_LAYOUT);
+  return INVEST_LAYOUTS.includes(stored) ? stored : INVEST_LAYOUTS[0];
+}
+
+export function setInvestmentsLayout(layout) {
+  const value = INVEST_LAYOUTS.includes(layout) ? layout : INVEST_LAYOUTS[0];
+  return game.settings.set(MODULE_ID, SETTINGS.INVEST_LAYOUT, value);
 }
 
 /**

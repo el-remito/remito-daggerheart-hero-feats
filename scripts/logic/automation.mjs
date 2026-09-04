@@ -122,9 +122,24 @@ export function stripRedundantInvestment(feat, rule) {
 /** Category-level eligibility: curated, and not the fixed General Category. */
 function eligibleForRule(feat) {
   if (!feat || feat.autoExempt === true) return false;
-  const category = feat.category;
-  // null === uncurated, and General is the GM's stated carve-out: it is the "no filing
-  // system yet" Category, so demanding investment in it would gate the entry point.
+  return ruleAppliesToCategory(feat.category);
+}
+
+/**
+ * Whether the rule derives anything for a Category at all, ignoring any one Feat.
+ *
+ * Exported because two callers need the carve-out and they hold different things:
+ * eligibleForRule has a feat, while My Investments has only a Category id and asks
+ * whether the curve governs it before offering a look ahead. Stating it once here
+ * is what stops the two drifting the next time General is revisited.
+ *
+ * null === uncurated, and General is the GM's stated carve-out: it is the "no filing
+ * system yet" Category, so demanding investment in it would gate the entry point.
+ *
+ * @param {string|null|undefined} category
+ * @returns {boolean}
+ */
+export function ruleAppliesToCategory(category) {
   return Boolean(category) && category !== GENERAL_CATEGORY_ID;
 }
 

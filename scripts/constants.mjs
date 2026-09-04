@@ -20,8 +20,12 @@ export const SETTINGS = {
   MENU: 'registryMenu',
   MIGRATION: 'migration',
   SHOW_STATS: 'showStatistics',
-  AUTOMATION: 'automation'
+  AUTOMATION: 'automation',
+  INVEST_LAYOUT: 'investmentsLayout'
 };
+
+/** How the My Investments tab lays its Categories out. Per user, never shared. */
+export const INVEST_LAYOUTS = ['wide', 'grid'];
 
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */
 export const MIGRATION_VERSION = 2;

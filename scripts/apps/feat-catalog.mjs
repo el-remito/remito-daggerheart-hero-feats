@@ -10,8 +10,15 @@
  *     (acquisitions), keyed by uuid rather than index.
  */
 
-import { MODULE_ID, PREFIX, TEMPLATES, ACTOR_TYPES } from '../constants.mjs';
-import { getCategories, getTypes, taxonomyLabel } from '../settings.mjs';
+import { MODULE_ID, PREFIX, SETTINGS, TEMPLATES, ACTOR_TYPES } from '../constants.mjs';
+import {
+  getAutomation,
+  getCategories,
+  getInvestmentsLayout,
+  getTypes,
+  setInvestmentsLayout,
+  taxonomyLabel
+} from '../settings.mjs';
 import { listFeats, typeLabels, getEnrichedDescription } from '../data/registry.mjs';
 import { onFeatureDocumentChanged } from '../data/resync.mjs';
 import {
@@ -89,7 +96,8 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       revokeFeat: FeatCatalog._onRevoke,
       adjustPoints: FeatCatalog._onAdjustPoints,
       clearFilters: FeatCatalog._onClearFilters,
-      selectTab: FeatCatalog._onSelectTab
+      selectTab: FeatCatalog._onSelectTab,
+      investLayout: FeatCatalog._onInvestLayout
     }
   };
 
@@ -205,11 +213,20 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       // The same views the two Feat tabs are built from, read from the other end:
       // listFeats has already applied Rule Automation, so a derived requirement is a
       // tier here exactly as it is a requirement there, and neither view can drift.
-      investments: buildInvestmentSummary({
-        feats: views,
-        counts: snapshot.categoryCounts,
-        categoryLabels: snapshot.categoryLabels
-      }),
+      investments: decorateTiers(
+        buildInvestmentSummary({
+          feats: views,
+          counts: snapshot.categoryCounts,
+          categoryLabels: snapshot.categoryLabels,
+          // Read for the forward tier alone: the look ahead past everything the Feats
+          // currently ask for, which only exists while the rule is on.
+          rule: getAutomation().investmentByLevel
+        })
+      ),
+      // Carried so a re-render for any other reason paints the layout this user chose;
+      // the toggle itself applies in place and never re-renders. Pre-computed as a
+      // boolean because Handlebars eq is not available to module templates.
+      isWideLayout: getInvestmentsLayout() !== 'grid',
       hasFeats: views.length > 0,
       // The rail renders its OWN state. Filtering never re-renders, so for a long time
       // the only way a box could be ticked was the player ticking it and nothing had to
@@ -479,6 +496,23 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
    * rendered, so this is a class swap plus a filter pass. Re-rendering here would reset
    * the filter rail and steal focus, the same trap filtering itself has to avoid.
    */
+  /**
+   * Switches the My Investments layout. Applied in place, exactly as _applyFilters
+   * applies is-summary: a re-render resets scroll and rebuilds the whole feat list,
+   * and this is a cosmetic click. The setting write is only so the choice survives
+   * closing the window.
+   */
+  static _onInvestLayout(event, target) {
+    event.preventDefault();
+    const layout = target.dataset.layout === 'grid' ? 'grid' : 'wide';
+    setInvestmentsLayout(layout);
+    this.element.querySelector(`.${PREFIX}-invest-list`)?.classList.toggle('is-grid', layout === 'grid');
+    for (const button of this.element.querySelectorAll(`[data-action="investLayout"]`)) {
+      button.classList.toggle('is-active', button.dataset.layout === layout);
+      button.setAttribute('aria-pressed', String(button.dataset.layout === layout));
+    }
+  }
+
   static _onSelectTab(event, target) {
     event.preventDefault();
     this._tab = ['acquired', 'investments'].includes(target.dataset.tab)
@@ -520,8 +554,41 @@ export function registerCatalogHooks() {
     });
   }
   Hooks.on('updateSetting', setting => {
+    // The layout is applied by the click that changed it, so a render here would throw
+    // away scroll position and open rows to paint what is already on screen. A client
+    // setting may not raise this hook at all; the guard is here so it does not matter.
+    if (setting.key === `${MODULE_ID}.${SETTINGS.INVEST_LAYOUT}`) return;
     if (setting.key?.startsWith(`${MODULE_ID}.`)) {
       for (const app of openCatalogs.values()) app.render();
     }
   });
+}
+
+/**
+ * Turns each tier's `levels` into display text. logic/investment.mjs emits the Levels
+ * as numbers for the same reason a requirement check emits a descriptor: the language
+ * layer owns the wording, and a span reads differently from a single Level.
+ *
+ * A tier with no Levels at all cannot arise today — a real tier has the Feats it
+ * unblocks and a forward tier has the curve's — but it renders as an empty string
+ * rather than a stray separator if one ever does.
+ */
+function decorateTiers(summary) {
+  return summary.map(row => ({
+    ...row,
+    tiers: row.tiers.map(tier => ({ ...tier, levelText: levelText(tier.levels) })),
+    // Fewer than two tiers means nothing — no Feat and, where the rule reaches, no
+    // curve mark — asks for more than the first. Said in words, because an absent row
+    // reads as "you have unlocked everything", which is almost never what it means.
+    showNoMore: row.tiers.length < 2
+  }));
+}
+
+function levelText(levels) {
+  if (!levels?.length) return '';
+  const from = levels[0];
+  const to = levels[levels.length - 1];
+  return from === to
+    ? game.i18n.format('RDHF.catalog.investLevel', { level: from })
+    : game.i18n.format('RDHF.catalog.investLevelRange', { from, to });
 }

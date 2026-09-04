@@ -167,8 +167,26 @@
                       rows for it. --}}
                 <section class="rdhf-section" data-section="investments" hidden>
                     {{#if investments.length}}
-                        <p class="rdhf-hint">{{localize "RDHF.catalog.investmentsHint"}}</p>
-                        <ul class="rdhf-invest-list">
+                        <div class="rdhf-invest-bar">
+                            <p class="rdhf-hint">{{localize "RDHF.catalog.investmentsHint"}}</p>
+                            {{!-- Per user, never shared, and applied in place by the click. --}}
+                            <div class="rdhf-invest-layout" role="group"
+                                 aria-label="{{localize "RDHF.catalog.investLayout"}}">
+                                <button type="button" class="rdhf-invest-layout-btn {{#if isWideLayout}}is-active{{/if}}"
+                                        data-action="investLayout" data-layout="wide"
+                                        aria-pressed="{{#if isWideLayout}}true{{else}}false{{/if}}"
+                                        data-tooltip="{{localize "RDHF.catalog.investLayoutWide"}}">
+                                    <i class="fa-solid fa-bars"></i>
+                                </button>
+                                <button type="button" class="rdhf-invest-layout-btn {{#unless isWideLayout}}is-active{{/unless}}"
+                                        data-action="investLayout" data-layout="grid"
+                                        aria-pressed="{{#unless isWideLayout}}true{{else}}false{{/unless}}"
+                                        data-tooltip="{{localize "RDHF.catalog.investLayoutGrid"}}">
+                                    <i class="fa-solid fa-table-cells"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <ul class="rdhf-invest-list {{#unless isWideLayout}}is-grid{{/unless}}">
                             {{#each investments}}
                                 <li class="rdhf-invest">
                                     <div class="rdhf-invest-head">
@@ -180,13 +198,14 @@
                                     {{#if this.tiers.length}}
                                         <ul class="rdhf-invest-tiers">
                                             {{#each this.tiers}}
-                                                <li class="rdhf-invest-tier">
+                                                <li class="rdhf-invest-tier {{#if this.forward}}is-forward{{/if}}">
                                                     <span class="rdhf-invest-when">
                                                         {{#if @first}}
                                                             {{localize "RDHF.catalog.investNext"}}
                                                         {{else}}
                                                             {{localize "RDHF.catalog.investThen"}}
                                                         {{/if}}
+                                                        {{#if this.levelText}}<span class="rdhf-invest-band">{{this.levelText}}</span>{{/if}}
                                                     </span>
                                                     <span class="rdhf-bar">
                                                         <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
@@ -198,11 +217,24 @@
                                                         {{localize "RDHF.catalog.investMore" count=this.more}}
                                                     </span>
                                                     <span class="rdhf-invest-opens">
-                                                        {{localize "RDHF.catalog.investUnlocks" count=this.unlocks}}
+                                                        {{#if this.forward}}
+                                                            {{localize "RDHF.catalog.investEmptyBand"}}
+                                                        {{else}}
+                                                            {{localize "RDHF.catalog.investUnlocks" count=this.unlocks}}
+                                                        {{/if}}
                                                     </span>
                                                 </li>
                                             {{/each}}
                                         </ul>
+                                        {{!-- A missing THEN used to read as "you have unlocked
+                                              everything" when it means "nothing is filed up there
+                                              yet". With the rule on the forward tier says so; with
+                                              it off there is no curve to read, so this does. --}}
+                                        {{#if this.showNoMore}}
+                                            <p class="rdhf-invest-done">
+                                                {{localize "RDHF.catalog.investNoMore" category=this.label}}
+                                            </p>
+                                        {{/if}}
                                     {{else}}
                                         <p class="rdhf-invest-done">{{localize "RDHF.catalog.investNone"}}</p>
                                     {{/if}}

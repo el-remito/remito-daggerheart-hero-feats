@@ -2144,6 +2144,79 @@ details[open] > summary .rdhf-arrow {
     list-style: none;
 }
 
+/* The dense layout: three across, as many rows as it takes. A container query rather
+   than a media query, because the app window is resizable and a media query measures
+   the viewport instead — three cards in a 400px window would overflow. */
+.rdhf-section[data-section="investments"] {
+    container-type: inline-size;
+}
+
+.rdhf-invest-list.is-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@container (max-width: 700px) {
+    .rdhf-invest-list.is-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@container (max-width: 460px) {
+    .rdhf-invest-list.is-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* In the dense layout a card is too narrow for one line, so the tier stacks: the band
+   and its standing on top, the bar and the payoff beneath. The bar is kept — it is the
+   only at-a-glance reading of progress on the tab. */
+.rdhf-invest-list.is-grid .rdhf-invest-tier {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 2px;
+}
+
+.rdhf-invest-list.is-grid .rdhf-bar {
+    grid-column: 1 / -1;
+}
+
+.rdhf-invest-list.is-grid .rdhf-invest-need {
+    justify-self: end;
+}
+
+.rdhf-invest-list.is-grid .rdhf-invest-opens {
+    grid-column: 1 / -1;
+}
+
+.rdhf-invest-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.rdhf-invest-layout {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 2px;
+}
+
+/* Single-line icon buttons, so core's --button-size height is exactly right here and
+   nothing needs restating. Only the width and the pressed tone do. */
+.rdhf-invest-layout-btn {
+    width: var(--button-size, 2em);
+    flex: 0 0 auto;
+    padding: 0;
+    background: none;
+    border: 1px solid transparent;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-invest-layout-btn.is-active {
+    border-color: var(--rdhf-border);
+    background: var(--rdhf-panel-soft);
+    color: var(--rdhf-gold);
+}
+
 /* The hint is a paragraph, and a paragraph the full width of an undivided window is
    unreadable. */
 .rdhf-section[data-section="investments"] .rdhf-hint {
@@ -2181,7 +2254,7 @@ details[open] > summary .rdhf-arrow {
    use, so progress reads the same way on both sides of the module. */
 .rdhf-invest-tier {
     display: grid;
-    grid-template-columns: 3.2rem minmax(40px, 1fr) auto auto auto;
+    grid-template-columns: minmax(5.4rem, auto) minmax(40px, 1fr) auto auto auto;
     align-items: center;
     gap: 6px;
     font-size: var(--font-size-11, 0.7rem);
@@ -2197,6 +2270,30 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-ink-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+/* The Level band the mark opens — the thing being bought, which the row did not name
+   before v1.5.2. Toned up from NEXT/THEN, which is only sequence. */
+.rdhf-invest-band {
+    color: var(--rdhf-ink);
+    font-weight: 600;
+}
+
+/* Read from the Automation curve rather than from a Feat, and holding nothing yet. It
+   is a promise about where the rule goes next, so it is stated more quietly than a tier
+   a player can actually collect on. */
+.rdhf-invest-tier.is-forward {
+    opacity: 0.72;
+}
+
+.rdhf-invest-tier.is-forward .rdhf-invest-need {
+    color: var(--rdhf-ink-muted);
+    font-weight: 400;
+}
+
+.rdhf-invest-tier.is-forward .rdhf-invest-opens {
+    font-style: italic;
 }
 
 .rdhf-invest-need {

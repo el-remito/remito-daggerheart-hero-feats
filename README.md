@@ -154,6 +154,11 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.5.2
+- **"My Investments" now says what each mark opens.** A row read `NEXT · 4/6 · 2 more · unblocks 4` and never named the thing being bought; it now reads `NEXT · Lv 5`. The Level comes from the Feats that mark actually gates, so it is right whether or not Rule Automation is on, and a mark opening several Levels says so
+- **A Category that showed no THEN was telling you nothing, and looked like it was telling you something.** A missing second row meant only that no Feat in that Category asks for more than the first — almost always because nothing is filed at the higher Levels yet, not because you had unlocked everything. With Rule Automation on, THEN now shows the next mark from your curve, greyed and marked *nothing there yet*; with it off, where there is no curve to read, the card says so in words
+- **Choose how the tab is laid out.** A toggle in the top right switches between one Category per row and three across. It is **per person** — your players each keep their own and nobody's choice moves anyone else's — and it lives on the tab it affects rather than in Module Settings, so you can see the change as you make it
+
 ### v1.5.1
 - **Fixed: "My Investments" was squeezed into a strip down the left of the window.** The tab hides the filter rail beside it — there is nothing there for it to filter — but the window is a two-column layout, and hiding the rail slid the whole pane into the narrow column the rail had been occupying rather than letting it spread out. The tab bar was cut off and each Category's "unblocks N" ran off the edge. The pane now takes the full width, and lays the Categories out side by side when there is room for them
 
