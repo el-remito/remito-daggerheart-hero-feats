@@ -154,6 +154,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.4.3
+- **The Statistics tab now says what "Requirement kinds in use" is counting.** It counts what you authored on each Feat, and while Rule Automation is on it says so and points you at the reachability audit — which is where the rule's demands are actually reported. The bar was always about authorship; nothing on screen said so, and with the rule on a low Investment count looked like the panel had missed it
+- **Fixed a Feat being counted as authoring an Investment requirement when it does not.** An investment row left with no Category, or a count of 0, produces no requirement anywhere in the module and Rule Automation correctly derives right past it — but the Statistics bar still counted it. Three readers of the investment chain, one filter, and this one had drifted. Your Investment figure may drop slightly as a result, and the smaller number is the honest one
+
 ### v1.4.2
 - **Categories and Types can be hidden from players.** A checkbox on each row of the Taxonomy tab withholds every Feat filed under that Category, or carrying that Type, from the player catalog, and drops the entry from their filter rail. You still see it and can still file into it — the row simply dims and its eye lights up. A Feat a character already owns stays in their My Feats either way
 - Note that hiding a **Type** withholds a Feat even when its other Types are visible: a Feat tagged both Combat and Downtime disappears the moment Downtime is hidden. That is deliberate, so a Type can be used to withdraw a cross-cutting slice of the catalog in one move

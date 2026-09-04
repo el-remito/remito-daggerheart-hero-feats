@@ -271,6 +271,8 @@
   "RDHF.stats.brokenRefs": "Broken prerequisites",
   "RDHF.stats.brokenRefsHint": "These Feats require another Feat by UUID that is no longer registered. A requirement naming a Feature by plain text is never listed here — it is matched loosely by design.",
   "RDHF.stats.requirementUsage": "Requirement kinds in use",
+  "RDHF.stats.requirementUsageHint": "Counts the requirements you authored on each Feat.",
+  "RDHF.stats.requirementUsageAutoHint": "Rule Automation is on, so most Feats also carry a derived Investment in Category requirement. Those are not counted here — the rule reaches nearly every Feat, and including them would peg that bar at 100% and tell you nothing. What the rule demands of your catalog is the reachability audit above.",
   "RDHF.stats.requirement.traits": "Traits",
   "RDHF.stats.requirement.resources": "Resources",
   "RDHF.stats.requirement.features": "Other Feats",

@@ -284,7 +284,14 @@ function buildRequirementUsage(feats) {
   };
 }
 
-/** True when a feat actually states a requirement of this kind. */
+/**
+ * True when a feat actually states a requirement of this kind.
+ *
+ * AUTHORED requirements only. A Rule Automation row is derived at read time and is
+ * never seen here, because the rule reaches nearly every feat and folding it in would
+ * peg the investment bar at ~100% and destroy the signal this panel exists to give.
+ * What the rule does to reachability is the separate audit above.
+ */
 export function usesRequirement(reqs, kind) {
   if (!reqs) return false;
   switch (kind) {
@@ -295,7 +302,12 @@ export function usesRequirement(reqs, kind) {
     case 'expression':
       return Boolean(String(reqs.expression ?? '').trim());
     case 'categoryInvestment':
-      return (reqs.categoryInvestment ?? []).length > 0;
+      // The same filter checkRequirements and authoredRows() apply. Without it a row
+      // holding no Category or a count of 0 was reported here as a requirement in use
+      // while producing no clause anywhere else — and the same feat was still being
+      // derived into by Rule Automation, which filters such a row out. It was counted
+      // as authored and treated as automatic at the same time.
+      return (reqs.categoryInvestment ?? []).some(r => r?.category && r?.count);
     default:
       return (reqs[kind] ?? []).length > 0;
   }

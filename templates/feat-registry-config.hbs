@@ -1027,6 +1027,12 @@
                 {{/if}}
 
                 <h5 class="rdhf-sub">{{localize "RDHF.stats.requirementUsage"}}</h5>
+                <p class="rdhf-hint">
+                    {{localize "RDHF.stats.requirementUsageHint"}}
+                    {{#if autoInvestEnabled}}
+                        {{localize "RDHF.stats.requirementUsageAutoHint"}}
+                    {{/if}}
+                </p>
                 <ul class="rdhf-bars">
                     {{#each stats.catalog.requirementUsage.rows}}
                         <li class="rdhf-bar-row">

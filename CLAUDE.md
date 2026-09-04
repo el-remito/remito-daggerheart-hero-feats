@@ -357,7 +357,12 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   touches feats that actually match, so a clean world never goes dirty from merely being opened.
 - **`authoredRows()` uses the same filter `checkRequirements` does** — `r.category && r.count`. A
   row with a count of 0 produces no visible requirement there, so it must not silently opt a feat
-  out here. Any future reader of the investment chain owes it the same filter.
+  out here. Any future reader of the investment chain owes it the same filter — and one had already
+  forgotten it: `usesRequirement` in `logic/statistics.mjs` tested `.length > 0` until v1.4.3, so a
+  feat carrying a row with no Category or a count of 0 was reported on the requirement-usage bar as
+  authoring an investment requirement while `checkRequirements` emitted no clause for it and
+  `authoredRows()` filtered it out — counted as authored and absorbed by the rule at the same time.
+  Three readers, one filter; `usage-smoke.mjs` now asserts they agree.
 - **The reachability audit lives in `logic/statistics.mjs` and imports `logic/automation.mjs`** —
   the module's one sibling import inside `logic/`, taken deliberately over restating the rule where
   it would drift from the one the catalog evaluates. `buildAutomationReach` asks whether the curve
@@ -440,7 +445,12 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   exempt** by explicit design, as is any uncurated feat; the opt-out is **one boolean covering every
   future rule**, not one per rule; and the Statistics requirement-usage bars keep counting
   **authored** rows only — the rule reaches nearly every feat, so folding it in would peg that bar
-  at ~100% and destroy the signal the panel exists to give.
+  at ~100% and destroy the signal the panel exists to give. That decision stands, but it read as a
+  bug to the GM who reported it: 112 feats, the rule on, and an Investment bar saying 10, with
+  nothing on screen to say the bar is about authorship. Since v1.4.3 the panel carries a hint, and a
+  second sentence appears **only while the rule is enabled** (`autoInvestEnabled` in the context —
+  *not* `automation`, which the stats pane has never been given) pointing at the reachability audit
+  as the place the rule is actually reported.
 - The Types list is free-form. The whitepaper's "Class" and "Domain" types are not auto-populated
   from `daggerheart.classes` / `CONFIG.DH.DOMAIN.allDomains()`; a GM adds the ones they want as
   ordinary types. Category is handled by its own filter section rather than as a pseudo-type.
