@@ -633,6 +633,32 @@ export function buildAdoptionStats({
     }
   }
 
+  // Which Categories the counted characters actually play. Derived from the SAME
+  // `counted` list as everything else here, so setting a character aside moves this
+  // figure with the rest of them — which is the whole reason it belongs in this
+  // function rather than being counted off the registry somewhere else.
+  //
+  // Feats, not Feat Points: a Category's pull is how often people reach into it, and a
+  // GM-granted feat is still a choice about where this table's interest lies. That is
+  // the same measure categoryCounts uses for Investment requirements, so a player's
+  // standing and this panel can never tell two different stories.
+  const byCategory = new Map();
+  for (const entry of counted) {
+    for (const [category, n] of Object.entries(countCategories(entry.acquired ?? [], byUuid))) {
+      byCategory.set(category, (byCategory.get(category) ?? 0) + n);
+    }
+  }
+  const categoryMax = byCategory.size ? Math.max(...byCategory.values()) : 0;
+  // Ids, not labels: localizing is the app layer's job, exactly as it is for the
+  // reachability findings. Ties break on the id so the order is stable between renders.
+  const popularCategories = [...byCategory.entries()]
+    .map(([category, count]) => ({
+      category,
+      count,
+      share: categoryMax ? Math.round((count / categoryMax) * 100) : 0
+    }))
+    .sort((a, b) => b.count - a.count || String(a.category).localeCompare(String(b.category)));
+
   const popularMax = takes.size ? Math.max(...takes.values()) : 0;
   const popular = [...takes.entries()]
     .map(([uuid, count]) => ({
@@ -648,6 +674,8 @@ export function buildAdoptionStats({
     characters: characters.sort((a, b) => String(a.name).localeCompare(String(b.name))),
     popular,
     popularMax,
+    popularCategories,
+    categoryMax,
     // Newest first. An acquisition recorded before the timestamp existed sorts last,
     // which is where a 0 belongs.
     recent: recent.sort((a, b) => b.at - a.at).slice(0, recentLimit),

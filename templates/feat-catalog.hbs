@@ -62,15 +62,19 @@
                 </div>
             </section>
 
-            {{!-- Eligibility sits directly under Level because the two are read
-                  together: "what can I take" is a narrowing of "what is in reach".
-                  This is the one place the rail deliberately departs from the GM
-                  registry's order — the registry has no eligibility switch at all,
-                  so the sections the two DO share stay in the same sequence. --}}
+            {{!-- The narrowing switches, directly under Level, because all three
+                  controls answer the same question — WHICH of these Feats do I want to
+                  look at — while Type and Category below describe what a Feat IS. Both
+                  windows carry this section in this position; the registry has no
+                  eligibility switch, which is the only way the two rails differ. --}}
             <section class="rdhf-rail-section">
                 <label class="rdhf-checkline">
                     <input type="checkbox" data-filter="eligibleOnly" {{#if filters.eligibleOnly}}checked{{/if}}>
                     <span>{{localize "RDHF.catalog.eligibleOnly"}}</span>
+                </label>
+                <label class="rdhf-checkline">
+                    <input type="checkbox" data-filter="newOnly" {{#if filters.newOnly}}checked{{/if}}>
+                    <span>{{localize "RDHF.catalog.newOnly"}}</span>
                 </label>
             </section>
 
@@ -113,15 +117,6 @@
                     {{/each}}
                 </details>
             {{/if}}
-
-            {{!-- Appended after Category in BOTH windows, so the sections the two
-                  share stay in the same sequence. --}}
-            <section class="rdhf-rail-section">
-                <label class="rdhf-checkline">
-                    <input type="checkbox" data-filter="newOnly" {{#if filters.newOnly}}checked{{/if}}>
-                    <span>{{localize "RDHF.catalog.newOnly"}}</span>
-                </label>
-            </section>
 
             <footer class="rdhf-rail-footer">
                 <span class="rdhf-result-summary">

@@ -20,6 +20,9 @@
     --rdhf-panel: light-dark(#ffffff, var(--dark-blue, #18162e));
     --rdhf-panel-deep: light-dark(#f5f2ed, var(--deep-black, #0e0d15));
     --rdhf-panel-soft: light-dark(rgba(34, 34, 34, 0.04), rgba(239, 230, 216, 0.05));
+    /* "Changed since you saw it" — a third fact, so a third hue. Not the gold of NEW and
+       not the red of withheld, or two different things would read as one. */
+    --rdhf-changed: light-dark(#7c3aed, #b794f6);
     --rdhf-border: light-dark(rgba(34, 34, 34, 0.25), rgba(239, 230, 216, 0.22));
     --rdhf-met: var(--green, #40a640);
     --rdhf-unmet: var(--medium-red, #d04747);
@@ -2346,4 +2349,78 @@ details[open] > summary .rdhf-arrow {
     margin: 6px 0 0;
     font-size: var(--font-size-11, 0.7rem);
     color: var(--rdhf-met);
+}
+
+/* ── v1.6.0: Secret Feats, and the UPDATED chip ───────────────────────────── */
+
+/* A third meaning needs a third tone. --rdhf-unmet is already "withheld from players"
+   and the gold is already "new"; a changed Feat is neither, so it takes a colour of its
+   own rather than borrowing one and making two facts read alike. */
+.rdhf-chip--updated {
+    border-color: color-mix(in srgb, var(--rdhf-changed) 55%, transparent);
+    background: color-mix(in srgb, var(--rdhf-changed) 16%, transparent);
+    color: var(--rdhf-changed);
+    letter-spacing: 0.04em;
+}
+
+/* Revealed is the opposite of withheld, so it reads in the module's "met" green rather
+   than in any of the withholding tones. */
+.rdhf-chip--revealed {
+    border-color: color-mix(in srgb, var(--rdhf-met) 55%, transparent);
+    background: color-mix(in srgb, var(--rdhf-met) 14%, transparent);
+    color: var(--rdhf-met);
+}
+
+/* A GM-only warning: a Secret Feat with nothing that can ever reveal it. */
+.rdhf-chip--warn {
+    border-color: color-mix(in srgb, var(--rdhf-gold) 60%, transparent);
+    background: color-mix(in srgb, var(--rdhf-gold) 18%, transparent);
+    color: var(--rdhf-gold);
+}
+
+/* The reveal mode only means anything on an entry that is withheld, so its control is
+   shown only then — by VISIBILITY, so the row's columns stay lined up either way. Same
+   reason .rdhf-taxonomy-spacer exists one row up. */
+.rdhf-taxonomy-reveal {
+    visibility: hidden;
+}
+
+.rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-reveal {
+    visibility: visible;
+}
+
+/* Lit only while the mode is actually in force, matching how the eye behaves beside it. */
+.rdhf-taxonomy-row.is-revealing .rdhf-taxonomy-reveal {
+    color: var(--rdhf-met);
+}
+
+.rdhf-taxonomy-row.is-revealing .rdhf-taxonomy-reveal i {
+    opacity: 1;
+}
+
+/* The manual recency marks. In the expanded body, so they are a deliberate visit. */
+.rdhf-mark-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: var(--spacer-8, 8px);
+}
+
+.rdhf-mark-label {
+    font-size: var(--font-size-11, 0.7rem);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-mark-row .rdhf-text-btn.is-active {
+    border-color: var(--rdhf-gold);
+    color: var(--rdhf-gold);
+    background: var(--rdhf-gold-dim);
+}
+
+.rdhf-reach-secrets {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
 }

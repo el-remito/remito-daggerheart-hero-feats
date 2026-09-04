@@ -19,6 +19,8 @@ import {
   DEFAULT_INVESTMENT_BY_LEVEL
 } from '../constants.mjs';
 import {
+  getExcludedActors,
+  setExcludedActors,
   getRegistry,
   setRegistry,
   getCategories,
@@ -50,7 +52,7 @@ import {
   buildCatalogStats,
   UNCURATED_ROW
 } from '../logic/statistics.mjs';
-import { ATOMS, blankRequirements } from '../logic/requirements.mjs';
+import { ATOMS, blankRequirements, prerequisiteState } from '../logic/requirements.mjs';
 import {
   applyAutoInvestment,
   autoInvestmentRow,
@@ -62,11 +64,31 @@ import {
   byCurationThenLevel,
   matchesFilters,
   blankFilterState,
-  newestCurated
+  newestCurated,
+  newestUpdated
 } from '../logic/filters.mjs';
 import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+
+/**
+ * A day, as DD/MM/YYYY.
+ *
+ * Built from the parts rather than through toLocaleDateString, which follows whatever
+ * locale the browser happens to be in and so showed the same world two different orders
+ * on two machines — with 01/02 and 02/01 indistinguishable, a reader cannot tell which
+ * they are looking at. One order, stated.
+ *
+ * @param {number|null} at  epoch ms
+ * @returns {string}
+ */
+function formatDay(at) {
+  if (!at) return '—';
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return '—';
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
 
 /**
  * The two hosts a feat's requirement controls render into: a Feats-tab row and the
@@ -157,10 +179,17 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // about it changing — so it is decided once and read by both the chips and the
     // filter, which is what keeps them from disagreeing.
     this._newFeats = new Set();
+    // The same window over its own timestamp. Two sets rather than one so a busy week of
+    // curation cannot push every changed Feat out of the ten slots they would share.
+    this._updatedFeats = new Set();
     // Actor ids the GM has set aside from the adoption figures. Session-local, like
     // every other thing this tab knows: the Statistics tab derives everything and
     // stores nothing, so there is no setting, no flag and no migration here either.
-    this._excludedActors = new Set();
+    // Read from the world, not started empty: a GM who set three characters aside last
+    // session should not have to do it again to read the same figures. Held on the app
+    // as a Set all the same, because every reader asks "is this one excluded" and the
+    // context is rebuilt from it on each render.
+    this._excludedActors = getExcludedActors();
     // Whether the Coverage gaps list is showing past its default cap. Same deal: the
     // rows are all in the DOM, and the toggle unhides them rather than re-rendering.
     this._showAllGaps = false;
@@ -206,6 +235,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       importRegistry: FeatRegistryConfig._onImport,
       pruneOrphans: FeatRegistryConfig._onPrune,
       clearRegFilters: FeatRegistryConfig._onClearRegFilters,
+      markNew: FeatRegistryConfig._onMarkRecency,
+      markUpdated: FeatRegistryConfig._onMarkRecency,
       resyncFeat: FeatRegistryConfig._onResyncFeat,
       resyncAll: FeatRegistryConfig._onResyncAll,
       removeReference: FeatRegistryConfig._onRemoveReference,
@@ -320,6 +351,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // a property of the set: the tenth-newest feat stops being new when an eleventh is
     // filed without anything about it changing.
     this._recomputeNewFeats();
+    this._recomputeUpdatedFeats();
 
     const feats = [...sources.values()]
       .map(source => {
@@ -329,6 +361,16 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
           ...source,
           uncurated: isUncurated(feat),
           isNew: this._newFeats.has(source.uuid),
+          isUpdated: this._updatedFeats.has(source.uuid),
+          // The BUTTON reflects the stored stamp, not chip membership: the chip is
+          // decided over the whole list, and a control that switched itself off because
+          // an eleventh Feat was stamped elsewhere would report someone else's edit.
+          markedNew: Number(feat.curatedAt) > 0,
+          markedUpdated: Number(feat.updatedAt) > 0,
+          // A Secret Feat with nothing to reveal it. Not an error — the GM may be part
+          // way through authoring — but it is invisible to every player and stays that
+          // way, so it is said out loud rather than left to be noticed by its absence.
+          neverReveals: this.#neverReveals(feat),
           isOpen: this.#openFeats.has(source.uuid),
           registered: Boolean(this.#config.feats?.[source.uuid]),
           categoryOptions: categoryOptions.map(o => ({ ...o, selected: o.id === feat.category })),
@@ -424,12 +466,22 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       standaloneFeats: feats.filter(f => f.standalone),
       featCount: feats.length,
       uncuratedCount: this._uncuratedTotal,
+      // `revealing` is the mode actually in force — reveal only means anything on an
+      // entry that is withheld in the first place, and the row shows its control only
+      // then. `reveal` itself is carried too, because the checkbox renders its own state.
       categories: this.#categories.map(c => ({
         ...c,
         resolved: taxonomyLabel(c),
+        reveal: c.reveal === true,
+        revealing: c.hidden === true && c.reveal === true,
         fixed: isFixedCategory(c.id)
       })),
-      types: this.#types.map(t => ({ ...t, resolved: taxonomyLabel(t) })),
+      types: this.#types.map(t => ({
+        ...t,
+        resolved: taxonomyLabel(t),
+        reveal: t.reveal === true,
+        revealing: t.hidden === true && t.reveal === true
+      })),
       formula: this.#formula,
       formulaPreview: this._previewFormula(),
       filterCategories: railCategories,
@@ -527,6 +579,18 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       hiddenCategories.has(feat.category) ||
       (feat.types ?? []).some(t => hiddenTypes.has(t));
 
+    // Secret Feats are withheld like any other, and stay out of supply: the audit asks
+    // what a player can reach TODAY, and one waiting on a prerequisite cannot be counted
+    // on. But a Category that passes only because its secrets were left out is a
+    // different kind of pass from one that passes outright, so the number is reported
+    // rather than left implicit — the panel says how many and why.
+    const revealing = entry => entry?.hidden === true && entry.reveal === true;
+    const secret = feat =>
+      Boolean(feat.category) &&
+      feat.hidden !== true &&
+      (revealing(this.#categories.find(c => c.id === feat.category)) ||
+        (feat.types ?? []).some(id => revealing(this.#types.find(t => t.id === id))));
+
     const records = feats.map(view => ({
       uuid: view.uuid,
       label: view.name,
@@ -588,6 +652,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       reach: {
         ...reach,
         clean: reach.checked > 0 && reach.blocked.length === 0,
+        // Counted over the same records the audit was given, so the figure can never
+        // disagree with what was actually excluded.
+        secretsExcluded: records.filter(secret).length,
         // Feats, not findings: `checked` counts Feats, and a finding can stand for
         // several of them, so the summary line would otherwise divide one unit by
         // another.
@@ -610,12 +677,19 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       },
       adoption: {
         ...adoption,
+        // The ids come back from logic/ unlocalized, like the reachability findings, and
+        // are resolved against the WORKING copy of the taxonomy so a Category renamed a
+        // moment ago reads correctly here too.
+        popularCategories: adoption.popularCategories.map(row => ({
+          ...row,
+          label: categoryLabels[row.category] ?? row.category
+        })),
         recent: adoption.recent.map(entry => ({
           ...entry,
           // Formatted here rather than in logic/: a date is a localized display string,
           // and the pure layer never touches game.i18n or the user's locale. An entry
           // acquired before the timestamp existed carries 0 and shows a dash.
-          when: entry.at ? new Date(entry.at).toLocaleDateString() : '—'
+          when: formatDay(entry.at)
         }))
       },
       hasFeats: records.length > 0,
@@ -874,7 +948,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     row.dataset.hidden = String(feat.hidden);
     // The filter reads this attribute, the chip below reads the same set. Repainting
     // the chip without the attribute would leave "Newly added Feats" filtering on the
-    // answer from the last full render.
+    // answer from the last full render. UPDATED needs no counterpart: it is a chip and
+    // nothing filters on it, which is why _updatedFeats reaches the row through the
+    // context and _buildChips alone.
     row.dataset.new = String(this._newFeats.has(uuid));
     row.classList.toggle('is-uncurated', uncurated);
     row.classList.toggle('is-hidden', feat.hidden);
@@ -1015,10 +1091,27 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         })
       );
     }
-    if (this._newFeats.has(feat.uuid)) {
+    // UPDATED wins the row: a Feat cannot be stamped updated until its curation has
+    // been committed, so where both are set it really was published once and changed
+    // afterwards, and that is the more useful of the two facts.
+    if (this._updatedFeats.has(feat.uuid)) {
+      chips.push(
+        this._chip('updated', game.i18n.localize('RDHF.catalog.updated'), {
+          tooltip: game.i18n.localize('RDHF.catalog.updatedTooltip')
+        })
+      );
+    } else if (this._newFeats.has(feat.uuid)) {
       chips.push(
         this._chip('new', game.i18n.localize('RDHF.catalog.new'), {
           tooltip: game.i18n.localize('RDHF.catalog.newTooltip')
+        })
+      );
+    }
+    if (this.#neverReveals(feat)) {
+      chips.push(
+        this._chip('warn', '', {
+          icon: 'fa-solid fa-triangle-exclamation',
+          tooltip: game.i18n.localize('RDHF.registry.neverRevealsTooltip')
         })
       );
     }
@@ -1413,15 +1506,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       const [kind, prop] = field.split('.');
       const list = kind === 'category' ? this.#categories : this.#types;
       const entry = list.find(e => e.id === input.closest('[data-entry-id]')?.dataset.entryId);
-      // Every other taxonomy field is text; `hidden` is the one checkbox, and
-      // String(true) would store the word rather than the flag.
-      if (entry) entry[prop] = prop === 'hidden' ? value === true : String(value);
+      // Every other taxonomy field is text; `hidden` and `reveal` are the checkboxes,
+      // and String(true) would store the word rather than the flag.
+      const flag = prop === 'hidden' || prop === 'reveal';
+      if (entry) entry[prop] = flag ? value === true : String(value);
       // Repainted, not re-rendered — the Taxonomy tab is a form the GM may be several
       // fields into, and render() would reset its scroll and steal focus. The class
       // drives the dimmed row and the lit eye, so without this the state only appears
       // on the next render for some other reason.
-      if (entry && prop === 'hidden') {
-        input.closest('[data-entry-id]')?.classList.toggle('is-hidden', entry.hidden === true);
+      if (entry && flag) {
+        const row = input.closest('[data-entry-id]');
+        row?.classList.toggle('is-hidden', entry.hidden === true);
+        // The reveal mode only means anything while the entry is withheld, so its
+        // control is shown only then — visibility, not display, so the row's columns
+        // stay lined up with its neighbours either way.
+        row?.classList.toggle('is-revealing', entry.hidden === true && entry.reveal === true);
       }
       return;
     }
@@ -1485,12 +1584,29 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         break;
     }
 
+    // UPDATED means "this changed after it was published", and AUTHORING IS NOT
+    // CHANGING. `category` and `level` are in REQUIREMENT_FIELDS because they feed Rule
+    // Automation, so curating a Feat — pick a Category, set a Level, write a requirement
+    // — necessarily edits the very fields that later count as changes, and a Feat no
+    // player has ever seen would announce itself as updated.
+    //
+    // The boundary is the commit, not a window: #curationCommitted asks the BASELINE,
+    // which is the saved world as of the last Save or Curation File. Before that the
+    // Feat is being authored and nothing stamps, however many fields are touched; after
+    // it, every mechanically relevant edit does. Un-curating clears curatedAt, so a Feat
+    // re-curated later is authored again — the same expression, no special case.
+    const stamped = REQUIREMENT_FIELDS.includes(field) && this.#curationCommitted(uuid);
+    if (stamped) feat.updatedAt = Date.now();
+
     // Every one of these can change what the row's chips say, so repaint them now
     // rather than waiting for the next full render.
-    if (['level', 'category', 'type', 'hidden', 'autoExempt'].includes(field)) {
+    if (stamped || ['level', 'category', 'type', 'hidden', 'autoExempt'].includes(field)) {
       // Curating changes the newest-ten set, which can add a chip to this row and take
       // one off another. Recompute first so _refreshRow below paints the new answer.
-      const moved = field === 'category' ? this._recomputeNewFeats() : [];
+      const moved = [
+        ...(field === 'category' ? this._recomputeNewFeats() : []),
+        ...(stamped ? this._recomputeUpdatedFeats() : [])
+      ];
       this._refreshRow(uuid);
       this._refreshCurationRow(uuid);
       for (const other of moved) if (other !== uuid) this._refreshRow(other);
@@ -1520,15 +1636,52 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * _refreshRow exists to prevent.
    */
   _recomputeNewFeats() {
-    const before = this._newFeats;
-    const after = newestCurated(
+    return this.#recompute('_newFeats', newestCurated, 'curatedAt');
+  }
+
+  /** The same, for the changed window. Stamping one Feat can demote whatever was tenth. */
+  _recomputeUpdatedFeats() {
+    return this.#recompute('_updatedFeats', newestUpdated, 'updatedAt');
+  }
+
+  /** One implementation: both chips are a recency SET decided over the whole list. */
+  #recompute(prop, windowFn, field) {
+    const before = this[prop];
+    const after = windowFn(
       Object.entries(this.#config.feats ?? {}).map(([uuid, stored]) => ({
         uuid,
-        curatedAt: Number(stored?.curatedAt) || 0
+        [field]: Number(stored?.[field]) || 0
       }))
     );
-    this._newFeats = after;
+    this[prop] = after;
     return [...new Set([...before, ...after])].filter(uuid => before.has(uuid) !== after.has(uuid));
+  }
+
+  /**
+   * Whether this Feat's curation has reached the saved world. The baseline is rebased by
+   * #commit (Save) and per uuid by #commitFeat (Curation's File), so this is exactly
+   * "was it already curated the last time anything was written".
+   */
+  #curationCommitted(uuid) {
+    return Number(this.#baseline?.registry?.feats?.[uuid]?.curatedAt) > 0;
+  }
+
+  /**
+   * A Feat withheld by a reveal-mode entry that states no prerequisite for the rule to
+   * test, and so can never become visible to anyone.
+   *
+   * Only the structured prerequisite lists count, which is what prerequisiteState says
+   * with an empty snapshot: `has` is purely structural. A prerequisite written into the
+   * free-text expression is deliberately not one, so this warns about that too — which
+   * is the point, since it is otherwise invisible.
+   */
+  #neverReveals(feat) {
+    if (!feat?.category || feat.hidden === true) return false;
+    const revealing = entry => entry?.hidden === true && entry.reveal === true;
+    const inReveal =
+      revealing(this.#categories.find(c => c.id === feat.category)) ||
+      (feat.types ?? []).some(id => revealing(this.#types.find(t => t.id === id)));
+    return inReveal && !prerequisiteState(feat, {}).has;
   }
 
   /** Greys the curve table while the rule is off. Repaint, never a re-render. */
@@ -1780,13 +1933,20 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * no repaint short of rebuilding the panel, and rebuilding it by hand would duplicate
    * markup the template already declares. The scroll position is preserved by render()
    * as it is for every other action here.
+   *
+   * It also writes THROUGH, rather than joining the working copy the four registry
+   * settings share. Two reasons: it is not registry data, so folding it into #baseline
+   * would make the close prompt offer to save a view preference alongside a GM's feat
+   * edits; and the figures on screen have already moved, so a choice that survived the
+   * render but not the window would be the one visible state that lies.
    */
-  static _onToggleLedgerActor(event, target) {
+  static async _onToggleLedgerActor(event, target) {
     event.preventDefault();
     const id = target.dataset.actorId;
     if (!id) return;
     if (this._excludedActors.has(id)) this._excludedActors.delete(id);
     else this._excludedActors.add(id);
+    await setExcludedActors(this._excludedActors);
     this.render();
   }
 
@@ -2145,6 +2305,50 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /** Mirrors the catalog's Clear filters: resets state and the controls, no re-render. */
+  /**
+   * Sets or clears a recency stamp by hand.
+   *
+   * The automatic stamp only knows about the registry's own fields. Editing a Feature's
+   * actions in a compendium changes what a Feat DOES and reaches nothing here — and the
+   * hook that would notice cannot safely write, because this app holds a working copy
+   * the GM may be several edits into and a background write would be lost at their next
+   * Save. So the GM says so instead: one click, in the working copy, saved on Save and
+   * revertible by Discard like every other field.
+   *
+   * A toggle on the stored timestamp, not on chip membership: the chip is decided over
+   * the whole list, and a control that switched itself off because an eleventh Feat was
+   * stamped elsewhere would be reporting someone else's edit.
+   */
+  static _onMarkRecency(event, target) {
+    event.preventDefault();
+    const host = this._featHost(target);
+    const uuid = host?.dataset.uuid;
+    if (!uuid) return;
+
+    // Created on demand, exactly as _syncField does: a Feature the GM has never touched
+    // has no entry yet, and reading one that is not there would leave the button doing
+    // nothing at all with nothing logged.
+    const feat = (this.#config.feats[uuid] ??= blankFeat(uuid));
+    const field = target.dataset.action === 'markNew' ? 'curatedAt' : 'updatedAt';
+    feat[field] = Number(feat[field]) > 0 ? 0 : Date.now();
+
+    const moved =
+      field === 'curatedAt' ? this._recomputeNewFeats() : this._recomputeUpdatedFeats();
+    this._paintRecencyButtons(host, feat);
+    this._refreshRow(uuid);
+    this._refreshCurationRow(uuid);
+    for (const other of moved) if (other !== uuid) this._refreshRow(other);
+  }
+
+  /** Lights each mark button from the stored stamp it writes. */
+  _paintRecencyButtons(host, feat) {
+    for (const button of host?.querySelectorAll('[data-action^="mark"]') ?? []) {
+      const on = Number(button.dataset.action === 'markNew' ? feat.curatedAt : feat.updatedAt) > 0;
+      button.classList.toggle('is-active', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
+  }
+
   static _onClearRegFilters(event) {
     event.preventDefault();
     this._filters = blankFilterState();

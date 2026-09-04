@@ -10,7 +10,7 @@
  *     (acquisitions), keyed by uuid rather than index.
  */
 
-import { MODULE_ID, PREFIX, SETTINGS, TEMPLATES, ACTOR_TYPES } from '../constants.mjs';
+import { ITEM_TYPES, MODULE_ID, PREFIX, SETTINGS, TEMPLATES, ACTOR_TYPES } from '../constants.mjs';
 import {
   getAutomation,
   getCategories,
@@ -31,7 +31,14 @@ import {
   setPointAdjustment
 } from '../data/actor-state.mjs';
 import { isEligible } from '../logic/requirements.mjs';
-import { matchesFilters, newestCurated, blankFilterState, buildSearchText, byLevelThenName } from '../logic/filters.mjs';
+import {
+  matchesFilters,
+  newestCurated,
+  newestUpdated,
+  blankFilterState,
+  buildSearchText,
+  byLevelThenName
+} from '../logic/filters.mjs';
 import { buildInvestmentSummary } from '../logic/investment.mjs';
 import { localizeCheck } from './requirement-text.mjs';
 
@@ -149,20 +156,33 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     const snapshot = buildActorSnapshot(this.actor);
     const pool = await getPointPool(this.actor);
     const state = getState(this.actor);
+    // keepUuids: a feat this character already owns stays listed even if the GM has
+    // since hidden it or cleared its Category, or the character has lost the prerequisite
+    // that revealed it. Otherwise "My Feats" would lose rows.
+    //
+    // The snapshot is what lets a Secret Feat resolve at all: without one nothing can be
+    // revealed. _onAcquire passes it too, or a revealed feat would be unbuyable at the
+    // moment of purchase.
+    const feats = await listFeats({
+      forGM: isGM,
+      keepUuids: state.acquired.map(e => e.uuid),
+      snapshot
+    });
+
     // A hidden taxonomy entry is dropped from the rail for players, because listFeats
     // has already withheld everything it could have matched — an entry that can only
     // ever filter to zero rows is worse than absent. The GM keeps every entry: they
     // are also the person who has to find the feats they just withdrew.
+    //
+    // A reveal-mode entry is the one hidden entry that CAN match, once the character has
+    // revealed something behind it. Rather than a second rule, the same rule is asked of
+    // the list the player actually received — which is also why this now sits below the
+    // listFeats call rather than above it.
+    const behind = new Set(feats.flatMap(f => [f.category, ...(f.types ?? [])]).filter(Boolean));
+    const railable = entry => !entry?.hidden || behind.has(entry.id);
     const showAll = isGM;
-    const categories = getCategories().filter(c => showAll || !c?.hidden);
-    const types = getTypes().filter(t => showAll || !t?.hidden);
-
-    // keepUuids: a feat this character already owns stays listed even if the GM has
-    // since hidden it or cleared its Category. Otherwise "My Feats" would lose rows.
-    const feats = await listFeats({
-      forGM: isGM,
-      keepUuids: state.acquired.map(e => e.uuid)
-    });
+    const categories = getCategories().filter(c => showAll || railable(c));
+    const types = getTypes().filter(t => showAll || railable(t));
     // So a requirement that references another Feat by UUID renders as its name
     // rather than as a raw "Compendium.pack.Item.abc123".
     snapshot.featLabels = Object.fromEntries(feats.map(f => [f.uuid, f.name]));
@@ -172,6 +192,9 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     // it changing. Measured over the list the PLAYER receives, so a Feat withheld from
     // them never occupies one of the ten slots.
     const fresh = newestCurated(feats);
+    // Its own window over its own timestamp, so "recently added" and "recently changed"
+    // cannot crowd each other out of ten slots they would otherwise share.
+    const changed = newestUpdated(feats);
 
     const views = feats
       .map(feat => {
@@ -189,6 +212,13 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           free: acquisitionOf(state, feat.uuid)?.free === true,
           hidden: feat.hidden === true,
           isNew: fresh.has(feat.uuid),
+          // UPDATED wins the row where both apply. It cannot arise on a feat still being
+          // authored — the stamp is withheld until curation is committed — so where both
+          // are set the feat really was curated once and changed later.
+          isUpdated: changed.has(feat.uuid),
+          // Worn until the feat is acquired, which needs no expiry of its own: an owned
+          // feat is `owned`, and the chip is not drawn for one.
+          revealed: feat.revealed === true,
           isOpen: this._openRows.has(feat.uuid)
         };
         view.searchText = buildSearchText(view);
@@ -372,7 +402,9 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const snapshot = buildActorSnapshot(this.actor);
     const pool = await getPointPool(this.actor);
-    const feats = await listFeats({ forGM: game.user.isGM });
+    // The same snapshot the listing used: without it resolveVisibility can reveal
+    // nothing, and a Secret Feat the player can see would not be found here.
+    const feats = await listFeats({ forGM: game.user.isGM, snapshot });
     const feat = feats.find(f => f.uuid === uuid);
     if (!feat) return;
 
@@ -549,6 +581,15 @@ export function registerCatalogHooks() {
   // the GM may be mid-edit, and its next render re-reads the now-empty caches anyway.
   for (const hook of ['updateItem', 'deleteItem', 'createItem']) {
     Hooks.on(hook, doc => {
+      // A Feature gained or lost ON a character can reveal or withdraw a Secret Feat, and
+      // nothing else notices: updateActor fires only for this module's flags and for
+      // levelData, and onFeatureDocumentChanged returns false for an embedded item by
+      // design. Only that actor's catalog is re-rendered, and the pack caches are left
+      // alone — an embedded item is a copy, never a source Feature.
+      if (doc?.documentName === 'Item' && doc.type === ITEM_TYPES.FEATURE && doc.isEmbedded) {
+        if (doc.parent?.id) refreshCatalog(doc.parent.id);
+        return;
+      }
       if (!onFeatureDocumentChanged(doc)) return;
       for (const app of openCatalogs.values()) app.render();
     });
@@ -558,6 +599,10 @@ export function registerCatalogHooks() {
     // away scroll position and open rows to paint what is already on screen. A client
     // setting may not raise this hook at all; the guard is here so it does not matter.
     if (setting.key === `${MODULE_ID}.${SETTINGS.INVEST_LAYOUT}`) return;
+    // Nor does a GM setting a character aside from the Statistics figures: it changes
+    // nothing a player can see, and a broad re-render would cost them scroll position
+    // and open rows for it.
+    if (setting.key === `${MODULE_ID}.${SETTINGS.EXCLUDED_ACTORS}`) return;
     if (setting.key?.startsWith(`${MODULE_ID}.`)) {
       for (const app of openCatalogs.values()) app.render();
     }

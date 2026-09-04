@@ -45,10 +45,33 @@ export function blankFilterState() {
  * @returns {Set<string>} uuids
  */
 export function newestCurated(views, limit = NEW_FEATS_LIMIT) {
+  return newestBy(views, 'curatedAt', limit);
+}
+
+/**
+ * The most recently CHANGED Feats, newest first — the same window as newestCurated,
+ * over its own timestamp, so "recently added" and "recently changed" are read the same
+ * way and neither can crowd the other out.
+ *
+ * A Feat only becomes eligible for an `updatedAt` stamp once its curation has been
+ * committed; see _syncField in the registry app. Authoring a Feat necessarily edits the
+ * same fields that later count as changes, so without that boundary every freshly
+ * curated Feat would report itself as updated.
+ *
+ * @param {Array<object>} views  feat views carrying `uuid` and `updatedAt`
+ * @param {number} [limit]
+ * @returns {Set<string>} uuids
+ */
+export function newestUpdated(views, limit = NEW_FEATS_LIMIT) {
+  return newestBy(views, 'updatedAt', limit);
+}
+
+/** The shared window. Both chips are a recency SET, and there is one implementation. */
+function newestBy(views, field, limit) {
   return new Set(
     (views ?? [])
-      .filter(v => Number(v?.curatedAt) > 0)
-      .sort((a, b) => Number(b.curatedAt) - Number(a.curatedAt))
+      .filter(v => Number(v?.[field]) > 0)
+      .sort((a, b) => Number(b[field]) - Number(a[field]))
       .slice(0, Math.max(0, limit))
       .map(v => v.uuid)
   );

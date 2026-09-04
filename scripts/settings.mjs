@@ -118,6 +118,18 @@ export function registerSettings() {
     default: INVEST_LAYOUTS[0]
   });
 
+  // Characters set aside from the adoption figures. WORLD, not client: "this character
+  // is a test dummy and not real play data" is a fact about the world, true for whoever
+  // opens the tab, not a preference of the person looking — which is the opposite of
+  // INVEST_LAYOUT above and the reason the two are scoped differently. config: false
+  // because it is only ever edited by ticking a row on the tab it affects.
+  game.settings.register(MODULE_ID, SETTINGS.EXCLUDED_ACTORS, {
+    scope: 'world',
+    config: false,
+    type: Array,
+    default: []
+  });
+
   // Rule Automation. config: false — like the registry and the taxonomy, this is only
   // ever edited through the Automation tab, which can explain the curve and show what
   // it derives; Foundry's settings sheet cannot.
@@ -226,6 +238,25 @@ export function getPointFormula() {
 }
 
 /** Whether the registry offers its Statistics tab. */
+/**
+ * Actor ids set aside from the adoption figures.
+ *
+ * Returned as a Set because every reader asks "is this one excluded". Junk is filtered
+ * on the way out rather than migrated: an id whose Actor has since been deleted simply
+ * never matches, and pruning the setting for it would be a write nobody asked for.
+ *
+ * @returns {Set<string>}
+ */
+export function getExcludedActors() {
+  const stored = game.settings.get(MODULE_ID, SETTINGS.EXCLUDED_ACTORS);
+  return new Set(Array.isArray(stored) ? stored.filter(id => typeof id === 'string' && id) : []);
+}
+
+/** @param {Set<string>|string[]} ids */
+export async function setExcludedActors(ids) {
+  return game.settings.set(MODULE_ID, SETTINGS.EXCLUDED_ACTORS, [...ids]);
+}
+
 export function getShowStatistics() {
   return game.settings.get(MODULE_ID, SETTINGS.SHOW_STATS) !== false;
 }

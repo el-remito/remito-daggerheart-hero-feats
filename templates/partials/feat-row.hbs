@@ -34,11 +34,32 @@
                     {{#each this.typeLabels}}
                         <span class="rdhf-chip rdhf-chip--type">{{this}}</span>
                     {{/each}}
-                    {{#if this.isNew}}
+                    {{!-- UPDATED wins where both apply: a Feat cannot be stamped
+                          updated until its curation has been committed, so the two
+                          together mean it was published once and changed later, which
+                          is the fact worth a slot on the line. --}}
+                    {{#if this.isUpdated}}
+                        <span class="rdhf-chip rdhf-chip--updated"
+                              data-tooltip="{{localize 'RDHF.catalog.updatedTooltip'}}">
+                            {{localize "RDHF.catalog.updated"}}
+                        </span>
+                    {{else if this.isNew}}
                         <span class="rdhf-chip rdhf-chip--new"
                               data-tooltip="{{localize 'RDHF.catalog.newTooltip'}}">
                             {{localize "RDHF.catalog.new"}}
                         </span>
+                    {{/if}}
+                    {{!-- Visible only because this character holds its prerequisite. Not
+                          drawn once the Feat is owned, which is the whole of its expiry:
+                          an acquired Feat is `owned` and this block never runs for it. --}}
+                    {{#if this.revealed}}
+                        {{#unless this.owned}}
+                            <span class="rdhf-chip rdhf-chip--revealed"
+                                  data-tooltip="{{localize 'RDHF.catalog.revealedTooltip'}}">
+                                <i class="fa-solid fa-lock-open"></i>
+                                {{localize "RDHF.catalog.revealed"}}
+                            </span>
+                        {{/unless}}
                     {{/if}}
                     {{#if this.uncurated}}
                         <span class="rdhf-chip rdhf-chip--uncurated"

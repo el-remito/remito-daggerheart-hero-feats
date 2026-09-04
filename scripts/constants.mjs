@@ -21,7 +21,8 @@ export const SETTINGS = {
   MIGRATION: 'migration',
   SHOW_STATS: 'showStatistics',
   AUTOMATION: 'automation',
-  INVEST_LAYOUT: 'investmentsLayout'
+  INVEST_LAYOUT: 'investmentsLayout',
+  EXCLUDED_ACTORS: 'excludedActors'
 };
 
 /** How the My Investments tab lays its Categories out. Per user, never shared. */

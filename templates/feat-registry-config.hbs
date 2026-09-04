@@ -154,6 +154,17 @@
                         </div>
                     </section>
 
+                    {{!-- The same section, in the same position, as the catalog's — minus
+                          the eligibility switch, which has no meaning here. The curation
+                          switches stay below Category: those two ask what the GM has yet
+                          to DO, not which Feats to look at. --}}
+                    <section class="rdhf-rail-section">
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="newOnly" {{#if newOnly}}checked{{/if}}>
+                            <span>{{localize "RDHF.catalog.newOnly"}}</span>
+                        </label>
+                    </section>
+
                     {{#if filterTypes.length}}
                         <details class="rdhf-rail-section rdhf-rail-details" data-rail="types"
                                  {{#if railOpen.types}}open{{/if}}>
@@ -193,15 +204,6 @@
                             {{/each}}
                         </details>
                     {{/if}}
-
-                    {{!-- Appended after Category in BOTH windows, so the sections the
-                          two share stay in the same sequence. --}}
-                    <section class="rdhf-rail-section">
-                        <label class="rdhf-checkline">
-                            <input type="checkbox" data-filter="newOnly" {{#if newOnly}}checked{{/if}}>
-                            <span>{{localize "RDHF.catalog.newOnly"}}</span>
-                        </label>
-                    </section>
 
                     <section class="rdhf-rail-section">
                         <label class="rdhf-checkline">
@@ -271,9 +273,18 @@
                                                         {{this.label}}
                                                     </span>
                                                 {{/each}}
-                                                {{#if this.isNew}}
+                                                {{#if this.isUpdated}}
+                                                    <span class="rdhf-chip rdhf-chip--updated"
+                                                          data-tooltip="{{localize 'RDHF.catalog.updatedTooltip'}}">{{localize "RDHF.catalog.updated"}}</span>
+                                                {{else if this.isNew}}
                                                     <span class="rdhf-chip rdhf-chip--new"
                                                           data-tooltip="{{localize 'RDHF.catalog.newTooltip'}}">{{localize "RDHF.catalog.new"}}</span>
+                                                {{/if}}
+                                                {{#if this.neverReveals}}
+                                                    <span class="rdhf-chip rdhf-chip--warn"
+                                                          data-tooltip="{{localize 'RDHF.registry.neverRevealsTooltip'}}">
+                                                        <i class="fa-solid fa-triangle-exclamation"></i>
+                                                    </span>
                                                 {{/if}}
                                                 {{#if this.uncurated}}
                                                     <span class="rdhf-chip rdhf-chip--uncurated"
@@ -348,6 +359,27 @@
                                                     {{/each}}
                                                 </select>
                                             </label>
+                                        </div>
+
+                                        {{!-- In the expanded body, not the summary line:
+                                              Re-sync and Reset are always visible because
+                                              they act on the Feature, and these are an
+                                              occasional correction to what players are
+                                              told. Written to the working copy like any
+                                              other field — saved on Save, undone by
+                                              Discard. --}}
+                                        <div class="rdhf-mark-row">
+                                            <span class="rdhf-mark-label">{{localize "RDHF.registry.markAs"}}</span>
+                                            <button type="button" class="rdhf-text-btn {{#if this.markedNew}}is-active{{/if}}"
+                                                    data-action="markNew" aria-pressed="{{this.markedNew}}"
+                                                    data-tooltip="{{localize 'RDHF.registry.markNewTooltip'}}">
+                                                {{localize "RDHF.catalog.new"}}
+                                            </button>
+                                            <button type="button" class="rdhf-text-btn {{#if this.markedUpdated}}is-active{{/if}}"
+                                                    data-action="markUpdated" aria-pressed="{{this.markedUpdated}}"
+                                                    data-tooltip="{{localize 'RDHF.registry.markUpdatedTooltip'}}">
+                                                {{localize "RDHF.catalog.updated"}}
+                                            </button>
                                         </div>
 
                                         <label class="rdhf-checkline rdhf-checkline--boxed">
@@ -743,7 +775,7 @@
                     <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.categories"}}</h4>
                     <p class="rdhf-hint">{{localize "RDHF.registry.categoriesHint"}}</p>
                     {{#each categories}}
-                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}} {{#if this.hidden}}is-hidden{{/if}}" data-entry-id="{{this.id}}">
+                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}} {{#if this.hidden}}is-hidden{{/if}} {{#if this.revealing}}is-revealing{{/if}}" data-entry-id="{{this.id}}">
                             {{#if this.fixed}}
                                 {{!-- General is the Category that lets a feat be curated
                                       without inventing a filing system, so it may not be
@@ -760,6 +792,15 @@
                                 <input type="checkbox" data-field="category.hidden"
                                        {{#if this.hidden}}checked{{/if}}>
                                 <i class="fa-solid fa-eye-slash"></i>
+                            </label>
+                            {{!-- Only meaningful while the entry is withheld, so it is
+                                  shown only then — by visibility, so the columns stay
+                                  lined up whichever way the row is set. --}}
+                            <label class="rdhf-taxonomy-hide rdhf-taxonomy-reveal"
+                                   data-tooltip="{{localize 'RDHF.registry.taxonomyRevealHint'}}">
+                                <input type="checkbox" data-field="category.reveal"
+                                       {{#if this.reveal}}checked{{/if}}>
+                                <i class="fa-solid fa-lock-open"></i>
                             </label>
                             {{#unless this.fixed}}
                                 <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeCategory">
@@ -788,7 +829,7 @@
                     <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.types"}}</h4>
                     <p class="rdhf-hint">{{localize "RDHF.registry.typesHint"}}</p>
                     {{#each types}}
-                        <div class="rdhf-taxonomy-row {{#if this.hidden}}is-hidden{{/if}}" data-entry-id="{{this.id}}">
+                        <div class="rdhf-taxonomy-row {{#if this.hidden}}is-hidden{{/if}} {{#if this.revealing}}is-revealing{{/if}}" data-entry-id="{{this.id}}">
                             <input type="text" data-field="type.label" value="{{this.resolved}}">
                             <input type="text" class="rdhf-icon-input" data-field="type.icon" value="{{this.icon}}"
                                    placeholder="fa-solid fa-tag">
@@ -797,6 +838,12 @@
                                 <input type="checkbox" data-field="type.hidden"
                                        {{#if this.hidden}}checked{{/if}}>
                                 <i class="fa-solid fa-eye-slash"></i>
+                            </label>
+                            <label class="rdhf-taxonomy-hide rdhf-taxonomy-reveal"
+                                   data-tooltip="{{localize 'RDHF.registry.taxonomyRevealHint'}}">
+                                <input type="checkbox" data-field="type.reveal"
+                                       {{#if this.reveal}}checked{{/if}}>
+                                <i class="fa-solid fa-lock-open"></i>
                             </label>
                             <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeType">
                                 <i class="fa-solid fa-trash"></i>
@@ -1069,6 +1116,14 @@
                 {{else}}
                     <p class="rdhf-hint">{{localize "RDHF.stats.reachNone"}}</p>
                 {{/if}}
+                {{!-- Said out loud, because a pass that depends on content no player can
+                      reach yet is not the same as an unconditional one. --}}
+                {{#if stats.reach.secretsExcluded}}
+                    <p class="rdhf-hint rdhf-reach-secrets">
+                        <i class="fa-solid fa-lock-open"></i>
+                        {{localize "RDHF.stats.reachSecrets" count=stats.reach.secretsExcluded}}
+                    </p>
+                {{/if}}
 
                 {{#if stats.catalog.brokenReferences.length}}
                     <h5 class="rdhf-sub">{{localize "RDHF.stats.brokenRefs"}}</h5>
@@ -1184,6 +1239,27 @@
                             </tbody>
                         </table>
                     </div>
+
+                    {{!-- Where this table's interest actually lies, which the per-Feat
+                          bar below cannot show: a Category can be the most played while
+                          no single Feat in it is the most taken. Same bar markup, same
+                          shape from buildAdoptionStats, and it moves with the exclude
+                          toggles because it is derived from the same counted list. --}}
+                    {{#if stats.adoption.popularCategories.length}}
+                        <h5 class="rdhf-sub">{{localize "RDHF.stats.popularCategories"}}</h5>
+                        <p class="rdhf-hint">{{localize "RDHF.stats.popularCategoriesHint"}}</p>
+                        <ul class="rdhf-bars">
+                            {{#each stats.adoption.popularCategories}}
+                                <li class="rdhf-bar-row">
+                                    <span class="rdhf-bar-label">{{this.label}}</span>
+                                    <span class="rdhf-bar">
+                                        <span class="rdhf-bar-fill" style="width: {{this.share}}%"></span>
+                                    </span>
+                                    <span class="rdhf-bar-value">{{this.count}}</span>
+                                </li>
+                            {{/each}}
+                        </ul>
+                    {{/if}}
 
                     <h5 class="rdhf-sub">{{localize "RDHF.stats.mostTaken"}}</h5>
                     <ul class="rdhf-bars">

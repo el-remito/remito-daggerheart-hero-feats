@@ -22,6 +22,7 @@ import {
   taxonomyLabel
 } from '../settings.mjs';
 import { blankRequirements, normalizeRequirements } from '../logic/requirements.mjs';
+import { resolveVisibility } from '../logic/visibility.mjs';
 import { applyAutoInvestment } from '../logic/automation.mjs';
 
 /** packId -> Promise<Map<uuid, indexEntry>>. Cleared when the registry setting changes. */
@@ -183,6 +184,11 @@ export function blankFeat(uuid) {
     // When this feat was last given a Category. 0 = never curated. Drives the
     // "Newly added" filter, and nothing else reads it.
     curatedAt: 0,
+    // When a mechanically relevant field was last changed on an ALREADY CURATED feat.
+    // 0 = never, which is every feat still being authored: curating one necessarily
+    // edits the same fields that later count as changes, so the stamp is withheld until
+    // the curation has been committed. See _syncField in the registry app.
+    updatedAt: 0,
     requirements: blankRequirements()
   };
 }
@@ -208,6 +214,7 @@ export function normalizeFeat(uuid, stored) {
     // is the opt-out. See scripts/logic/automation.mjs.
     autoExempt: stored.autoExempt === true,
     curatedAt: Number(stored.curatedAt) || 0,
+    updatedAt: Number(stored.updatedAt) || 0,
     requirements: normalizeRequirements(stored.requirements)
   };
 }
@@ -220,17 +227,25 @@ export function isUncurated(feat) {
 /**
  * The full feat list, joined against its source Features.
  *
- * Two things are withheld from players: uncurated feats (no Category yet) and feats
- * the GM flagged hidden. Both are still returned when their uuid is in `keepUuids` —
- * an already-acquired feat must not vanish from the character's own list because the
- * GM later hid it or cleared its Category.
+ * Withholding is decided by resolveVisibility below. Everything it withholds is still
+ * returned when the uuid is in `keepUuids` — an already-acquired feat must not vanish
+ * from the character's own list because the GM later hid it, cleared its Category, or
+ * because the character lost the prerequisite that revealed it.
  *
  * @param {object} [options]
- * @param {boolean} [options.forGM]      include uncurated and hidden feats
+ * @param {boolean} [options.forGM]      include everything, whatever the withholds say
  * @param {Set<string>|string[]} [options.keepUuids]  never withhold these
- * @returns {Promise<Array<object>>}  feat records merged with { name, img, summary, uncurated }
+ * @param {object|null} [options.snapshot]  the actor a Secret Feat is measured against;
+ *   without one no feat can ever be revealed, which is the safe direction
+ * @returns {Promise<Array<object>>}  feat records merged with
+ *   { name, img, summary, uncurated, revealed }
  */
-export async function listFeats({ forGM = false, keepUuids = null, registry = getRegistry() } = {}) {
+export async function listFeats({
+  forGM = false,
+  keepUuids = null,
+  snapshot = null,
+  registry = getRegistry()
+} = {}) {
   const keep = keepUuids instanceof Set ? keepUuids : new Set(keepUuids ?? []);
   const sources = await loadAllSourceFeatures(registry);
   const categories = getCategories();
@@ -238,8 +253,15 @@ export async function listFeats({ forGM = false, keepUuids = null, registry = ge
   // rule below: both are world-level and cannot change mid-loop. The ACCESSORS still
   // return hidden entries — the GM has to be able to file into one — so the withholding
   // lives here, on the one seam every player-facing record passes through.
-  const hiddenCategories = new Set(categories.filter(c => c?.hidden).map(c => c.id));
-  const hiddenTypes = new Set(getTypes().filter(t => t?.hidden).map(t => t.id));
+  // Keyed by id to the entry's REVEAL MODE, not merely present: an entry set to reveal
+  // withholds conditionally, one set to hide withholds outright, and the resolver has to
+  // tell them apart. `reveal` is read inline like `hidden` was before it — a taxonomy
+  // entry is a plain stored object with no normalizer, so an entry written before v1.6.0
+  // simply reads undefined, which is not true.
+  const hiddenCategories = new Map(
+    categories.filter(c => c?.hidden).map(c => [c.id, c.reveal === true])
+  );
+  const hiddenTypes = new Map(getTypes().filter(t => t?.hidden).map(t => [t.id, t.reveal === true]));
   // Read once for the whole list, not per feat: the rule is world-level and cannot
   // change mid-loop.
   const rule = getAutomation().investmentByLevel;
@@ -254,18 +276,20 @@ export async function listFeats({ forGM = false, keepUuids = null, registry = ge
     // normalizeFeat so the GM's editable rows stay authored-only.
     const feat = applyAutoInvestment(normalizeFeat(uuid, registry.feats?.[uuid]), rule);
     const uncurated = isUncurated(feat);
-    // Four withholds now, all overridden by keepUuids so a feat a character already
-    // owns never vanishes from My Feats: uncurated, the per-feat flag, and either half
-    // of the taxonomy being hidden. The Type test is deliberately ANY, not ALL — a
-    // hidden Type withholds a feat that also carries a visible one, which is the
-    // symmetric reading and means a Type can be used to withdraw a slice of the
-    // catalog outright.
-    const hiddenByTaxonomy =
-      hiddenCategories.has(feat.category) || (feat.types ?? []).some(t => hiddenTypes.has(t));
-    if (!forGM && !keep.has(uuid) && (uncurated || feat.hidden || hiddenByTaxonomy)) continue;
+    const visibility = resolveVisibility(feat, {
+      uncurated,
+      hiddenCategories,
+      hiddenTypes,
+      snapshot
+    });
+    if (!forGM && !keep.has(uuid) && visibility === 'hidden') continue;
     out.push({
       ...feat,
       ...source,
+      // Visible only because the character holds its prerequisite. Carried so the row
+      // can wear the chip without re-deriving anything, and so the rail can keep a
+      // taxonomy entry that has at least one revealed feat behind it.
+      revealed: visibility === 'revealed',
       // The GM's override wins over the auto-derived teaser. Spread order matters:
       // ...source would otherwise clobber it with the description-derived text.
       summary: feat.summary?.trim() || source.summary,

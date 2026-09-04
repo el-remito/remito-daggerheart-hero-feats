@@ -224,6 +224,44 @@ export function evaluateInvestment(rules, snapshot) {
   return orResult || andResult;
 }
 
+/* ── Prerequisites ────────────────────────────────────────────────────── */
+
+/**
+ * The requirement kinds that describe something a character HOLDS, as opposed to
+ * something they have grown into. Held: another Feat or Feature, a class, a subclass.
+ * Grown into: Level, Traits, resource capacity, investment in a Category.
+ *
+ * The distinction earns its keep for Secret Feats, which reveal on the held half and
+ * are still gated by the rest — acquire the prerequisite and every Feat hanging off it
+ * appears at once, some of them not yet takeable.
+ */
+export const PREREQUISITE_KINDS = ['feature', 'class', 'subclass'];
+
+/**
+ * Whether a feat states any prerequisite, and whether the character meets all of them.
+ *
+ * Derived from checkRequirements rather than by walking `requirements` by hand, so a
+ * future prerequisite kind joins this rule by being added to PREREQUISITE_KINDS alone,
+ * and the reveal can never disagree with the requirement line the player is shown.
+ *
+ * The free-text `expression` escape hatch is deliberately NOT a prerequisite: an atom
+ * cannot be classified as held-versus-grown without partially evaluating the grammar,
+ * and a rule that sometimes read an expression would mean two different things
+ * depending on which control the GM happened to type into. A feat whose only
+ * prerequisite lives in an expression reports `has: false`, which the registry surfaces
+ * as a warning rather than leaving it to be discovered by its silence.
+ *
+ * @param {object} feat      normalized feat record
+ * @param {object} snapshot  actor snapshot
+ * @returns {{has: boolean, met: boolean}}  met is false whenever has is false
+ */
+export function prerequisiteState(feat, snapshot) {
+  const clauses = checkRequirements(feat, snapshot ?? {}).filter(c =>
+    PREREQUISITE_KINDS.includes(c.kind)
+  );
+  return { has: clauses.length > 0, met: clauses.length > 0 && clauses.every(c => c.met) };
+}
+
 /**
  * Whole-feat eligibility, including the point cost. Cost is a flat 1 Feat Point.
  *

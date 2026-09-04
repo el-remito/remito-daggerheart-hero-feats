@@ -49,6 +49,7 @@ scripts/
     filters.mjs             catalog filter predicate and sort comparators
     statistics.mjs          catalog-shape, coverage-gap and adoption derivation
     curation.mjs            the Curation queue's membership rule and advance order
+    visibility.mjs          the withholding precedence: visible / hidden / revealed
     automation.mjs          Rule Automation: the derived-requirement rules
   apps/
     requirement-text.mjs    the ONLY place a requirement descriptor becomes display text
@@ -207,12 +208,25 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **The GM registry mirrors the player catalog** — same rail, same row shape, same `matchesFilters`
   predicate, so curation happens against the view the table sees. Only the player-facing switches
   (eligibility, hide-acquired) are left out, replaced by "uncurated only" / "hidden only". The
-  shared sections are ordered the same way in both templates — **search, Level, Type, Category** —
-  and nothing but source order keeps them agreeing. Type and Category are `<details>` in both since
-  v1.4.1; rail open-state is keyed by `data-rail`, never by index, so reordering is safe. The
-  catalog's own **eligibility switch sits between Level and Type** rather than with the trailing
-  switches, which is the one deliberate departure: the registry has no eligibility switch at all,
-  so the sections the two actually share are still in the same sequence.
+  shared sections are ordered the same way in both templates — **search, Clear filters, Level,
+  the narrowing switches, Type, Category** — and nothing but source order keeps them agreeing. Type
+  and Category are `<details>` in both since v1.4.1; rail open-state is keyed by `data-rail`, never
+  by index, so reordering is safe.
+
+  The **narrowing switches** (eligibility, Newly added) sit together directly under Level as of
+  v1.6.0, because both answer *which of these Feats do I want to look at*, while Type and Category
+  below them describe what a Feat IS. Newly added used to trail after Category, which put it at the
+  opposite end of the rail from the question it belongs to. The registry's copy of the section has
+  no eligibility switch, and that is the ONLY way the two rails differ. The registry's **uncurated
+  / hidden** switches stay below Category on purpose: they ask what the GM has yet to DO, not which
+  Feats to look at, so they are not part of the shared sequence.
+
+  **UPDATED is a chip, not a filter.** It was briefly both; a switch for it earns nothing that
+  reading the list does not already give, and every filter is a control a player has to understand
+  before they can ignore it. So `isUpdated` travels through the CONTEXT to the chip and stops
+  there — no `updatedOnly` in `blankFilterState`, no branch in `matchesFilters`, and no
+  `data-updated` attribute, since that attribute exists only so `matchesFilters` can stay a per-row
+  predicate with no context object. `isNew` still needs all four.
 - **A rail renders its own state, in both apps.** `filters.search`, the level values, each box's
   `checked` and `railOpen` all travel through the context. Filtering never re-renders, so for a
   long time nothing had to be carried — but both windows re-render for other reasons (an
@@ -436,6 +450,28 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   membership changed, and `_syncField` repaints each — the arrival gains the chip and whatever was
   tenth loses it. Repainting only the edited row left the second wearing a stale chip until the
   next full render, the exact lag the rest of `_refreshRow` exists to prevent.
+- **The exclude set is the ONE thing the Statistics tab persists**, and it is a `world` setting
+  (v1.6.0). "This sheet is a test dummy, not real play data" is a fact about the world, true for
+  whoever opens the tab — the opposite of `INVEST_LAYOUT`, which is a display preference on one
+  person's window, and the reason the two are scoped differently. It is `config: false` and edited
+  only by ticking a row, and it writes THROUGH rather than joining the four working copies: folding
+  it into `#baseline` would make the close prompt offer to save a view preference beside a GM's
+  feat edits, and the figures on screen have already moved, so a choice surviving the render but
+  not the window would be the one visible state that lies. The catalog's broad `updateSetting` hook
+  skips the key for the same reason it skips the layout — it changes nothing a player can see.
+  `_statsAxis` and `_showAllGaps` are still session-local; they change which rows are SHOWN, and
+  this changes what the figures ARE.
+- **Dates are formatted by `formatDay`, never by `toLocaleDateString`.** The Recent acquisitions
+  list followed whatever locale the browser was in, so one world showed two orders on two machines
+  — and 01/02 against 02/01 leaves a reader no way to tell which they have. DD/MM/YYYY, built from
+  the parts, stated once.
+- **"Most played Categories" is summed inside `buildAdoptionStats`, from the same `counted` list**
+  as every other figure there, so the exclude toggles move it too — counting it off the registry
+  somewhere else would have produced a panel describing two different tables. It measures acquired
+  **Feats**, not Feat Points and not a sum of Levels, which is the same measure `categoryCounts`
+  uses for Investment requirements, so a player's standing and this panel cannot tell two stories.
+  It returns Category **ids** and the app resolves labels against its working copy, exactly as the
+  reachability findings do.
 - **The Statistics ledger's exclude toggle re-renders, and the other two toggles do not.**
   `_onStatsAxis` and `_onToggleGaps` change which rows are *shown*; `_onToggleLedgerActor` changes
   what the figures *are* — Most taken, Recent and every counter — so there is no repaint short of
@@ -593,6 +629,74 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   collapsed under a button still reading "Show fewer" — the rail-renders-its-own-state trap, one
   panel down. Both button labels are in the markup with one hidden, so the handler toggles
   visibility and never writes a display string.
+- **Withholding is ONE resolver, and it lives in `logic/visibility.mjs`.** `resolveVisibility`
+  returns `visible | hidden | revealed` and holds the whole precedence, **strictest wins**: the
+  per-feat `hidden` flag and uncurated withhold unconditionally; then any hidden taxonomy entry NOT
+  in reveal mode; then, if every hidden entry on the feat IS in reveal mode, the prerequisite
+  decides; otherwise visible. It sits in `logic/` rather than inside `listFeats`, its only caller,
+  because it is the whole contract and worth exercising directly — `reveal-smoke.mjs` does, and
+  could not if it needed Foundry to run. Reading the taxonomy stays the CALLER's job: the resolver
+  is handed id → reveal-mode maps, exactly as `logic/statistics.mjs` is handed a collapsed
+  `withheld` rather than the entries themselves.
+- **The per-feat `hidden` flag is ABSOLUTE, and that is what makes it useful.** Secret Feats
+  automate *discovery* — a character-state question a rule can answer. They deliberately do NOT
+  automate *campaign pacing*, which is a story-clock question no rule over Traits, Levels and
+  investment can express, because the fact is not on the character sheet. `hidden` is the pacing
+  tool, unticked by hand when the story arrives; nothing a character does can undo it. One mechanism
+  serving both would have served both badly.
+- **A reveal keys on the PREREQUISITE, not the whole requirement set.** `PREREQUISITE_KINDS` is
+  `feature` / `class` / `subclass` — the things a character HOLDS, as against Level, Traits,
+  resources and investment, which they grow into. So a Feat appears the moment its prerequisite is
+  acquired even when it is still years above the character's Level: revealed, and visibly not yet
+  takeable. `prerequisiteState` derives this from `checkRequirements` rather than walking
+  `requirements` by hand, so a future prerequisite kind joins the rule by being named in one array,
+  and the reveal can never disagree with the requirement line the player is shown.
+- **The expression escape hatch is deliberately NOT a prerequisite.** An atom cannot be classified
+  as held-versus-grown without partially evaluating a free-text grammar, and a rule that sometimes
+  read one would mean two things depending on which control the GM typed into. A feat whose only
+  prerequisite lives there reports `has: false` and can never reveal — which is why
+  `#neverReveals` puts a warning chip on the row rather than letting it be found by its silence.
+- **Secret Feats needed a NEW HOOK, and without it the feature does not work.** `updateActor`
+  re-renders open catalogs only for this module's flags and `system.levelData`, and
+  `onFeatureDocumentChanged` returns `false` for an embedded item by design — so gaining a Feature
+  ON a character, the central case, refreshed nothing and the Feats appeared only on the next
+  reopen. The `createItem`/`deleteItem` branch re-renders **that one actor's** catalog and leaves
+  the pack caches alone: an embedded item is a copy, never a source Feature.
+- **A Feat cannot be stamped UPDATED until its curation has been COMMITTED, and that is an event,
+  not a window.** `category` and `level` are in `REQUIREMENT_FIELDS` because they feed Rule
+  Automation, so *curating* a Feat necessarily edits the very fields that later count as changes —
+  pick a Category, set a Level, author a requirement, and a Feat no player has ever seen would
+  announce itself as changed. **Authoring is not changing.** The boundary is the one the app already
+  keeps: `#curationCommitted` asks `#baseline`, the saved world as of the last `#commit` (Save) or
+  `#commitFeat` (Curation's File). Before it nothing stamps however many fields are touched; after
+  it every mechanically relevant edit does. Un-curating clears `curatedAt`, so a Feat re-curated
+  later is authored again — the same expression, no special case. This is why UPDATED can win the
+  row outright: where both chips apply the Feat really was published once and changed afterwards.
+- **`REQUIREMENT_FIELDS` gained a third reader rather than a second list.** It already excluded
+  `summary`, `hidden` and `type` deliberately, which is exactly "mechanically relevant, not the
+  description". `new-smoke.mjs` reads the literal out of the source file rather than restating it,
+  so adding a field there without deciding whether it counts as a change fails a test — the same
+  discipline the `r.category && r.count` filter got in v1.4.3.
+- **The recency chips are two windows, not one.** `newestCurated` and `newestUpdated` are the same
+  function over different timestamps (`newestBy`), and two SETS rather than one so a busy week of
+  curation cannot push every changed Feat out of ten slots they would share. Both are still a
+  property of the SET, recomputed per render, never persisted — `#recompute` is now the one
+  implementation and `_recomputeNewFeats` / `_recomputeUpdatedFeats` are its two callers, each
+  returning the uuids whose membership moved so exactly those rows repaint.
+- **The manual mark exists because the hook that would replace it cannot safely write.** Editing a
+  Feature's actions changes what a Feat DOES and reaches no registry field. An `updateItem` hook
+  could notice, but the registry is a world setting the GM edits through a working copy saved on
+  Save, so a background stamp written while that window is open is lost at their next Save — which
+  is the same reason the registry app is never re-rendered from document hooks. So the GM says so
+  instead, in the expanded row body (Re-sync and Reset stay in the always-visible `<summary>`;
+  these are one level deeper because they are an occasional correction). The button reflects the
+  STORED stamp, not chip membership: a control that switched itself off because an eleventh Feat
+  was stamped elsewhere would be reporting someone else's edit.
+- **Secret Feats are not audit supply, and the audit says so.** `buildInvestmentReach` asks what a
+  player can reach today, and a Feat waiting on a prerequisite cannot be counted on — so the
+  `withheld` predicate is unchanged. But a Category that passes only because its secrets were
+  excluded is a different kind of pass, so `secretsExcluded` is counted over the same records the
+  audit was given and reported under the summary.
 - **Four things are withheld from players, and `listFeats` applies all four**: uncurated feats (no
   Category), feats the GM flagged `hidden`, feats whose Category is flagged hidden, and feats
   carrying **any** hidden Type. A GM who registers a large pack and forgets to curate will see an
