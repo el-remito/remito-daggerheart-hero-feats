@@ -289,9 +289,15 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     // My Investments is a per-Category summary, not a Feat list, so the rail would be
     // four controls filtering nothing. Hidden here rather than by re-rendering, for the
     // same reason tab switching never re-renders: the rail would lose its state.
+    //
+    // Hiding the rail is NOT enough on its own: .rdhf-catalog-body is a two-track grid
+    // and the rail is item 1, so `display: none` promotes the main column into the
+    // 230px rail track and leaves the 1fr track empty. The body has to collapse to one
+    // track in the same breath, which is what is-summary does.
     const summary = this._tab === 'investments';
     const rail = el.querySelector(`.${PREFIX}-rail`);
     if (rail) rail.hidden = summary;
+    el.querySelector(`.${PREFIX}-catalog-body`)?.classList.toggle('is-summary', summary);
 
     for (const section of el.querySelectorAll(`.${PREFIX}-section`)) {
       const active = section.dataset.section === this._tab;

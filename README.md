@@ -154,6 +154,9 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.5.1
+- **Fixed: "My Investments" was squeezed into a strip down the left of the window.** The tab hides the filter rail beside it — there is nothing there for it to filter — but the window is a two-column layout, and hiding the rail slid the whole pane into the narrow column the rail had been occupying rather than letting it spread out. The tab bar was cut off and each Category's "unblocks N" ran off the edge. The pane now takes the full width, and lays the Categories out side by side when there is room for them
+
 ### v1.5.0
 - **Coverage gaps: "Show the other N".** The list of empty Category × Level combinations still opens capped at twelve, but the rest are one click away instead of merely counted — a GM could read that thirty combinations were missing with no way to learn which ones. Every gap is still one click from the Feats tab filtered to it
 - **"Automation reach" is now "Unreachable Feats", and it actually finds them.** It used to count how many Feats sat in a Category below a given Level, which meant two Level 5 Feats each demanding six from a Category holding five counted *each other* as investment — and the pair passed, though neither can ever be taken first. Reachability is now worked out from the ground up: nothing counts as investment until it is itself reachable

@@ -343,6 +343,13 @@ details[open] > summary .rdhf-arrow {
     min-height: 0;
 }
 
+/* My Investments hides the rail, and a grid does not reflow for a display:none item —
+   it just shifts the next one into the vacated track. Collapse to a single track so the
+   pane gets the whole window instead of the rail's 230px. */
+.rdhf-catalog-body.is-summary {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .rdhf-rail {
     display: flex;
     flex-direction: column;
@@ -2122,15 +2129,25 @@ details[open] > summary .rdhf-arrow {
 
 /* ── My Investments ───────────────────────────────────────────────────────── */
 
-/* A per-Category summary, not a Feat list: no rail beside it, so the pane is free to
-   use the full width and the rows can be wide and shallow. */
+/* A per-Category summary, not a Feat list: with the rail collapsed the pane owns the
+   whole window, which a single column of cards would leave two thirds empty. Auto-fit
+   columns instead — the same idiom the statistics panels use — with the minimum set by
+   what one tier row needs to stay on one line. Cards start at the top rather than
+   stretching, so a Category with one tier does not grow to match a neighbour with two. */
 .rdhf-invest-list {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    align-items: start;
     gap: 8px;
     margin: 8px 0 0;
     padding: 0;
     list-style: none;
+}
+
+/* The hint is a paragraph, and a paragraph the full width of an undivided window is
+   unreadable. */
+.rdhf-section[data-section="investments"] .rdhf-hint {
+    max-width: 80ch;
 }
 
 .rdhf-invest {
@@ -2164,9 +2181,9 @@ details[open] > summary .rdhf-arrow {
    use, so progress reads the same way on both sides of the module. */
 .rdhf-invest-tier {
     display: grid;
-    grid-template-columns: 3.5rem minmax(60px, 1fr) auto auto auto;
+    grid-template-columns: 3.2rem minmax(40px, 1fr) auto auto auto;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     font-size: var(--font-size-11, 0.7rem);
 }
 
