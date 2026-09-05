@@ -14,8 +14,8 @@ Open **Feat Registry** from the module settings (or the button under Game Settin
 | Tab | What it does |
 |---|---|
 | **Sources** | Register a compendium — every Feature inside becomes a Feat. Or drag a single Feature item anywhere onto the window. |
-| **Feats** | The full list. Curate or revise any one of them: Level, Category, Types, Requirements. |
-| **Curation** | A queue of everything still uncurated, one at a time, built for working through a freshly registered pack. |
+| **Feats** | Every **published** Feat. Revise any one of them: Level, Category, Types, Requirements. |
+| **Curation** | Every Feat not yet published, one at a time, built for working through a freshly registered pack. |
 | **Taxonomy** | Maintain the Category and Type lists. |
 | **Points** | The Feat Point formula, with a live preview. |
 | **Statistics** | How the catalog is distributed and what your table has actually taken. |
@@ -26,8 +26,9 @@ Nothing on any tab reaches your world until you press **Save** — the one excep
 Feature items are **never modified** — all metadata lives in a world setting keyed by item UUID, so
 locked compendia (including the Daggerheart SRD packs) work untouched.
 
-A Feat stays **uncurated** until you give it a Category, and uncurated Feats are hidden from
-players. The Feats tab shows a badge with how many are still waiting. Every world has a fixed
+A Feat is hidden from players until you **File** it on the Curation tab, and it cannot be filed
+until it has a Category. Filing is the only thing that publishes a Feat: **Save** stores your work
+without showing it to anyone. The Curation tab shows a badge with how many are still waiting. Every world has a fixed
 **General** Category for feats that need to be visible without belonging anywhere in particular —
 it cannot be renamed or deleted, and it always sorts first.
 
@@ -56,9 +57,17 @@ Requirements can demand any combination of:
 There is also an optional advanced expression field combining atoms with `AND` / `OR`, for example
 `classIs:Rogue AND tierAtLeast:2`.
 
+**Narrative requirements** are the exception to all of the above: conditions you state in words,
+for anything no rule can measure — "is a follower of the Deity of Storms", "is a Novice in at least
+one Crafting category". Each one is its own line, and each shows to players as a gold chip with a
+question mark. The module never checks them: a narrative requirement can never make a Feat
+ineligible and can never stop a purchase. The player is warned about it in the acquisition dialog
+and told to settle it with you. That also means it can never reveal a Secret Feat — a rule that
+cannot be evaluated would reveal it to everybody, always.
+
 ### Curation
 
-Registering a pack of two hundred Features leaves you with two hundred uncurated Feats and no
+Registering a pack of two hundred Features leaves you with two hundred unpublished Feats and no
 obvious place to start. The **Curation** tab is that place: a queue of everything still waiting,
 alphabetical, with one Feat's editor beside it holding only the fields you actually set while
 sorting a catalog — Level, Category, Types, the short and full descriptions, prerequisite Feats,
@@ -69,15 +78,19 @@ one does not cost you a trip to another tab.
 The full description is shown next to the teaser box on purpose: reading the Feature is how the
 teaser gets written.
 
-- **File** saves *that one Feat* straight to your world and moves you on — so a long curation pass
-  can never be lost, and you never curate the same Feat twice. It writes only that Feat: sources,
-  taxonomy and the point formula are still working copies and still need **Save**.
+- **File** *publishes* that one Feat and moves you on. It writes straight to your world, so a long
+  curation pass can never be lost — and only that Feat: sources, taxonomy and the point formula are
+  still working copies and still need **Save**.
+- **Save** stores everything you have done without publishing anything. A Feat you have given a
+  Category to but not filed stays in the queue, and stays invisible to players, until you file it.
 - **Skip** moves on without saving, and wraps around, so a Feat you passed over is reachable again.
-- Choosing a Category does **not** make a Feat vanish mid-edit. It stays in the queue, marked as no
-  longer outstanding, until you File it.
-- Filing a Feat that still has no Category is allowed and just means "not now" — it leaves the
-  queue for this session and is back the next time you open the Registry. The pane says so before
-  you press it.
+- Choosing a Category does **not** make a Feat vanish mid-edit, and it does not publish it either.
+  It stays in the queue, marked as ready to file, until you File it.
+- A Feat cannot be filed until it has a Category — the button says so and stays disabled. Use
+  **Skip** if you want to come back to it.
+- Publishing is one-way. To pull a Feat back, either **Reset** it (which clears its metadata) or
+  delete the Category it was filed under; both send it back to the queue. Characters who already
+  own it keep their copy either way.
 
 The queue is worked out from the registry each time, so there is nothing to keep in sync and
 nothing to reset.
@@ -153,6 +166,17 @@ https://raw.githubusercontent.com/el-remito/remito-daggerheart-hero-feats/main/m
 Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.7.1).
 
 ## Changelog
+
+### v1.7.0
+- **File now publishes.** A Feat stays invisible to players until you press **File** on the Curation tab — giving it a Category is no longer enough. Previously, setting a Category and pressing **Save** pushed the Feat live and dropped it out of the queue in the same stroke, which meant half-curated Feats could reach your table without anyone deciding they were ready
+- **Save stores your work without showing it to anyone.** Curate as many Feats as you like, save, close, come back tomorrow: they are all still in the queue, exactly as you left them, still hidden from players. The queue survives reloads now, so you can no longer lose your place in a long pass
+- **A Feat cannot be filed without a Category.** The button stays disabled and says why; **Skip** is there for a Feat you want to come back to
+- **The two tabs now split the catalog cleanly** — **Curation** holds everything not yet published, **Feats** holds everything that is. The "uncurated only" filter is gone because nothing on the Feats tab can be uncurated any more, and the Statistics grid’s holding-pen row now sends you to Curation
+- **Publishing is one-way.** To withdraw a Feat, **Reset** it or delete the Category it was filed under; both send it back to the queue and warn you first. Characters who already own it keep their copy
+- **Narrative requirements** — conditions you write in words, for anything no rule can measure: "is a follower of the Deity of Storms", "is a Novice in at least one Crafting category". Players see them on the Feat in gold, and are warned before they buy it, but the module never enforces them and they can never stop an acquisition. Your table settles them with you
+- **Long requirements no longer get cut off.** A requirement naming five Feats used to overflow its line and clip mid-word; it now wraps to as many lines as it needs
+- **The Sources tab’s search box stays put while you scroll** the results beneath it
+- Existing worlds are migrated on load: every Feat that was visible before the update stays visible, and nothing has to be re-filed
 
 ### v1.6.0
 - **Secret Feats: withheld until a character holds what they hang off.** Hide a Category or Type as usual, then set it to **withhold until met**, and every Feat filed there stays invisible to a player until that character holds the Feat, Feature, class or subclass it requires — at which point all of them appear at once, wearing a **REVEALED** chip until taken. The reveal keys on the prerequisite alone: a Feat’s Level, Traits and Investment still *gate* it, they no longer *hide* it, so a Feat can be revealed and not yet takeable. Nothing is stored per character and nothing needs re-saving; lose the prerequisite and an untaken Feat withdraws again, while one already acquired always stays

@@ -72,7 +72,9 @@ World setting `registry`:
   feats: {
     '<item uuid>': {
       uuid, level: 1,
-      category: null,            // null === UNCURATED === withheld from players
+      filedAt: 0,                // 0 === NEVER PUBLISHED === withheld from players
+      curatedAt: 0,              // when it was ANNOUNCED; stamped by File, drives NEW
+      category: null,            // null === uncurated === cannot be filed yet
       types: ['combat'],
       hidden: false,             // GM secret: withheld even once curated
       autoExempt: false,         // opts this feat out of every Rule Automation rule
@@ -82,6 +84,7 @@ World setting `registry`:
         resources: { hitPoints, stress, hope, evasion },   // minimum MAX values
         traits:    { agility … knowledge },
         features: [], classes: [], subclasses: [],          // any-of within each list
+        narrative: [],                                      // stated, NEVER evaluated
         categoryInvestment: [{ category, count, join }],   // join: connector to the PREVIOUS row
         expression: ''                                      // optional escape hatch
       }
@@ -111,17 +114,29 @@ the rule.
 
 **`general` is a fixed Category**, seeded from `DEFAULT_CATEGORIES` and re-inserted by
 `getCategories()` if a world ever loses it. It exists so a feat can be *curated* — and therefore
-visible to players — without the GM inventing a filing system first. `isFixedCategory()` gates
-renaming and deletion. It was a *type* until v1.1.0, which could never lift a feat out of uncurated;
-migration 1 files General-typed uncategorised feats under it and strips the type everywhere.
+FILEABLE — without the GM inventing a filing system first. (Before v1.7.0 a Category was itself
+visibility; now it is the precondition for File, which is the thing that publishes.)
+`isFixedCategory()` gates renaming and deletion. It was a *type* until v1.1.0, which could never
+lift a feat out of uncurated; migration 1 files General-typed uncategorised feats under it and
+strips the type everywhere.
 
 **Ordering lives in the accessors**, not at the call sites: `getCategories()` returns General first
 then alphabetical by displayed label, `getTypes()` alphabetical. That is the only way the two filter
 rails, the curation dropdowns and the Taxonomy tab can be guaranteed to agree.
 
-`SETTINGS.MIGRATION` holds an integer against `MIGRATION_VERSION`. A migration that throws leaves
-the number alone and is retried next load rather than half-applying and being forgotten. Migrations
-are GM-only, so every read path still has to tolerate un-migrated data.
+`SETTINGS.MIGRATION` holds an integer against `MIGRATION_VERSION` (**3** as of v1.7.0). A migration
+that throws leaves the number alone and is retried next load rather than half-applying and being
+forgotten. Migrations are GM-only, so every read path still has to tolerate un-migrated data.
+
+Migration 3 stamps `filedAt` for the publication gate, and it is the one migration that is a
+**tidy-up rather than a requirement**: `normalizeFeat` reads an entry with no `filedAt` key at all
+and a Category as published (`Number(stored.curatedAt) || 1` — the sentinel keeps the value a
+number), because under the old rule a Category WAS visibility. Without that inline default a world
+would go dark for every player until a GM next logged in, which is precisely the situation "every
+read path tolerates un-migrated data" exists to cover. `blankFeat` writes `filedAt: 0` explicitly so
+a genuinely new feat can never be mistaken for a legacy one. The migration is idempotent by its own
+`filedAt !== undefined` guard, not by the version alone, so a world saved between a failed run and a
+retry is not re-stamped with a later date.
 
 Actor flag `actor.flags['remito-daggerheart-hero-feats'].state`:
 
@@ -207,7 +222,7 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   registry's tabs *do* re-render, because each is a different form.
 - **The GM registry mirrors the player catalog** — same rail, same row shape, same `matchesFilters`
   predicate, so curation happens against the view the table sees. Only the player-facing switches
-  (eligibility, hide-acquired) are left out, replaced by "uncurated only" / "hidden only". The
+  (eligibility, hide-acquired) are left out, replaced by "hidden only". The
   shared sections are ordered the same way in both templates — **search, Clear filters, Level,
   the narrowing switches, Type, Category** — and nothing but source order keeps them agreeing. Type
   and Category are `<details>` in both since v1.4.1; rail open-state is keyed by `data-rail`, never
@@ -217,9 +232,11 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   v1.6.0, because both answer *which of these Feats do I want to look at*, while Type and Category
   below them describe what a Feat IS. Newly added used to trail after Category, which put it at the
   opposite end of the rail from the question it belongs to. The registry's copy of the section has
-  no eligibility switch, and that is the ONLY way the two rails differ. The registry's **uncurated
-  / hidden** switches stay below Category on purpose: they ask what the GM has yet to DO, not which
-  Feats to look at, so they are not part of the shared sequence.
+  no eligibility switch, and that is the ONLY way the two rails differ. The registry's **hidden
+  only** switch stays below Category on purpose: it asks what the GM has yet to DO, not which
+  Feats to look at, so it is not part of the shared sequence. Its **uncurated only** companion is
+  gone as of v1.7.0 — nothing on the Feats tab can be uncurated now, so the switch could only ever
+  match zero rows.
 
   **UPDATED is a chip, not a filter.** It was briefly both; a switch for it earns nothing that
   reading the list does not already give, and every filter is a control a player has to understand
@@ -245,6 +262,20 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   themselves `{ key, data }` descriptors, so `localizeCheck` recurses one level into
   them and terminates because an atom carries no branches of its own. All three joins
   live in `apps/requirement-text.mjs`.
+- **A `soft` descriptor is STATED and never evaluated, and it carries `met: true`.** That is the
+  whole of narrative requirements (v1.7.0): free GM prose for anything no rule can measure. `met`
+  being true is what makes `isEligible` need **no special case at all** — a soft clause can never
+  reach `evaluation.failures`, so it can never block an acquisition or the eligibility filter, which
+  is the same permissiveness an unrecognized expression atom already gets. The app layer reads
+  `soft` to colour the chip and to warn in the acquisition dialog. One descriptor per entry, because
+  the field is an ARRAY of strings: two soft conditions are two facts, and one giant chip is exactly
+  the readability failure `.rdhf-chip--req`'s wrapping rule exists to fix.
+  It is deliberately **NOT** in `PREREQUISITE_KINDS`, for the stronger version of the reason the
+  expression hatch is not: prose cannot be classified as held-versus-grown OR evaluated, so
+  revealing a Secret Feat on one would reveal it to everybody, always. `describeRequirements` returns
+  `{ label, soft }` rather than bare strings so the GM's Requires line can mark them too — the
+  registry mutes every requirement chip because it has no character to measure against, but "the
+  module cannot check this" is not a verdict about anyone.
 - **The expression escape hatch is parsed for display, and `parseExpression` shares
   `splitAtom` with `evaluateAtom`.** `RDHF.requirement.expression` is `"{value}"`, and
   before v1.4.1 `value` was the GM's raw text — so a player was shown
@@ -300,8 +331,18 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   It was already the per-feat Hidden chip's tone; v1.4.4 gives it to the taxonomy-withheld chips,
   the rail markers and the Taxonomy tab's lit eye (which was gold until then — a third signal for a
   fact the module already had a colour for). The dashed edge is a second, orthogonal channel meaning
-  "not stated on this feat", borrowed from `.rdhf-chip--uncurated`; a chip withheld by its Category
+  "not stated on this feat", now named `.rdhf-chip--empty`; a chip withheld by its Category
   wears both, so it reads as withheld-but-not-by-this-feat and cannot be mistaken for either parent.
+  **Gold is the neutral-informational tone**, worn by Level and Category chips — and, since v1.7.0,
+  by a narrative requirement chip, whose whole meaning is "stated, but not checkable". It is not a
+  verdict, which is precisely why it may not borrow met-green or unmet-red. The only other gold chip
+  is NEW, which is the module's one FILLED chip; outline versus fill is what keeps the two apart.
+- **`.rdhf-chip` is `white-space: nowrap`, and `.rdhf-chip--req` is the one exception.** Every other
+  chip is a short label and must never wrap — that is what keeps a row header on one line. A
+  requirement clause is a SENTENCE (an any-of list of five Feature names, an investment chain, a
+  GM's prose), so nowrap made it overflow its flex line and clip mid-word. The override also
+  restates `align-items: flex-start`, because `.rdhf-chip` centres and a two-line chip must put its
+  icon beside the FIRST line.
 - **Working copy, save on Save.** The registry app clones the setting into `#config`, mutates it on
   every `input`, and writes only in `_onSave`. Open `<details>` state is captured before
   `super.render()` and restored by uuid, never by index.
@@ -312,18 +353,28 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   dozen of those, and the next one to forget the flag would silently discard the GM's work, which is
   the exact bug this exists to fix. The comparison sorts object keys at every depth because
   `#commitFeat` rebases one uuid-keyed entry and insertion order would otherwise read as an edit.
-- **Curation's File is the ONE surgical write.** `saveFeatEntry` merges a single feat's entry into
-  the *saved* registry and `#commitFeat` rebases only that key of `#baseline`; taxonomy, sources and
-  the formula stay working copies and still need Save. Reusing `#commit()` would have pushed a
-  half-renamed Category live as a side effect of filing a feat AND stopped the close prompt from
-  firing, because everything would have been committed through a side door. It also skips the write
-  entirely when the entry is unchanged.
-- **The Curation queue is derived and session-local.** Membership is
-  `(uncurated OR already seen) AND NOT filed`, held in two `Set`s on the app instance — no setting,
-  no flag, no migration. The `seen` half is load-bearing: choosing a Category stops a feat being
-  uncurated, and a queue derived strictly from that would delete the row out from under the GM
-  before they could reach its dependencies or traits. Reopening the registry rebuilds the backlog
-  from the registry itself, which is what makes filing an uncurated feat safe.
+- **Curation's File is the ONE surgical write, and since v1.7.0 it is also the PUBLICATION
+  EVENT.** `saveFeatEntry` merges a single feat's entry into the *saved* registry and `#commitFeat`
+  rebases only that key of `#baseline`; taxonomy, sources and the formula stay working copies and
+  still need Save. Reusing `#commit()` would have pushed a half-renamed Category live as a side
+  effect of filing a feat AND stopped the close prompt from firing, because everything would have
+  been committed through a side door.
+  `_onCurationFile` stamps `filedAt` (and `curatedAt`) into the working copy **before** the commit
+  and rolls both back if it throws: the stamp IS the publication, so a working copy saying published
+  while the world said nothing would drop the row out of the queue and be believed. `filedAt` uses
+  `||=` because a re-file must not move the publication date; `curatedAt` is assigned outright
+  because a re-file IS a re-announcement. The old "skip the write when unchanged" short-circuit is
+  now unreachable on a first File, which is the point — it used to let File remove a row from the
+  session queue having written nothing at all.
+- **The Curation queue is derived from the WORLD, and holds no session state.** Membership is
+  plain `NOT published`. Both `Set`s that used to live on the app instance — `_curationSeen` and
+  `_curationFiled` — are gone, and they were the bug: a GM who curated four Feats and pressed Save
+  published them and lost them from the queue in the same stroke, because `seen` died with the
+  window while `uncurated` had already stopped being true. Publication is now the event that removes
+  a row, so nothing has to be remembered and a half-curated Feat survives a reload.
+  `outstanding` (no Category) and `ready` (waiting on File) split the queue, and `outstanding` is
+  counted over the queue rather than the whole list — identical populations, since `uncurated`
+  implies `!published` for every writer, and the queue says it more directly.
 - **The Curation editor is the Feats row's controls in a second host.** It renders from the same
   feat views and carries `data-uuid`, so `_syncField`, `_renderInvestment`, `_renderReferenceChips`,
   `_bindReferenceSearch`, `_renderAtomRows` and `_loadFullDescription` all apply unchanged — every
@@ -340,9 +391,10 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `_addFeatureReference` had all shipped Feats-only. **Never write the selector at a call site.**
   `FEAT_HOST` (`.rdhf-reg-feat[data-uuid], .rdhf-cur-editor[data-uuid]`) is declared once at the
   top of `feat-registry-config.mjs` and `_featHost(el)` is the only way a handler should resolve
-  its feat. `_paintBadges()` exists for the same reason one rail below: the uncurated badge sits on
-  Curation (the tab that clears it, not the one that lists it), and a `querySelector` for it would
-  paint only the first badge a nav ever grows.
+  its feat. `_paintBadges()` is **gone** as of v1.7.0: the badge counts unpublished feats, which is
+  exactly the queue length, and nothing can move it without a full render — File, Reset and deleting
+  a Category all call `render()`. Handlebars writes it from `unpublishedCount` and it is never
+  repainted.
 - **Selecting a queue feat re-renders; editing one does not.** The pane is a whole form, and
   rebuilding it by hand would duplicate every control the Feats tab declares. So `render()` captures
   and restores the queue's own scroller (`.rdhf-cur-queue-scroll`) alongside `.rdhf-reg-scroll`, and
@@ -422,9 +474,17 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   the number the panel has always printed.
 - **Supply is what a player can ACQUIRE, so all four withholds drop out**, not just `feat.hidden`.
   The app collapses them into a single `withheld` per record in `_buildStats`, because reading the
-  taxonomy is the app's job and not `logic/`'s; uncurated is folded in there too, which is why the
-  audit carries no separate branch for it. Exempt feats and feats with authored rows are still
-  supply.
+  taxonomy is the app's job and not `logic/`'s; **unpublished** is folded in there too, which is why
+  the audit carries no separate branch for it — and it subsumes the old uncurated test, since File
+  requires a Category. A curated-but-unfiled feat is therefore not supply, which is right: nobody
+  can acquire it. Exempt feats and feats with authored rows are still supply.
+  The Statistics **heat grid** needs the same test for a different reason: its Category-row predicate
+  is `isPublished(feat) && feat.category === rowId`, and without that guard a curated-but-unfiled
+  feat counts in BOTH its Category row and the not-published pen, the column totals exceed the feat
+  count, and the pen stops being a pen. The consequence to accept is that a Category whose feats are
+  all unfiled reads as an empty Category in Coverage gaps — correct under the new model, and one
+  click from being fixed. `secret()` and `#neverReveals` moved to `isPublished` too: both mean
+  "withheld ONLY by a reveal-mode entry", and an unfiled feat is withheld for a stronger reason.
 - **Findings group by *(Category, Level, requirement)*** and are ordered **lowest Level first**
   inside a Category, Categories by their worst shortfall. Under a fixpoint a blockage cascades —
   unreachable Level 5 feats make the Level 6 ones unreachable too, with a bigger shortfall — so the
@@ -436,8 +496,8 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   support a single Level 10 feat (17 before the v1.4.2 retune; `reach-smoke.mjs` derives the figure
   rather than restating it).
 - **"Newly added" is a property of the SET, and that is why nothing is stored per feat.**
-  `curatedAt` on a registry entry is a timestamp, stamped in `_syncField`'s `category` case for the
-  moment a feat gained a Category (and cleared to 0 when it loses one) — but *membership* of the
+  `curatedAt` on a registry entry is a timestamp, stamped by **Curation's File** for the moment a
+  feat was ANNOUNCED to players (and cleared to 0 when it is unpublished) — but *membership* of the
   newest ten is decided by `newestCurated()` over the whole list, once per render, because the
   tenth-newest feat stops being new when an eleventh is filed with nothing about it changing. So
   the flag reaching the row is `isNew`, derived, never persisted, and `matchesFilters` stays a
@@ -446,6 +506,14 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   PLAYER receives, so a withheld feat never occupies one of the ten slots. **No migration**:
   `normalizeFeat`'s inline default reads an entry written before v1.5.0 as `curatedAt: 0`, and 0 is
   never new.
+  **The STAMP moved in v1.7.0; the reader did not, and that is deliberate.** `_syncField`'s
+  `category` case no longer stamps, because gaining a Category no longer makes a Feat visible — a
+  Feat can now sit curated in the queue for a week before anyone sees it. Pointing the window at
+  `filedAt` instead would have been the obvious move and is a trap: `_onMarkRecency` is a TOGGLE
+  (`feat[field] = Number(feat[field]) > 0 ? 0 : Date.now()`), so clicking a lit "Mark as New" would
+  write `filedAt = 0` and **unpublish the Feat** — turning a cosmetic control into the Unpublish
+  action this design deliberately does not have. Moving the stamp costs one line and leaves
+  `newestCurated`, `#recompute`, `_onMarkRecency`, `_paintRecencyButtons` and `markedNew` untouched.
 - **Curating one feat repaints two rows.** `_recomputeNewFeats()` returns the uuids whose
   membership changed, and `_syncField` repaints each — the arrival gains the chip and whatever was
   tenth loses it. Repainting only the edited row left the second wearing a stale chip until the
@@ -600,6 +668,16 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   Level off a class pack's `system.features[]` parent — and **no "dismiss / not a Feat" flag**, on
   the explicit basis that only packs consisting entirely of Features are ever registered, so the
   queue always reaches zero on its own.
+- Publication scope decisions worth not re-litigating (v1.7.0): **publish is a ONE-WAY LATCH** —
+  File is the gate for FIRST publication only, and afterwards editing on the Feats tab goes live on
+  Save exactly as before, which is what makes "no File button on the Feats tab" true; **there is no
+  Unpublish action**, the routes back being Reset (destructive) and deleting the Category, both of
+  which warn; **the two tabs PARTITION the registry**, Curation holding everything unpublished and
+  Feats everything published, nothing in both and nothing in neither; and the Feats tab's Category
+  `<select>` therefore has **no blank option**, because offering one would be an Unpublish control
+  by the back door. The Curation tab's copy keeps it.
+  Filing an uncurated feat used to be allowed and meant "done for now"; publishing one is
+  meaningless, so the button is disabled and **Skip** carries that intent instead.
 - The Statistics tab **derives everything and stores nothing** — no setting, no flag, no migration.
   It reads the registry app's *working copy*, so a Category assigned a moment ago is reflected
   before Save, and it is computed **only while that tab is open**: the Feats tab re-renders on every
@@ -631,9 +709,16 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   visibility and never writes a display string.
 - **Withholding is ONE resolver, and it lives in `logic/visibility.mjs`.** `resolveVisibility`
   returns `visible | hidden | revealed` and holds the whole precedence, **strictest wins**: the
-  per-feat `hidden` flag and uncurated withhold unconditionally; then any hidden taxonomy entry NOT
-  in reveal mode; then, if every hidden entry on the feat IS in reveal mode, the prerequisite
-  decides; otherwise visible. It sits in `logic/` rather than inside `listFeats`, its only caller,
+  per-feat `hidden` flag and **not published** withhold unconditionally; then any hidden taxonomy
+  entry NOT in reveal mode; then, if every hidden entry on the feat IS in reveal mode, the
+  prerequisite decides; otherwise visible. Step 1 returns BEFORE the taxonomy is read, which is what
+  stops a reveal-mode Category resurrecting an unfiled Feat: publication is strictly stronger than
+  any reveal. The argument's DEFAULT flipped with it — `uncurated = false` defaulted a forgetful
+  caller to permissive, `published = false` defaults to withholding, so an omission now fails loudly
+  with an empty catalog rather than leaking quietly. `isPublished` lives in this file rather than
+  beside `isUncurated` in `data/registry.mjs` because `logic/statistics.mjs` needs it and cannot
+  import from `data/`; `isUncurated` stays there and now answers a different question, "can this be
+  filed?". It sits in `logic/` rather than inside `listFeats`, its only caller,
   because it is the whole contract and worth exercising directly — `reveal-smoke.mjs` does, and
   could not if it needed Foundry to run. Reading the taxonomy stays the CALLER's job: the resolver
   is handed id → reveal-mode maps, exactly as `logic/statistics.mjs` is handed a collapsed
@@ -669,9 +754,15 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   announce itself as changed. **Authoring is not changing.** The boundary is the one the app already
   keeps: `#curationCommitted` asks `#baseline`, the saved world as of the last `#commit` (Save) or
   `#commitFeat` (Curation's File). Before it nothing stamps however many fields are touched; after
-  it every mechanically relevant edit does. Un-curating clears `curatedAt`, so a Feat re-curated
-  later is authored again — the same expression, no special case. This is why UPDATED can win the
-  row outright: where both chips apply the Feat really was published once and changed afterwards.
+  it every mechanically relevant edit does. This is why UPDATED can win the row outright: where both
+  chips apply the Feat really was published once and changed afterwards.
+  **It reads `filedAt` as of v1.7.0, not `curatedAt`.** The old test was a proxy that was exact only
+  while a saved Category WAS publication; once File is the gate, a footer Save would push the stamp
+  into the baseline and arm UPDATED for a Feat nobody has seen. `filedAt` is the fact itself, so
+  "authoring is not changing" finally has a real publication event as its boundary. Unpublishing
+  moves the WORKING copy while this reads the BASELINE, so edits keep stamping until the next Save,
+  after which the Feat is authored again — exactly how un-curating behaved, same expression, no
+  special case.
 - **`REQUIREMENT_FIELDS` gained a third reader rather than a second list.** It already excluded
   `summary`, `hidden` and `type` deliberately, which is exactly "mechanically relevant, not the
   description". `new-smoke.mjs` reads the literal out of the source file rather than restating it,
@@ -697,12 +788,15 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `withheld` predicate is unchanged. But a Category that passes only because its secrets were
   excluded is a different kind of pass, so `secretsExcluded` is counted over the same records the
   audit was given and reported under the summary.
-- **Four things are withheld from players, and `listFeats` applies all four**: uncurated feats (no
-  Category), feats the GM flagged `hidden`, feats whose Category is flagged hidden, and feats
-  carrying **any** hidden Type. A GM who registers a large pack and forgets to curate will see an
-  empty player catalog — the Feats tab badge counts them. All four are overridden by `keepUuids`,
-  which the catalog fills with the character's own acquisitions, so a feat already owned never
-  disappears from **My Feats** because the GM later hid it or cleared its Category.
+- **Four things are withheld from players, and `listFeats` applies all four**: **unpublished** feats
+  (`filedAt === 0`), feats the GM flagged `hidden`, feats whose Category is flagged hidden, and feats
+  carrying **any** hidden Type. Still four, not five: unpublished sits where uncurated used to and
+  SUBSUMES it, because File requires a Category and so nothing published can lack one. A GM who
+  registers a large pack and forgets to file will see an empty player catalog — the Curation tab
+  badge counts them. All four are overridden by `keepUuids`, which the catalog fills with the
+  character's own acquisitions, so a feat already owned never disappears from **My Feats** because
+  the GM later hid it, unpublished it, or deleted the Category it was filed under. That last path is
+  new and makes the override load-bearing rather than theoretical.
   The Type test is **any, not all**, and that is a decision, not an oversight: a feat tagged both
   Combat and Downtime is withheld the moment Downtime is hidden. The symmetric reading was chosen
   so a Type can withdraw a slice of the catalog outright — the alternative (a hidden Type only

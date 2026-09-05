@@ -83,12 +83,16 @@ export function localizeCheck(check) {
  * The feat's own Level is dropped. It is a requirement, but the row already carries a
  * Level chip and repeating it in the same line is noise.
  *
+ * Returns `{ label, soft }` rather than bare strings. Every `met` here is meaningless and
+ * discarded, but `soft` is not a verdict — it says the module cannot reach one — so the
+ * GM's line has to be able to mark those clauses the same way the player's does.
+ *
  * @param {object} feat  normalized feat record
  * @param {{categoryLabels?: object, featLabels?: object}} labels
- * @returns {string[]}
+ * @returns {Array<{label: string, soft: boolean}>}
  */
 export function describeRequirements(feat, { categoryLabels = {}, featLabels = {} } = {}) {
   return checkRequirements(feat, { categoryLabels, featLabels })
     .filter(check => check.kind !== 'level')
-    .map(check => localizeCheck(check).label);
+    .map(check => ({ label: localizeCheck(check).label, soft: check.soft === true }));
 }

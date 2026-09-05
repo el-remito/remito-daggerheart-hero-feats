@@ -130,15 +130,27 @@
     color: var(--rdhf-met);
 }
 
-.rdhf-chip--uncurated {
+/* "Not published yet" — withheld from players, so it wears the module's one withheld
+   tone. The dashed edge it used to carry meant "not stated on this Feat", which fitted
+   *uncurated* (a Category is missing) and does not fit this: nothing is missing, it
+   simply has not been filed. */
+.rdhf-chip--unpublished {
+    border-color: var(--rdhf-unmet);
+    color: var(--rdhf-unmet);
+}
+
+/* The dashed muted look under its own name, for the Statistics panel's empty-Category
+   chips — they were only ever borrowing the old uncurated chip's rules. */
+.rdhf-chip--empty {
     border-style: dashed;
     color: var(--rdhf-ink-muted);
 }
 
 /* The one FILLED chip, which is the point: "new" is not a state of the Feat the way
-   owned, uncurated and withheld are, so it gets its own channel rather than a fourth
-   colour competing with them. Gold is the module's attention tone and is not otherwise
-   spoken for — unmet-red means withheld, met-green means owned. */
+   owned, unpublished and withheld are, so it gets its own channel rather than a fourth
+   colour competing with them. Gold is the module's attention tone — unmet-red means
+   withheld, met-green means owned. Gold OUTLINE is spoken for as of v1.7.0 (a narrative
+   requirement, stated but not checkable); filled versus outlined keeps the two apart. */
 .rdhf-chip--new {
     border-color: var(--rdhf-gold);
     background: var(--rdhf-gold-dim);
@@ -149,6 +161,21 @@
     font-size: var(--font-size-10, 0.63rem);
 }
 
+/* Every other chip is a short label and must never wrap — that is what keeps the row
+   headers on one line. A requirement clause is a SENTENCE: an any-of list of five
+   Feature names, an investment chain, or a GM's own prose. .rdhf-chip's nowrap made it
+   overflow its flex line and clip, so this is the one chip allowed to give.
+   .rdhf-chip centres its content, which is wrong once there are two lines: the icon has
+   to sit beside the FIRST one. */
+.rdhf-chip--req {
+    white-space: normal;
+    max-width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    text-align: left;
+    border-radius: 6px;
+}
+
 .rdhf-chip--req.is-met {
     border-color: color-mix(in srgb, var(--rdhf-met) 45%, transparent);
     color: var(--rdhf-met);
@@ -157,6 +184,15 @@
 .rdhf-chip--req.is-unmet {
     border-color: color-mix(in srgb, var(--rdhf-unmet) 45%, transparent);
     color: var(--rdhf-unmet);
+}
+
+/* Stated by the GM, uncheckable by the module. Gold because it is INFORMATIONAL and not
+   a verdict — met-green and unmet-red are both verdicts, and this clause has none. Gold
+   is already the module's neutral-informational tone (.rdhf-chip--level, --category); the
+   only other gold chip is NEW, which is FILLED, so outline versus fill keeps them apart. */
+.rdhf-chip--req.is-soft {
+    border-color: var(--rdhf-gold-soft);
+    color: var(--rdhf-gold);
 }
 
 .rdhf-icon-btn,
@@ -251,6 +287,22 @@ details[open] > summary .rdhf-arrow {
     border-radius: 3px;
     background: var(--rdhf-panel-deep);
     color: var(--rdhf-ink-muted);
+}
+
+/* The Sources tab scrolls as one block on .rdhf-registry-body, so its search box can pin
+   to that scrollport and the GM keeps hold of it while reading the results.
+   Scoped away from the split tabs (Feats, Curation): their rails scroll separately and
+   already keep their search in view.
+   A sticky element is pinned by its MARGIN box, not its border box — the v1.5.3 lesson —
+   so any top margin would offset the stuck bar and open a transparent band above it for
+   rows to travel through. Zeroed here; the breathing space is the pane's own padding,
+   which scrolls away underneath. The opaque background it already carries is what hides
+   the rows passing beneath. */
+.rdhf-pane:not(.rdhf-pane--split) > .rdhf-search-wrap {
+    position: sticky;
+    top: 0;
+    margin-top: 0;
+    z-index: 2;
 }
 
 .rdhf-search-wrap input {
@@ -456,7 +508,7 @@ details[open] > summary .rdhf-arrow {
     border-left: 3px solid var(--rdhf-met);
 }
 
-.rdhf-feat.is-uncurated {
+.rdhf-feat.is-unpublished {
     border-style: dashed;
 }
 
@@ -743,10 +795,6 @@ details[open] > summary .rdhf-arrow {
     background: var(--rdhf-panel);
 }
 
-.rdhf-reg-feat.is-uncurated {
-    border-style: dashed;
-}
-
 .rdhf-reg-summary {
     display: flex;
     align-items: center;
@@ -1018,7 +1066,7 @@ details[open] > summary .rdhf-arrow {
     width: 100%;
 }
 
-/* The registry's uncurated badge is a warning and reads red; a plain count is not. */
+/* The registry's unpublished badge is a warning and reads red; a plain count is not. */
 .rdhf-tab-badge--count {
     background: var(--rdhf-gold-soft);
     color: var(--rdhf-ink);
@@ -1198,6 +1246,23 @@ details[open] > summary .rdhf-arrow {
 
 .rdhf-investment-row--first {
     grid-template-columns: minmax(0, 1fr) 70px auto;
+}
+
+/* Same shape as the investment list one block up, deliberately: both are "a stack of
+   rows the GM adds to", and the two are rendered side by side in the same fieldset. */
+.rdhf-narrative-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+/* Two columns rather than the investment row's four: there is nothing to line up
+   against but the remove button. */
+.rdhf-narrative-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
 }
 
 .rdhf-join-select {
@@ -1544,7 +1609,7 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-ink-muted);
 }
 
-.rdhf-heat-table tr.is-uncurated .rdhf-heat-rowhead {
+.rdhf-heat-table tr.is-unpublished .rdhf-heat-rowhead {
     font-style: italic;
     color: var(--rdhf-ink-muted);
 }
@@ -2079,6 +2144,14 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-ink-muted);
 }
 
+/* The one clause that keeps its colour in the registry. The muting above exists because
+   the GM has no character to measure a requirement against — but "the module cannot check
+   this" is not a verdict about anyone, and it is the GM who needs to see at a glance which
+   clauses they left unenforceable. */
+.rdhf-reg-reqs .rdhf-chip--req.is-soft {
+    color: var(--rdhf-gold);
+}
+
 /* ── v1.4.2: hiding a Category or Type ────────────────────────────────────── */
 
 /* The taxonomy row is a flex line, so the toggle only has to refuse to stretch —
@@ -2139,7 +2212,7 @@ details[open] > summary .rdhf-arrow {
 
 /* Two facts, two channels, so they compose rather than compete: --rdhf-unmet is the
    module's "withheld from players" tone, already worn by .rdhf-chip--hidden for the
-   per-feat flag; the dashed edge is .rdhf-chip--uncurated's "not stated on this Feat"
+   per-feat flag; the dashed edge is .rdhf-chip--empty's "not stated on this Feat"
    tone. A chip withheld by its Category or Type is both — withheld, but not by
    anything set on the Feat itself — so it takes both and cannot be confused with
    either parent. */

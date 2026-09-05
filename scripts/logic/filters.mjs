@@ -2,7 +2,7 @@
  * filters.mjs
  * Pure catalog filtering and sorting. Operates on "feat views" — the flattened records
  * the catalog builds in _prepareContext ({ uuid, name, level, category, types[],
- * description, eligible, owned, uncurated }).
+ * description, eligible, owned, published }).
  *
  * Filtering runs on every keystroke and never triggers a re-render (the catalog toggles
  * row visibility in place), so these must stay cheap and allocation-light.
@@ -37,8 +37,10 @@ export function blankFilterState() {
  * matchesFilters stay a per-row predicate and lets both windows filter from data
  * attributes without a context object.
  *
- * A Feat that has never been curated carries 0 and is never new: "newly added" means
- * newly made available to players, which is the moment it gained a Category.
+ * A Feat that has never been published carries 0 and is never new. Since v1.7.0 the
+ * stamp is written by Curation's File, so "newly made available to players" is literally
+ * what this measures rather than a proxy for it — gaining a Category no longer makes a
+ * Feat visible, and so no longer makes it new.
  *
  * @param {Array<object>} views  feat views carrying `uuid` and `curatedAt`
  * @param {number} [limit]
@@ -128,7 +130,3 @@ export function byLevelThenName(a, b) {
   return (a.level ?? 0) - (b.level ?? 0) || String(a.name).localeCompare(String(b.name));
 }
 
-/** GM registry order: uncurated first (they need attention), then level, then name. */
-export function byCurationThenLevel(a, b) {
-  return Number(b.uncurated) - Number(a.uncurated) || byLevelThenName(a, b);
-}

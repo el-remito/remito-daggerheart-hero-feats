@@ -15,11 +15,36 @@
 import { prerequisiteState } from './requirements.mjs';
 
 /**
+ * Whether a Feat has been published — filed by the GM on the Curation tab, and therefore
+ * available to players at all. 0 = never filed.
+ *
+ * It lives here rather than beside isUncurated in data/registry.mjs because three layers
+ * need it and the import direction is one-way (apps/ -> data/ -> logic/): logic/statistics.mjs
+ * cannot reach data/. This file already owns the withholding contract, and statistics.mjs
+ * already imports two logic/ siblings rather than restating a rule they share.
+ *
+ * It deliberately does NOT re-test `category`. `published => curated` is an invariant kept
+ * by the two writers — File requires a Category, and clearing a Category clears this stamp —
+ * not enforced structurally. The one way to break it is a hand-edited import, the same
+ * exposure that already lets an import name a Category no taxonomy entry has.
+ *
+ * @param {object} feat
+ * @returns {boolean}
+ */
+export function isPublished(feat) {
+  return Number(feat?.filedAt) > 0;
+}
+
+/**
  * STRICTEST WINS, and the order is the contract:
  *
- *   1. uncurated, or the per-feat `hidden` flag → hidden, unconditionally. That flag is
- *      the GM's pacing tool: a Feat held back because the story has not reached it must
- *      not be revealable by anything a character does, only by the GM unticking it.
+ *   1. NOT published, or the per-feat `hidden` flag → hidden, unconditionally. Publication
+ *      is not a *reason* a visible Feat is withheld; it is the precondition for being
+ *      visible at all, which is why it belongs in step 1 rather than as a fifth clause.
+ *      It also SUBSUMES the old uncurated withhold: File requires a Category, so nothing
+ *      published can lack one. The `hidden` flag beside it is the GM's pacing tool: a Feat
+ *      held back because the story has not reached it must not be revealable by anything a
+ *      character does, only by the GM unticking it.
  *   2. any hidden taxonomy entry on the Feat that is NOT in reveal mode → hidden. "Hide
  *      this Category" therefore stays an absolute promise, and cannot be undone by an
  *      unrelated tag that happens to be revealable.
@@ -33,9 +58,15 @@ import { prerequisiteState } from './requirements.mjs';
  * the honest reading of "reveal when the prerequisite is met"; the registry warns about
  * it on the row rather than letting it be discovered by its silence.
  *
+ * Step 1 returns BEFORE the taxonomy is read, which is what stops a reveal-mode Category
+ * resurrecting an unfiled Feat: publication is strictly stronger than any reveal.
+ *
  * @param {object} feat  normalized feat record
  * @param {object} args
- * @param {boolean} args.uncurated
+ * @param {boolean} args.published  see isPublished. The default is FALSE, and the polarity
+ *   matters: `uncurated = false` used to default a forgetful caller to permissive, showing
+ *   everything. This defaults to withholding, matching `snapshot = null` below — a caller
+ *   that omits the flag now fails loudly with an empty catalog rather than leaking quietly.
  * @param {Map<string, boolean>} args.hiddenCategories  id → whether it is reveal-mode
  * @param {Map<string, boolean>} args.hiddenTypes       id → whether it is reveal-mode
  * @param {object|null} args.snapshot   the actor to measure a reveal against
@@ -43,9 +74,9 @@ import { prerequisiteState } from './requirements.mjs';
  */
 export function resolveVisibility(
   feat,
-  { uncurated = false, hiddenCategories = new Map(), hiddenTypes = new Map(), snapshot = null } = {}
+  { published = false, hiddenCategories = new Map(), hiddenTypes = new Map(), snapshot = null } = {}
 ) {
-  if (!feat || uncurated || feat.hidden === true) return 'hidden';
+  if (!feat || !published || feat.hidden === true) return 'hidden';
 
   const modes = [];
   if (hiddenCategories.has(feat.category)) modes.push(hiddenCategories.get(feat.category) === true);

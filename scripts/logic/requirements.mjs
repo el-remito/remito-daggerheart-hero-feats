@@ -29,6 +29,10 @@ export function blankRequirements() {
     classes: [],
     subclasses: [],
     categoryInvestment: [],
+    // Conditions the module states but can never CHECK — "is a follower of Deity X",
+    // "is a Novice in at least one Crafting category". One string per condition, not one
+    // blob: two soft conditions are two facts, and each earns its own chip.
+    narrative: [],
     expression: ''
   };
 }
@@ -56,6 +60,11 @@ export function normalizeRequirements(reqs) {
           count: Number(r.count) || 0,
           join: i === 0 ? null : r.join === 'or' ? 'or' : 'and'
         }))
+      : [],
+    // Blank entries are dropped rather than kept: an empty chip states nothing, and the
+    // GM's editor leaves one behind every time a row is cleared instead of removed.
+    narrative: Array.isArray(reqs.narrative)
+      ? reqs.narrative.map(n => String(n ?? '')).filter(n => n.trim())
       : [],
     expression: typeof reqs.expression === 'string' ? reqs.expression : ''
   };
@@ -181,6 +190,25 @@ export function checkRequirements(feat, snapshot) {
     });
   }
 
+  // Narrative requirements — stated, never evaluated. ONE descriptor per entry, so a
+  // long list of them wraps as separate chips rather than one unreadable clause.
+  //
+  // `met: true` is the deliberate part, and it is what makes isEligible need no special
+  // case at all: a clause the module cannot judge must never silently lock a Feat away,
+  // which is the same permissiveness an unrecognized expression atom already gets. `soft`
+  // is the flag the app layer reads to colour the chip and to warn at the point of
+  // purchase — the player is told the module is not checking this, and asked to settle it
+  // with their GM.
+  for (const text of reqs.narrative) {
+    out.push({
+      kind: 'narrative',
+      key: 'RDHF.requirement.narrative',
+      data: { value: text },
+      met: true,
+      soft: true
+    });
+  }
+
   // Free-text expression escape hatch. `branches` is the parse; `value` is the GM's
   // raw text, kept as the fallback for a caller that has nothing better to show.
   if (reqs.expression?.trim()) {
@@ -250,6 +278,10 @@ export const PREREQUISITE_KINDS = ['feature', 'class', 'subclass'];
  * depending on which control the GM happened to type into. A feat whose only
  * prerequisite lives in an expression reports `has: false`, which the registry surfaces
  * as a warning rather than leaving it to be discovered by its silence.
+ *
+ * A `narrative` clause is excluded for the stronger version of the same reason: it is
+ * prose, so it cannot be classified as held-versus-grown OR evaluated at all. Revealing
+ * a Secret Feat on one would mean revealing it to everybody, always.
  *
  * @param {object} feat      normalized feat record
  * @param {object} snapshot  actor snapshot

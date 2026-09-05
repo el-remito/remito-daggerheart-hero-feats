@@ -40,6 +40,7 @@ export async function runMigrations() {
   try {
     if (from < 1) await migrateGeneralTypeToCategory();
     if (from < 2) await migrateSeededTypeIcons();
+    if (from < 3) await migrateFiledStamps();
     await game.settings.set(MODULE_ID, SETTINGS.MIGRATION, MIGRATION_VERSION);
     console.log(`${MODULE_ID} | Migrated world data ${from} → ${MIGRATION_VERSION}.`);
   } catch (err) {
@@ -121,4 +122,33 @@ async function migrateSeededTypeIcons() {
   }
 
   if (changed) await setTypes(types);
+}
+
+/**
+ * Migration 3 — publication becomes an explicit event.
+ *
+ * Before v1.7.0 a Feat reached players the moment it had a Category. Curation's File is
+ * now the gate, so every Feat needs a `filedAt` stamp saying whether it has been through
+ * it — and every Feat that was already visible must keep being visible.
+ *
+ * normalizeFeat's inline default already reads a keyless entry with a Category as
+ * published, so nothing goes dark before this runs; this writes the fact down, turning
+ * that sentinel into a real timestamp. `curatedAt` is preferred where there is one: under
+ * the old rule that IS the moment the Feat became visible to players.
+ *
+ * Idempotent by the `filedAt !== undefined` guard rather than by the version alone, so a
+ * world that saved between a failed run and a retry is not re-stamped with a later date.
+ */
+async function migrateFiledStamps() {
+  const registry = foundry.utils.deepClone(getRegistry());
+  const now = Date.now();
+  let stamped = 0;
+
+  for (const feat of Object.values(registry.feats ?? {})) {
+    if (!feat || feat.filedAt !== undefined) continue;
+    feat.filedAt = feat.category ? Number(feat.curatedAt) || now : 0;
+    stamped++;
+  }
+
+  if (stamped) await setRegistry(registry);
 }

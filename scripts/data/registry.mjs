@@ -22,7 +22,7 @@ import {
   taxonomyLabel
 } from '../settings.mjs';
 import { blankRequirements, normalizeRequirements } from '../logic/requirements.mjs';
-import { resolveVisibility } from '../logic/visibility.mjs';
+import { isPublished, resolveVisibility } from '../logic/visibility.mjs';
 import { applyAutoInvestment } from '../logic/automation.mjs';
 
 /** packId -> Promise<Map<uuid, indexEntry>>. Cleared when the registry setting changes. */
@@ -181,14 +181,22 @@ export function blankFeat(uuid) {
     summary: '',
     hidden: false, // GM-only: never listed for a player who has not acquired it
     autoExempt: false,
-    // When this feat was last given a Category. 0 = never curated. Drives the
-    // "Newly added" filter, and nothing else reads it.
+    // When this feat was last ANNOUNCED to players. 0 = never. Stamped by Curation's
+    // File (publishing IS the announcement) and by the Mark as New toggle; cleared when
+    // the feat is unpublished. Drives the "Newly added" window, and nothing else reads
+    // it. The stored key keeps its pre-1.7.0 name: renaming it would cost a migration
+    // for no behavioural gain.
     curatedAt: 0,
     // When a mechanically relevant field was last changed on an ALREADY CURATED feat.
     // 0 = never, which is every feat still being authored: curating one necessarily
     // edits the same fields that later count as changes, so the stamp is withheld until
     // the curation has been committed. See _syncField in the registry app.
     updatedAt: 0,
+    // When this feat was PUBLISHED by Curation's File. 0 = never published, and
+    // `published <=> filedAt > 0` is the whole of the player-visibility gate. Written
+    // EXPLICITLY here so a genuinely new feat is never mistaken for a pre-1.7.0 entry,
+    // which normalizeFeat detects by the key being absent altogether.
+    filedAt: 0,
     requirements: blankRequirements()
   };
 }
@@ -207,19 +215,38 @@ export function normalizeFeat(uuid, stored) {
     standalone: stored.standalone === true,
     // GM-authored teaser; blank falls back to text derived from the description.
     summary: typeof stored.summary === 'string' ? stored.summary : '',
-    // A deliberate GM secret. Unlike uncurated, this survives curation: the feat is
-    // fully configured and simply must not be browsable yet.
+    // A deliberate GM secret. Unlike unpublished, this survives publication: the feat is
+    // fully configured, filed, and simply must not be browsable yet.
     hidden: stored.hidden === true,
     // Rule Automation derives requirements for every feat that has not opted out; this
     // is the opt-out. See scripts/logic/automation.mjs.
     autoExempt: stored.autoExempt === true,
     curatedAt: Number(stored.curatedAt) || 0,
     updatedAt: Number(stored.updatedAt) || 0,
+    // An entry written before v1.7.0 has no such key at all, and under the old rule a
+    // Category alone made a feat visible — so one is read as published, using its own
+    // curation stamp as the date because that IS the moment it reached players. The `|| 1`
+    // sentinel covers a legacy entry that was never stamped (pre-1.5.0), keeping the value
+    // a number and `> 0` true. Migration 3 replaces every one of these with a real value;
+    // this inline default is what stops a world going dark before a GM has logged in.
+    filedAt:
+      stored.filedAt === undefined
+        ? stored.category
+          ? Number(stored.curatedAt) || 1
+          : 0
+        : Number(stored.filedAt) || 0,
     requirements: normalizeRequirements(stored.requirements)
   };
 }
 
-/** A feat is uncurated until it has been given a Category. */
+/**
+ * A feat is uncurated until it has been given a Category.
+ *
+ * Since v1.7.0 this is NOT the visibility question — it is "can this be filed?". What
+ * players are shown is decided by isPublished (logic/visibility.mjs), which subsumes it:
+ * File requires a Category, so nothing published can lack one. The two live in different
+ * files on purpose; see the note on isPublished.
+ */
 export function isUncurated(feat) {
   return !feat?.category;
 }
@@ -229,8 +256,10 @@ export function isUncurated(feat) {
  *
  * Withholding is decided by resolveVisibility below. Everything it withholds is still
  * returned when the uuid is in `keepUuids` — an already-acquired feat must not vanish
- * from the character's own list because the GM later hid it, cleared its Category, or
- * because the character lost the prerequisite that revealed it.
+ * from the character's own list because the GM later hid it, unpublished it, deleted the
+ * Category it was filed under, or because the character lost the prerequisite that
+ * revealed it. That override sits ahead of the whole withhold decision, so it covers the
+ * publication gate exactly as it covers the other three.
  *
  * @param {object} [options]
  * @param {boolean} [options.forGM]      include everything, whatever the withholds say
@@ -276,8 +305,9 @@ export async function listFeats({
     // normalizeFeat so the GM's editable rows stay authored-only.
     const feat = applyAutoInvestment(normalizeFeat(uuid, registry.feats?.[uuid]), rule);
     const uncurated = isUncurated(feat);
+    const published = isPublished(feat);
     const visibility = resolveVisibility(feat, {
-      uncurated,
+      published,
       hiddenCategories,
       hiddenTypes,
       snapshot
@@ -293,6 +323,9 @@ export async function listFeats({
       // The GM's override wins over the auto-derived teaser. Spread order matters:
       // ...source would otherwise clobber it with the description-derived text.
       summary: feat.summary?.trim() || source.summary,
+      // Both are carried: `published` is what withholds, `uncurated` is what the GM still
+      // has to DO about it, and the Curation queue splits its rows by the second.
+      published,
       uncurated,
       categoryLabel: uncurated
         ? null
@@ -334,7 +367,7 @@ export async function removeSource(packId) {
   return registry;
 }
 
-/** Registers a single Feature item as a Feat, uncurated. */
+/** Registers a single Feature item as a Feat, uncurated and unpublished. */
 export async function addFeat(uuid) {
   const registry = foundry.utils.deepClone(getRegistry());
   registry.feats ??= {};

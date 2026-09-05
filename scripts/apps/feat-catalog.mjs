@@ -30,7 +30,7 @@ import {
   revokeFeat,
   setPointAdjustment
 } from '../data/actor-state.mjs';
-import { isEligible } from '../logic/requirements.mjs';
+import { checkRequirements, isEligible } from '../logic/requirements.mjs';
 import {
   matchesFilters,
   newestCurated,
@@ -435,10 +435,25 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
 
+    // Narrative requirements are stated and never checked, so they cannot have blocked
+    // the purchase above — which is exactly why they have to be said here instead. The
+    // player is told the module is not judging these and that their GM is.
+    //
+    // escapeHTML is not optional: DialogV2 content is raw HTML and this is GM free-form
+    // prose, the same reason every feat name in this module already goes through it.
+    const soft = checkRequirements(feat, snapshot).filter(check => check.soft);
+    const softBlock = soft.length
+      ? `<p class="${PREFIX}-warning">${game.i18n.localize('RDHF.dialog.narrativeWarning')}</p>` +
+        `<ul class="${PREFIX}-reasons">${soft
+          .map(check => `<li>${foundry.utils.escapeHTML(localizeCheck(check).label)}</li>`)
+          .join('')}</ul>`
+      : '';
+
     const confirmed = await foundry.applications.api.DialogV2.confirm({
       window: { title: game.i18n.localize('RDHF.dialog.acquireTitle') },
       content:
         `<p>${game.i18n.format('RDHF.dialog.acquireBody', { name })}</p>` +
+        softBlock +
         `<p class="${PREFIX}-warning">${game.i18n.localize('RDHF.dialog.acquireWarning')}</p>`
     });
     if (!confirmed) return;

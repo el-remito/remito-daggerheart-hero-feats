@@ -8,7 +8,7 @@
   rather than read as @root, which does not survive nesting reliably here.
 --}}
 <li>
-    <details class="rdhf-feat{{#if this.owned}} is-owned{{/if}}{{#if this.uncurated}} is-uncurated{{/if}}"
+    <details class="rdhf-feat{{#if this.owned}} is-owned{{/if}}{{#unless this.published}} is-unpublished{{/unless}}"
              data-uuid="{{this.uuid}}"
              data-name="{{this.name}}"
              data-level="{{this.level}}"
@@ -61,12 +61,15 @@
                             </span>
                         {{/unless}}
                     {{/if}}
-                    {{#if this.uncurated}}
-                        <span class="rdhf-chip rdhf-chip--uncurated"
-                              data-tooltip="{{localize 'RDHF.catalog.uncuratedTooltip'}}">
-                            {{localize "RDHF.catalog.uncurated"}}
+                    {{!-- Only ever seen by a GM browsing the catalog, or by a player on a
+                          Feat they already own that was later unpublished — keepUuids
+                          keeps that row visible. Worded for both. --}}
+                    {{#unless this.published}}
+                        <span class="rdhf-chip rdhf-chip--unpublished"
+                              data-tooltip="{{localize 'RDHF.catalog.unpublishedTooltip'}}">
+                            {{localize "RDHF.catalog.unpublished"}}
                         </span>
-                    {{/if}}
+                    {{/unless}}
                     {{!-- GM-only: a hidden feat is never listed for a player who does
                           not already own it, so this chip only ever renders for a GM. --}}
                     {{#if this.hidden}}
@@ -99,8 +102,13 @@
                     <div class="rdhf-req-line">
                         <span class="rdhf-req-label">{{localize "RDHF.catalog.requires"}}</span>
                         {{#each this.checks}}
-                            <span class="rdhf-chip rdhf-chip--req {{#if this.met}}is-met{{else}}is-unmet{{/if}}">
-                                <i class="fa-solid {{#if this.met}}fa-check{{else}}fa-xmark{{/if}}"></i>
+                            {{!-- `soft` wins over met/unmet. A narrative clause carries
+                                  met: true so it can never block a purchase, but rendering
+                                  it green-with-a-tick would have the module assert a fact
+                                  it cannot know — worse than not showing it at all. --}}
+                            <span class="rdhf-chip rdhf-chip--req {{#if this.soft}}is-soft{{else}}{{#if this.met}}is-met{{else}}is-unmet{{/if}}{{/if}}"
+                                  {{#if this.soft}}data-tooltip="{{localize 'RDHF.requirement.narrativeTooltip'}}"{{/if}}>
+                                <i class="fa-solid {{#if this.soft}}fa-circle-question{{else}}{{#if this.met}}fa-check{{else}}fa-xmark{{/if}}{{/if}}"></i>
                                 {{this.label}}
                             </span>
                         {{/each}}

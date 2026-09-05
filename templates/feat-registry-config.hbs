@@ -13,10 +13,11 @@
         </button>
         <button type="button" class="rdhf-tab {{#if isCuration}}is-active{{/if}}" data-action="selectTab" data-tab="curation">
             <i class="fa-solid fa-wand-magic-sparkles"></i> {{localize "RDHF.registry.tabs.curation"}}
-            {{!-- The uncurated count lives here rather than on Feats: it is a call to
-                  action, and this is the tab that answers it. Painted by _paintBadges(),
-                  which writes every badge in the nav rather than the first one. --}}
-            <span class="rdhf-tab-badge" {{#unless uncuratedCount}}hidden{{/unless}}>{{uncuratedCount}}</span>
+            {{!-- The unpublished count — which is exactly this queue's length, since the
+                  two tabs partition the registry. Rendered here and never repainted:
+                  nothing can publish or unpublish a Feat without a full render (File,
+                  Reset and deleting a Category all re-render). --}}
+            <span class="rdhf-tab-badge" {{#unless unpublishedCount}}hidden{{/unless}}>{{unpublishedCount}}</span>
         </button>
         <button type="button" class="rdhf-tab {{#if isTaxonomy}}is-active{{/if}}" data-action="selectTab" data-tab="taxonomy">
             <i class="fa-solid fa-tags"></i> {{localize "RDHF.registry.tabs.taxonomy"}}
@@ -103,9 +104,10 @@
                                 <img class="rdhf-feat-img rdhf-feat-img--small" src="{{this.img}}" alt="">
                                 <span class="rdhf-source-label">{{this.name}}</span>
                                 <code class="rdhf-source-id">{{this.uuid}}</code>
-                                {{#if this.uncurated}}
-                                    <span class="rdhf-chip rdhf-chip--uncurated">{{localize "RDHF.catalog.uncurated"}}</span>
-                                {{/if}}
+                                {{#unless this.published}}
+                                    <span class="rdhf-chip rdhf-chip--unpublished"
+                                          data-tooltip="{{localize 'RDHF.catalog.unpublishedTooltip'}}">{{localize "RDHF.catalog.unpublished"}}</span>
+                                {{/unless}}
                                 <button type="button" class="rdhf-icon-btn rdhf-danger"
                                         data-action="removeFeat"
                                         data-tooltip="{{localize 'RDHF.registry.removeStandalone'}}">
@@ -125,8 +127,9 @@
             {{!-- Deliberately mirrors the player catalog: same rail, same row shape,
                   same matchesFilters predicate. The GM should be curating against the
                   view the table actually sees. Player-only switches (eligibility,
-                  hide-acquired) have no meaning here and are left out; "uncurated only"
-                  is the curation tool that replaces them. --}}
+                  hide-acquired) have no meaning here and are left out. Nothing on this
+                  tab is unpublished, so there is no "uncurated only" switch either —
+                  those Feats live on the Curation tab now. --}}
             <section class="rdhf-pane rdhf-pane--split">
                 <aside class="rdhf-rail">
                     <label class="rdhf-search-wrap">
@@ -207,10 +210,6 @@
 
                     <section class="rdhf-rail-section">
                         <label class="rdhf-checkline">
-                            <input type="checkbox" data-filter="uncuratedOnly" {{#if uncuratedOnly}}checked{{/if}}>
-                            <span>{{localize "RDHF.registry.uncuratedOnly"}}</span>
-                        </label>
-                        <label class="rdhf-checkline">
                             <input type="checkbox" data-filter="hiddenOnly" {{#if hiddenOnly}}checked{{/if}}>
                             <span>{{localize "RDHF.registry.hiddenOnly"}}</span>
                         </label>
@@ -236,10 +235,9 @@
                     <ul class="rdhf-reg-list">
                         {{#each feats}}
                             <li>
-                                <details class="rdhf-reg-feat {{#if this.uncurated}}is-uncurated{{/if}} {{#if this.hidden}}is-hidden{{/if}}"
+                                <details class="rdhf-reg-feat {{#if this.hidden}}is-hidden{{/if}}"
                                          data-uuid="{{this.uuid}}"
                                          data-search="{{this.searchText}}"
-                                         data-uncurated="{{this.uncurated}}"
                                          data-hidden="{{this.hidden}}"
                                          data-new="{{this.isNew}}"
                                          data-level="{{this.level}}"
@@ -284,12 +282,6 @@
                                                     <span class="rdhf-chip rdhf-chip--warn"
                                                           data-tooltip="{{localize 'RDHF.registry.neverRevealsTooltip'}}">
                                                         <i class="fa-solid fa-triangle-exclamation"></i>
-                                                    </span>
-                                                {{/if}}
-                                                {{#if this.uncurated}}
-                                                    <span class="rdhf-chip rdhf-chip--uncurated"
-                                                          data-tooltip="{{localize 'RDHF.catalog.uncuratedTooltip'}}">
-                                                        {{localize "RDHF.catalog.uncurated"}}
                                                     </span>
                                                 {{/if}}
                                                 {{#if this.hidden}}
@@ -352,8 +344,11 @@
                                             </label>
                                             <label>
                                                 <span>{{localize "RDHF.registry.category"}}</span>
+                                                {{!-- No blank option here, deliberately: publication is a one-way
+                                                      latch and every row on this tab is published, so offering
+                                                      "no Category" would be an Unpublish control by the back
+                                                      door. The Curation tab's copy keeps it. --}}
                                                 <select data-field="category">
-                                                    <option value="">{{localize "RDHF.registry.noCategory"}}</option>
                                                     {{#each this.categoryOptions}}
                                                         <option value="{{this.id}}" {{#if this.selected}}selected{{/if}}>{{this.label}}</option>
                                                     {{/each}}
@@ -510,6 +505,14 @@
                                                 <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addInvestment"}}
                                             </button>
 
+                                            <h5 class="rdhf-sub">{{localize "RDHF.registry.narrative"}}</h5>
+                                            <p class="rdhf-hint">{{localize "RDHF.registry.narrativeHint"}}</p>
+                                            {{!-- Rows are built by _renderNarrative(). --}}
+                                            <div class="rdhf-narrative-list"></div>
+                                            <button type="button" class="rdhf-text-btn" data-action="addNarrative">
+                                                <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addNarrative"}}
+                                            </button>
+
                                             <h5 class="rdhf-sub">{{localize "RDHF.registry.expression"}}</h5>
                                             <p class="rdhf-hint">{{localize "RDHF.registry.expressionHint"}}</p>
                                             {{!-- The atom shortcut row is appended here by
@@ -522,6 +525,10 @@
                         {{/each}}
                     </ul>
                     <p class="rdhf-reg-empty rdhf-empty" hidden>{{localize "RDHF.registry.noMatches"}}</p>
+                {{else if hasAnyFeats}}
+                    {{!-- Registered Feats exist, none are published yet. Without this branch
+                          a GM holding a 200-Feat pack was told to go and register one. --}}
+                    <p class="rdhf-empty">{{localize "RDHF.registry.nonePublished"}}</p>
                 {{else}}
                     <p class="rdhf-empty">{{localize "RDHF.registry.noFeats"}}</p>
                 {{/if}}
@@ -544,9 +551,6 @@
                             <span class="rdhf-cur-outstanding">{{curation.outstanding}}</span>
                             {{localize "RDHF.curation.outstanding"}}
                             <span class="rdhf-cur-ready" {{#unless curation.ready}}hidden{{/unless}}>&middot; {{localize "RDHF.curation.readyCount" count=curation.ready}}</span>
-                            {{#if curation.filed}}
-                                <span class="rdhf-cur-filed">&middot; {{localize "RDHF.curation.filedCount" count=curation.filed}}</span>
-                            {{/if}}
                         </p>
                     </header>
 
@@ -690,6 +694,14 @@
                                 <button type="button" class="rdhf-text-btn" data-action="addInvestment">
                                     <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addInvestment"}}
                                 </button>
+
+                                <h5 class="rdhf-sub">{{localize "RDHF.registry.narrative"}}</h5>
+                                <p class="rdhf-hint">{{localize "RDHF.registry.narrativeHint"}}</p>
+                                {{!-- Rows are built by _renderNarrative(). --}}
+                                <div class="rdhf-narrative-list"></div>
+                                <button type="button" class="rdhf-text-btn" data-action="addNarrative">
+                                    <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addNarrative"}}
+                                </button>
                             </fieldset>
 
                             {{!-- Everything not set on most feats. Present, so a feat
@@ -750,7 +762,12 @@
                                 <button type="button" class="rdhf-text-btn" data-action="curationSkip">
                                     {{localize "RDHF.curation.skip"}} <i class="fa-solid fa-forward"></i>
                                 </button>
+                                {{!-- Publishing an uncurated Feat is meaningless, so the control is
+                                      blocked rather than allowed-and-undone. _refreshCurationRow
+                                      re-enables it the moment a Category is chosen, without a
+                                      re-render. --}}
                                 <button type="button" class="rdhf-save-btn" data-action="curationFile"
+                                        {{#if this.uncurated}}disabled{{/if}}
                                         data-tooltip="{{localize 'RDHF.curation.fileTooltip'}}">
                                     <i class="fa-solid fa-floppy-disk"></i> {{localize "RDHF.curation.file"}}
                                 </button>
@@ -936,12 +953,12 @@
                         <span>{{localize "RDHF.stats.counter.total"}}</span>
                     </div>
                     <div class="rdhf-counter">
-                        <strong>{{stats.catalog.curated}}</strong>
-                        <span>{{localize "RDHF.stats.counter.curated"}}</span>
+                        <strong>{{stats.catalog.published}}</strong>
+                        <span>{{localize "RDHF.stats.counter.published"}}</span>
                     </div>
-                    <div class="rdhf-counter {{#if stats.catalog.uncurated}}is-warn{{/if}}">
-                        <strong>{{stats.catalog.uncurated}}</strong>
-                        <span>{{localize "RDHF.stats.counter.uncurated"}}</span>
+                    <div class="rdhf-counter {{#if stats.catalog.unpublished}}is-warn{{/if}}">
+                        <strong>{{stats.catalog.unpublished}}</strong>
+                        <span>{{localize "RDHF.stats.counter.unpublished"}}</span>
                     </div>
                     <div class="rdhf-counter">
                         <strong>{{stats.catalog.hidden}}</strong>
@@ -986,7 +1003,7 @@
                                 </thead>
                                 <tbody>
                                     {{#each this.rows}}
-                                        <tr {{#if this.isUncurated}}class="is-uncurated"{{/if}}>
+                                        <tr {{#if this.isUnpublished}}class="is-unpublished"{{/if}}>
                                             <th scope="row" class="rdhf-heat-rowhead">
                                                 {{#if this.icon}}<i class="{{this.icon}}"></i>{{/if}}
                                                 <span>{{this.label}}</span>
@@ -1030,7 +1047,7 @@
                         <i class="fa-solid fa-triangle-exclamation"></i>
                         <span>{{localize "RDHF.stats.emptyCategories"}}</span>
                         {{#each stats.catalog.gaps.emptyCategories}}
-                            <span class="rdhf-chip rdhf-chip--uncurated">{{this.label}}</span>
+                            <span class="rdhf-chip rdhf-chip--empty">{{this.label}}</span>
                         {{/each}}
                     </p>
                 {{/if}}

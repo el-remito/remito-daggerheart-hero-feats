@@ -20,12 +20,13 @@ import { TRAITS, RESOURCE_REQS } from '../constants.mjs';
 // exactly as checkRequirements does, and that precedence gets stated once.
 import { applyAutoInvestment } from './automation.mjs';
 import { evaluateInvestment } from './requirements.mjs';
+import { isPublished } from './visibility.mjs';
 
 /** Levels the grid always shows, so its columns never move as a catalog grows. */
 export const LEVEL_COLUMNS = 10;
 
-/** The bucket uncurated feats fall into. Not a real Category id — nothing may collide. */
-export const UNCURATED_ROW = '__uncurated__';
+/** The bucket unpublished feats fall into. Not a real Category id — nothing may collide. */
+export const UNPUBLISHED_ROW = '__unpublished__';
 
 /** Requirement kinds counted by the usage panel, in the order they are displayed. */
 export const REQUIREMENT_KINDS = [
@@ -35,6 +36,9 @@ export const REQUIREMENT_KINDS = [
   'classes',
   'subclasses',
   'categoryInvestment',
+  // Stated but never checked. Counted here all the same: it is a requirement the GM
+  // authored and a player has to satisfy, even though the module cannot verify it.
+  'narrative',
   'expression'
 ];
 
@@ -47,7 +51,7 @@ export const REQUIREMENT_KINDS = [
  * @param {Array<object>} args.feats        normalized feats, each with a `label` and `resolves`
  * @param {Array<{id: string, label: string}>} args.categories
  * @param {Array<{id: string, label: string}>} args.types
- * @param {string} [args.uncuratedLabel]    localized label for the uncurated grid row
+ * @param {string} [args.unpublishedLabel]  localized label for the not-published grid row
  * @param {number} [args.maxLevel]
  * @returns {object}
  */
@@ -55,37 +59,49 @@ export function buildCatalogStats({
   feats = [],
   categories = [],
   types = [],
-  uncuratedLabel = 'Uncurated',
+  unpublishedLabel = 'Not published',
   maxLevel = LEVEL_COLUMNS
 } = {}) {
   const list = Array.isArray(feats) ? feats.filter(Boolean) : [];
   const columns = levelColumns(list, maxLevel);
 
+  // Published, not merely curated: measuring "has a Category" here would put a figure on
+  // screen that no player can verify, which is the exact class of claim this release
+  // exists to remove. What is curated-but-unfiled is reported on the Curation header,
+  // where it is actionable.
   const counters = {
     total: list.length,
-    curated: 0,
-    uncurated: 0,
+    published: 0,
+    unpublished: 0,
     hidden: 0,
     standalone: 0,
     missing: 0
   };
   for (const feat of list) {
-    if (feat.category) counters.curated++;
-    else counters.uncurated++;
+    if (isPublished(feat)) counters.published++;
+    else counters.unpublished++;
     if (feat.hidden) counters.hidden++;
     if (feat.standalone) counters.standalone++;
     if (feat.resolves === false) counters.missing++;
   }
 
-  // The uncurated row is pinned last: it is a holding pen, not a Category, and mixing
+  // The not-published row is pinned last: it is a holding pen, not a Category, and mixing
   // it into the alphabetical run would imply otherwise.
   const categoryRows = [
     ...categories.map(c => ({ id: c.id, label: c.label ?? c.id })),
-    ...(counters.uncurated ? [{ id: UNCURATED_ROW, label: uncuratedLabel, isUncurated: true }] : [])
+    ...(counters.unpublished
+      ? [{ id: UNPUBLISHED_ROW, label: unpublishedLabel, isUnpublished: true }]
+      : [])
   ];
 
+  // The `isPublished(feat) &&` on the Category branch is load-bearing: without it a
+  // curated-but-unfiled feat counts in BOTH its Category row and the pen, the column
+  // totals exceed the feat count, and the pen stops being a pen. With it the grid stays
+  // a partition and answers "what can players see, by Category and Level" — which is the
+  // question Coverage gaps is built on. A Category whose feats are all unfiled therefore
+  // reads as empty, which is correct and one click from being fixed.
   const categoryGrid = buildGrid(categoryRows, columns, list, (feat, rowId) =>
-    rowId === UNCURATED_ROW ? !feat.category : feat.category === rowId
+    rowId === UNPUBLISHED_ROW ? !isPublished(feat) : isPublished(feat) && feat.category === rowId
   );
 
   // A feat with two Types is counted in both rows, so these totals legitimately exceed
@@ -209,7 +225,7 @@ export function buildInvestmentReach({ feats = [], categories = [], rule = null 
   const labels = new Map(categories.map(c => [c.id, c.label]));
 
   // Supply is what a player could actually acquire, so every withhold drops out: the
-  // per-Feat Hidden flag, a hidden Category, a hidden Type and uncurated alike. The app
+  // per-Feat Hidden flag, a hidden Category, a hidden Type and unpublished alike. The app
   // collapses all four into `withheld`, because it is the layer that can see the
   // taxonomy; `hidden` is still honoured for a caller that has not.
   const candidates = list.filter(f => f.withheld !== true && f.hidden !== true);
@@ -514,11 +530,11 @@ function buildResourceDemand(feats) {
 /**
  * Where the Category × Level grid has nothing in it.
  *
- * The uncurated row is skipped throughout: an empty uncurated cell is the *goal*, not
- * a gap, and listing it as one would invert the meaning of the whole panel.
+ * The not-published row is skipped throughout: an empty cell there is the *goal*, not a
+ * gap, and listing it as one would invert the meaning of the whole panel.
  */
 function buildGaps(grid, columns) {
-  const real = grid.rows.filter(r => !r.isUncurated);
+  const real = grid.rows.filter(r => !r.isUnpublished);
   const emptyCells = [];
   const emptyCategories = [];
 

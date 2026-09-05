@@ -50,8 +50,9 @@ import {
   buildAdoptionStats,
   buildInvestmentReach,
   buildCatalogStats,
-  UNCURATED_ROW
+  UNPUBLISHED_ROW
 } from '../logic/statistics.mjs';
+import { isPublished } from '../logic/visibility.mjs';
 import { ATOMS, blankRequirements, prerequisiteState } from '../logic/requirements.mjs';
 import {
   applyAutoInvestment,
@@ -61,7 +62,7 @@ import {
 } from '../logic/automation.mjs';
 import { describeRequirements, localizeCheck } from './requirement-text.mjs';
 import {
-  byCurationThenLevel,
+  byLevelThenName,
   matchesFilters,
   blankFilterState,
   newestCurated,
@@ -119,6 +120,7 @@ const REQUIREMENT_FIELDS = [
   'investmentCategory',
   'investmentCount',
   'investmentJoin',
+  'narrative',
   'expression'
 ];
 
@@ -167,7 +169,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     super(options);
     this._tab = 'sources';
     this._filters = blankFilterState();
-    this._uncuratedOnly = false;
     this._hiddenOnly = false;
     this._sourceSearch = '';
     // Rail sections are collapsible; which ones are open survives a re-render.
@@ -194,15 +195,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // rows are all in the DOM, and the toggle unhides them rather than re-rendering.
     this._showAllGaps = false;
 
-    /* Curation queue state. All three are session-local by design: the queue is
-       DERIVED from "has no Category", so anything left half-done is simply back the
-       next time the registry opens. Nothing here is stored, and there is no migration. */
-    // Feats that have appeared in the queue at least once. Keeps a feat in place after
-    // a Category is chosen — otherwise picking one would delete the row out from under
-    // the GM before they could set its dependencies or traits.
-    this._curationSeen = new Set();
-    // Explicitly filed this session, and gone from the queue until the app is reopened.
-    this._curationFiled = new Set();
+    /* Curation queue state. Only the SELECTION is session-local now: since v1.7.0 the
+       queue is derived from "not published yet", which is stored, so a half-curated Feat
+       keeps its place across reloads until the GM actually files it. The two Sets that
+       used to live here — seen and filed — are gone, and with them the bug where a Save
+       published a queued Feat and dropped it out of the queue at the same time. */
     this._curationUuid = null;
     this._curationMore = false;
     this._curationScroll = 0;
@@ -230,6 +227,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       removeType: FeatRegistryConfig._onRemoveType,
       addInvestment: FeatRegistryConfig._onAddInvestment,
       removeInvestment: FeatRegistryConfig._onRemoveInvestment,
+      addNarrative: FeatRegistryConfig._onAddNarrative,
+      removeNarrative: FeatRegistryConfig._onRemoveNarrative,
       resetAutomation: FeatRegistryConfig._onResetAutomation,
       exportRegistry: FeatRegistryConfig._onExport,
       importRegistry: FeatRegistryConfig._onImport,
@@ -353,12 +352,16 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._recomputeNewFeats();
     this._recomputeUpdatedFeats();
 
-    const feats = [...sources.values()]
+    const views = [...sources.values()]
       .map(source => {
         const feat = normalizeFeat(source.uuid, this.#config.feats?.[source.uuid]);
         return {
           ...feat,
           ...source,
+          // Both, and they answer different questions: `published` decides which of the
+          // two tabs this row belongs to, `uncurated` decides what the GM still has to
+          // do about it once it is in the queue.
+          published: isPublished(feat),
           uncurated: isUncurated(feat),
           isNew: this._newFeats.has(source.uuid),
           isUpdated: this._updatedFeats.has(source.uuid),
@@ -427,12 +430,19 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
             .toLowerCase()
         };
       })
-      .sort(byCurationThenLevel);
+      // byCurationThenLevel is gone: with the tabs partitioning the registry the Feats
+      // list holds nothing unpublished, so its uncurated-first term was identically 0.
+      // Ordering exactly like the player catalog is the gain — the GM curates against
+      // the view the table sees.
+      .sort(byLevelThenName);
 
-    // Carried so _refreshCurationRow can move the Feats badge without re-deriving the
-    // whole catalog: it counts ALL uncurated feats, filed ones included, and the
-    // Curation queue does not contain those.
-    this._uncuratedTotal = feats.filter(f => f.uncurated).length;
+    // The two halves of the partition. The Feats tab renders only what has been
+    // published; the Curation queue and the Statistics pass are given everything.
+    const feats = views.filter(v => v.published);
+
+    // Carried so _refreshCurationRow can move the tab badge without re-deriving the
+    // whole catalog. It counts every UNPUBLISHED feat, which is exactly the queue.
+    this._unpublishedTotal = views.length - feats.length;
 
     return {
       tab: this._tab,
@@ -463,9 +473,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         .map(p => ({ id: p.collection, label: `${p.metadata.label} (${p.collection})` }))
         .sort((a, b) => a.label.localeCompare(b.label)),
       feats,
-      standaloneFeats: feats.filter(f => f.standalone),
+      // The FULL list, not the published half: an unpublished standalone Feat still has
+      // to be listable here so it can be unregistered.
+      standaloneFeats: views.filter(f => f.standalone),
       featCount: feats.length,
-      uncuratedCount: this._uncuratedTotal,
+      // Distinguishes "nothing published yet" from "no Feats registered at all". Without
+      // it a GM holding a 200-Feat pack was told to go and register one.
+      hasAnyFeats: views.length > 0,
+      unpublishedCount: this._unpublishedTotal,
       // `revealing` is the mode actually in force — reveal only means anything on an
       // entry that is withheld in the first place, and the row shows its control only
       // then. `reveal` itself is carried too, because the checkbox renders its own state.
@@ -487,7 +502,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       filterCategories: railCategories,
       filterTypes: railTypes,
       filters: this._filters,
-      uncuratedOnly: this._uncuratedOnly,
       hiddenOnly: this._hiddenOnly,
       newOnly: this._filters.newOnly,
       sourceSearch: this._sourceSearch,
@@ -497,33 +511,30 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       // Computed ONLY when the tab is open. The Feats tab re-renders on every source
       // add, feat drop and taxonomy edit; scanning every actor each time would be pure
       // waste, and with the tab switched off nothing here runs at all.
-      stats: showStats && this._tab === 'stats' ? await this._buildStats(feats) : null,
+      stats: showStats && this._tab === 'stats' ? await this._buildStats(views) : null,
       statsAxis: this._statsAxis,
       isAxisCategory: this._statsAxis === 'category',
       isAxisType: this._statsAxis === 'type',
       // Built from the same feat views the Feats tab uses, so the editor pane needs no
       // second shape and every [data-field] control behaves identically in both.
-      curation: this._tab === 'curation' ? this._buildCuration(feats) : null
+      curation: this._tab === 'curation' ? this._buildCuration(views) : null
     };
   }
 
   /**
    * The Curation queue and whichever feat it currently has open.
    *
-   * Everything here is session state on the app; nothing is read from or written to a
-   * setting. Feats reaching the queue are recorded in `_curationSeen` as a side effect
-   * of building it — that set is what keeps a row in place after its Category is
-   * chosen, and there is no other moment at which membership is known.
+   * Membership is stored, not remembered: the queue is every feat that has not been
+   * published, so nothing has to be recorded as a side effect of rendering it and a
+   * half-curated feat is still here after a reload. The only session state left is which
+   * row is open.
+   *
+   * Given the FULL view list, not the Feats tab's published half.
    *
    * @param {Array<object>} feats  the feat views from _prepareContext
    */
   _buildCuration(feats) {
-    const { queue, outstanding, ready, filed } = buildCurationQueue({
-      feats,
-      seen: this._curationSeen,
-      filed: this._curationFiled
-    });
-    for (const feat of queue) this._curationSeen.add(feat.uuid);
+    const { queue, outstanding, ready } = buildCurationQueue({ feats });
 
     // A selection can go stale in three ways: it was just filed, it was pruned, or the
     // tab is being opened for the first time. All three land on the head of the queue.
@@ -549,7 +560,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       hasQueue: queue.length > 0,
       outstanding,
       ready,
-      filed,
       moreOpen: this._curationMore
     };
   }
@@ -569,13 +579,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // as what a player could actually ACQUIRE, and a Feat withheld by its Category or
     // by one of its Types is no more acquirable than one flagged Hidden outright — so
     // the audit is given the collapsed answer rather than the taxonomy, which is the
-    // app's to read and not logic/'s. Uncurated is in here for the same reason, which
-    // is why the audit carries no separate branch for it.
+    // app's to read and not logic/'s. Still FOUR: unpublished sits where uncurated used
+    // to and subsumes it, because File requires a Category and so nothing published can
+    // lack one. That is why the audit carries no separate branch for either.
     const hiddenCategories = new Set(this.#categories.filter(c => c?.hidden).map(c => c.id));
     const hiddenTypes = new Set(this.#types.filter(t => t?.hidden).map(t => t.id));
     const withheld = feat =>
       feat.hidden === true ||
-      !feat.category ||
+      !isPublished(feat) ||
       hiddenCategories.has(feat.category) ||
       (feat.types ?? []).some(t => hiddenTypes.has(t));
 
@@ -584,9 +595,12 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // on. But a Category that passes only because its secrets were left out is a
     // different kind of pass from one that passes outright, so the number is reported
     // rather than left implicit — the panel says how many and why.
+    // isPublished, not merely "has a Category": secretsExcluded means "withheld ONLY
+    // because a reveal-mode entry is waiting on a prerequisite", and an unfiled Feat is
+    // withheld for a stronger reason. Counting it here would overstate the caveat.
     const revealing = entry => entry?.hidden === true && entry.reveal === true;
     const secret = feat =>
-      Boolean(feat.category) &&
+      isPublished(feat) &&
       feat.hidden !== true &&
       (revealing(this.#categories.find(c => c.id === feat.category)) ||
         (feat.types ?? []).some(id => revealing(this.#types.find(t => t.id === id))));
@@ -628,7 +642,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       feats: records,
       categories: localCategories,
       types: this.#types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon })),
-      uncuratedLabel: game.i18n.localize('RDHF.catalog.uncurated')
+      unpublishedLabel: game.i18n.localize('RDHF.stats.counter.unpublished')
     });
 
     const adoption = buildAdoptionStats({
@@ -817,8 +831,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     for (const input of el.querySelectorAll('[data-filter]')) {
       const kind = input.dataset.filter;
       input.addEventListener('change', () => {
-        if (kind === 'uncuratedOnly') this._uncuratedOnly = input.checked;
-        else if (kind === 'hiddenOnly') this._hiddenOnly = input.checked;
+        if (kind === 'hiddenOnly') this._hiddenOnly = input.checked;
         else if (kind === 'newOnly') this._filters.newOnly = input.checked;
         else if (kind === 'levelMin' || kind === 'levelMax') {
           this._filters[kind] = input.value === '' ? null : Number(input.value);
@@ -856,6 +869,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const rows = el.querySelectorAll(FEAT_HOST);
     for (const row of rows) {
       this._renderInvestment(row);
+      this._renderNarrative(row);
       this._paintAutoInvestment(row);
       this._paintRequirementLine(row);
       this._renderReferenceChips(row);
@@ -925,9 +939,13 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * Repaints one row's chips, classes and data attributes from the working copy.
    *
    * Called on every edit because the chips are derived state: without this, ticking
-   * "Hide from players" or choosing a Category left the Hidden and Uncurated chips
-   * showing the old answer until the GM switched tabs and came back. Also refreshes the
-   * tab badge and re-runs the filters, since both read the same derived state.
+   * "Hide from players" or choosing a Category left the Hidden chip showing the old
+   * answer until the GM switched tabs and came back. Also re-runs the filters, which
+   * read the same derived state.
+   *
+   * Every row it can find is PUBLISHED — the Feats tab holds nothing else — so there is
+   * no uncurated state to paint here and no badge to move: nothing can change a Feat's
+   * publication without a full render.
    *
    * @param {string} uuid
    */
@@ -939,12 +957,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     );
     if (!row) return;
     const feat = normalizeFeat(uuid, this.#config.feats?.[uuid]);
-    const uncurated = isUncurated(feat);
 
     row.dataset.level = String(feat.level);
     row.dataset.category = feat.category ?? '';
     row.dataset.types = (feat.types ?? []).join('|');
-    row.dataset.uncurated = String(uncurated);
     row.dataset.hidden = String(feat.hidden);
     // The filter reads this attribute, the chip below reads the same set. Repainting
     // the chip without the attribute would leave "Newly added Feats" filtering on the
@@ -952,19 +968,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // nothing filters on it, which is why _updatedFeats reaches the row through the
     // context and _buildChips alone.
     row.dataset.new = String(this._newFeats.has(uuid));
-    row.classList.toggle('is-uncurated', uncurated);
     row.classList.toggle('is-hidden', feat.hidden);
 
     const chips = row.querySelector(`.${PREFIX}-reg-chips`);
-    if (chips) chips.replaceChildren(...this._buildChips(feat, uncurated));
-
-    this._paintBadges(
-      Object.keys(this.#config.feats ?? {}).length
-        ? [...this.element.querySelectorAll(`.${PREFIX}-reg-feat`)].filter(
-            r => r.dataset.uncurated === 'true'
-          ).length
-        : 0
-    );
+    if (chips) chips.replaceChildren(...this._buildChips(feat));
 
     this._applyRegFilters();
   }
@@ -987,7 +994,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     if (!row) return;
     const feat = normalizeFeat(uuid, this.#config.feats?.[uuid]);
     const uncurated = isUncurated(feat);
-    const was = row.dataset.uncurated === 'true';
 
     row.classList.toggle('is-uncurated', uncurated);
     row.dataset.uncurated = String(uncurated);
@@ -1026,25 +1032,31 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       ready.hidden = rows - outstanding === 0;
     }
 
-    // The Feats tab badge counts ALL uncurated feats, filed ones included, so it cannot
-    // be read off the queue. Carried as a running total from the last render and moved
-    // by this one edit — the same repaint-don't-re-render rule, one tab over.
-    if (was !== uncurated) {
-      this._paintBadges((this._uncuratedTotal ?? 0) + (uncurated ? 1 : -1));
-    }
+    // The tab badge counts every unpublished feat, which is exactly the queue length,
+    // and nothing here can change it: choosing a Category does not publish anything.
+    // Only File, Reset and deleting a Category move it, and all three re-render.
 
-    // Filing a feat that still has no Category is legal but temporary, and the GM
-    // should know that before they press it rather than after it reappears.
+    // File PUBLISHES, and a Feat cannot be published without a Category — so the note
+    // explains the block and the button has to follow the field.
+    //
+    // This is the one line that makes the feature work. The Curation pane does not
+    // re-render on a field edit (that is the whole point of repainting), so without it
+    // the button stays disabled after the GM picks a Category and File looks broken.
     if (uuid === this._curationUuid) {
       const note = this.element.querySelector(`.${PREFIX}-cur-file-note`);
       if (note) note.hidden = !uncurated;
+      const file = this.element.querySelector('[data-action="curationFile"]');
+      if (file) file.disabled = uncurated;
     }
   }
 
   /** One chip element. Kept tiny because _buildChips calls it six times a row. */
-  _chip(modifier, text, { icon = null, tooltip = null, withheld = false } = {}) {
+  _chip(modifier, text, { icon = null, tooltip = null, withheld = false, state = '' } = {}) {
     const chip = document.createElement('span');
-    chip.className = `${PREFIX}-chip ${PREFIX}-chip--${modifier}${withheld ? ' is-hidden' : ''}`;
+    chip.className =
+      `${PREFIX}-chip ${PREFIX}-chip--${modifier}` +
+      (withheld ? ' is-hidden' : '') +
+      (state ? ` ${state}` : '');
     if (tooltip) chip.dataset.tooltip = tooltip;
     if (icon) {
       const i = document.createElement('i');
@@ -1056,7 +1068,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /** The chip row for one feat, mirroring what the template renders on a full pass. */
-  _buildChips(feat, uncurated) {
+  _buildChips(feat) {
     const chips = [
       this._chip('level', `${game.i18n.localize('RDHF.catalog.levelShort')} ${feat.level}`)
     ];
@@ -1081,13 +1093,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
           withheld: entry?.hidden === true,
           icon: entry?.hidden ? 'fa-solid fa-eye-slash' : null,
           tooltip: entry?.hidden ? game.i18n.localize('RDHF.registry.withheldByType') : null
-        })
-      );
-    }
-    if (uncurated) {
-      chips.push(
-        this._chip('uncurated', game.i18n.localize('RDHF.catalog.uncurated'), {
-          tooltip: game.i18n.localize('RDHF.catalog.uncuratedTooltip')
         })
       );
     }
@@ -1234,6 +1239,48 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       remove.type = 'button';
       remove.className = `${PREFIX}-icon-btn ${PREFIX}-danger`;
       remove.dataset.action = 'removeInvestment';
+      remove.dataset.index = String(index);
+      remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+      line.appendChild(remove);
+
+      list.appendChild(line);
+    });
+  }
+
+  /**
+   * Renders the narrative-requirement rows: one text input per stated condition.
+   *
+   * Built in JS for the same reason the investment rows are — a re-render resets scroll
+   * and steals focus, and a GM adding a second condition should not be thrown to the top
+   * of a long list. Host-agnostic because it is GIVEN its container, so the Feats row and
+   * the Curation editor both drive it unchanged.
+   *
+   * @param {HTMLElement} host
+   */
+  _renderNarrative(host) {
+    const list = host.querySelector(`.${PREFIX}-narrative-list`);
+    if (!list) return;
+    const uuid = host.dataset.uuid;
+    const lines = this.#config.feats?.[uuid]?.requirements?.narrative ?? [];
+    list.replaceChildren();
+
+    lines.forEach((text, index) => {
+      const line = document.createElement('div');
+      line.className = `${PREFIX}-narrative-row`;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.dataset.field = 'narrative';
+      input.dataset.index = String(index);
+      input.value = String(text ?? '');
+      input.placeholder = game.i18n.localize('RDHF.registry.narrativePlaceholder');
+      input.addEventListener('input', () => this._syncField(input));
+      line.appendChild(input);
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = `${PREFIX}-icon-btn ${PREFIX}-danger`;
+      remove.dataset.action = 'removeNarrative';
       remove.dataset.index = String(index);
       remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
       line.appendChild(remove);
@@ -1393,26 +1440,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     });
   }
 
-  /** Writes a reference list back to the field and re-chips it. */
-  /**
-   * Writes the uncurated count onto EVERY tab badge and keeps the running total in
-   * step with it.
-   *
-   * The badge sits on Curation — the tab that clears the count. querySelectorAll rather
-   * than querySelector because a nav is free to grow a second badge: the singular lookup
-   * would paint whichever came first in the DOM and leave the other stale, which is a
-   * silent wrong number rather than a visible break.
-   *
-   * @param {number} count
-   */
-  _paintBadges(count) {
-    this._uncuratedTotal = Math.max(0, count);
-    for (const badge of this.element?.querySelectorAll(`.${PREFIX}-tab-badge`) ?? []) {
-      badge.textContent = String(this._uncuratedTotal);
-      badge.hidden = this._uncuratedTotal === 0;
-    }
-  }
-
   /**
    * The feat host an event target sits in, on whichever tab that is.
    *
@@ -1463,7 +1490,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       };
       const show =
         matchesFilters(view, this._filters) &&
-        (!this._uncuratedOnly || row.dataset.uncurated === 'true') &&
         (!this._hiddenOnly || row.dataset.hidden === 'true');
       (row.closest('li') ?? row).hidden = !show;
       if (show) visible++;
@@ -1535,10 +1561,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         break;
       case 'category':
         feat.category = value === '' ? null : String(value);
-        // "Newly added" measures the moment a feat became available to players, which
-        // is the moment it gained a Category. Re-filing a curated feat re-stamps it:
-        // the filter says "recently curated", not "first curated ever".
-        feat.curatedAt = feat.category ? Date.now() : 0;
+        // No stamp here. "Newly added" measures the moment a feat became available to
+        // players, and since v1.7.0 that is Curation's File, not the moment a Category
+        // was chosen — a feat can now sit curated in the queue for a week before anyone
+        // sees it. _onCurationFile writes curatedAt instead.
         break;
       case 'summary':
         feat.summary = String(value);
@@ -1578,6 +1604,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         break;
       case 'investmentCount':
         feat.requirements.categoryInvestment[Number(input.dataset.index)].count = Number(value) || 0;
+        break;
+      case 'narrative':
+        feat.requirements.narrative[Number(input.dataset.index)] = String(value);
         break;
       case 'expression':
         feat.requirements.expression = String(value);
@@ -1658,12 +1687,25 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /**
-   * Whether this Feat's curation has reached the saved world. The baseline is rebased by
-   * #commit (Save) and per uuid by #commitFeat (Curation's File), so this is exactly
-   * "was it already curated the last time anything was written".
+   * Whether this Feat has been PUBLISHED as far as the saved world is concerned.
+   *
+   * The baseline is rebased by #commit (Save) and per uuid by #commitFeat (Curation's
+   * File), so this asks "had players been shown this the last time anything was written".
+   *
+   * `curatedAt > 0` used to stand in for that, and it was exact only while a saved
+   * Category WAS publication. Once File is the gate it stops being: a footer Save would
+   * push the stamp into the baseline and arm the UPDATED chip for a Feat nobody has ever
+   * seen. `filedAt` is the fact itself, so "authoring is not changing" finally has a real
+   * publication event as its boundary. Two consequences worth knowing:
+   *
+   *   • curate → footer Save leaves the Feat in the baseline with filedAt 0, still being
+   *     authored, still stamping nothing however many fields are touched.
+   *   • unpublishing moves the WORKING copy; this reads the BASELINE, so edits keep
+   *     stamping until the next Save, after which the Feat is authored again. That is
+   *     exactly how un-curating behaved before — the same expression, no special case.
    */
   #curationCommitted(uuid) {
-    return Number(this.#baseline?.registry?.feats?.[uuid]?.curatedAt) > 0;
+    return Number(this.#baseline?.registry?.feats?.[uuid]?.filedAt) > 0;
   }
 
   /**
@@ -1676,7 +1718,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * is the point, since it is otherwise invisible.
    */
   #neverReveals(feat) {
-    if (!feat?.category || feat.hidden === true) return false;
+    // isPublished, matching secret() in _buildStats: both ask "withheld ONLY by a
+    // reveal-mode entry", and an unpublished Feat is withheld for a stronger reason.
+    if (!isPublished(feat) || feat.hidden === true) return false;
     const revealing = entry => entry?.hidden === true && entry.reveal === true;
     const inReveal =
       revealing(this.#categories.find(c => c.id === feat.category)) ||
@@ -1802,8 +1846,22 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     });
 
     // The heading is markup, not derived, so it is kept rather than rebuilt.
+    //
+    // A soft clause is marked here as well as in the player catalog. The registry mutes
+    // every requirement chip on purpose — it has no character to measure against, so a
+    // coloured verdict would be inventing one — but "the module cannot check this" is not
+    // a verdict, and it is the GM who needs to see which clauses they left unenforceable.
     const heading = line.querySelector(`.${PREFIX}-req-label`);
-    line.replaceChildren(heading, ...labels.map(text => this._chip('req', text)));
+    line.replaceChildren(
+      heading,
+      ...labels.map(entry =>
+        this._chip('req', entry.label, {
+          state: entry.soft ? 'is-soft' : '',
+          icon: entry.soft ? 'fa-solid fa-circle-question' : null,
+          tooltip: entry.soft ? game.i18n.localize('RDHF.requirement.narrativeTooltip') : null
+        })
+      )
+    );
     line.hidden = labels.length === 0;
   }
 
@@ -1961,13 +2019,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const { row, level, axis } = target.dataset;
     if (!row) return;
 
+    // "Not published" is a grid row but not a Category, and nothing on the Feats tab can
+    // match it any more — those Feats live on Curation now, which is where the click
+    // goes. Returned BEFORE the reset below, so leaving the tab does not silently throw
+    // away the filters the GM had set on it. The cell's Level is dropped deliberately:
+    // the Curation tab has no filter rail to apply it to.
+    if (row === UNPUBLISHED_ROW) {
+      this._tab = 'curation';
+      this.render();
+      return;
+    }
+
     this._filters = blankFilterState();
-    this._uncuratedOnly = false;
     this._hiddenOnly = false;
 
-    // Uncurated is a grid row but not a Category, so it maps to the rail's own switch.
-    if (row === UNCURATED_ROW) this._uncuratedOnly = true;
-    else if (axis === 'type') this._filters.types = [row];
+    if (axis === 'type') this._filters.types = [row];
     else this._filters.categories = [row];
 
     if (level) {
@@ -2087,10 +2153,17 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     });
     if (!confirmed) return;
 
-    // Feats lose their Category and fall back to uncurated, which hides them from
-    // players until the GM re-files them. That is the safe direction to fail.
+    // Feats lose their Category, and with it their publication: they go back to the
+    // Curation queue and are hidden from players until the GM files them again. That is
+    // the safe direction to fail, and it is what keeps `published => curated` true —
+    // this is the one path that could otherwise leave a published feat with no Category.
+    // curatedAt goes too: unpublishing withdraws the announcement, so the NEW chip must
+    // not survive it.
     for (const feat of Object.values(this.#config.feats ?? {})) {
-      if (feat.category === id) feat.category = null;
+      if (feat.category !== id) continue;
+      feat.category = null;
+      feat.filedAt = 0;
+      feat.curatedAt = 0;
     }
     this.#categories = this.#categories.filter(c => c.id !== id);
     this.render();
@@ -2144,6 +2217,37 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // Adding the first row suppresses the rule, removing the last restores it.
     this._paintAutoInvestment(row);
     this._paintRequirementLine(row);
+  }
+
+  /**
+   * Both resolve their container through _featHost, never a hard-coded .rdhf-reg-feat.
+   * ApplicationV2 hands a handler the clicked element, and the Curation editor is a
+   * second host carrying the same data-uuid — a selector written at the call site
+   * resolves null there and the button does nothing at all, silently. That was v1.3.2.
+   */
+  static _onAddNarrative(event, target) {
+    event.preventDefault();
+    const host = this._featHost(target);
+    const uuid = host?.dataset.uuid;
+    if (!uuid) return;
+    const feat = (this.#config.feats[uuid] ??= blankFeat(uuid));
+    feat.requirements ??= blankRequirements();
+    feat.requirements.narrative ??= [];
+    feat.requirements.narrative.push('');
+    this._renderNarrative(host);
+    this._paintRequirementLine(host);
+  }
+
+  static _onRemoveNarrative(event, target) {
+    event.preventDefault();
+    const host = this._featHost(target);
+    const uuid = host?.dataset.uuid;
+    const index = Number(target.dataset.index);
+    this.#config.feats[uuid]?.requirements?.narrative?.splice(index, 1);
+    if (host) {
+      this._renderNarrative(host);
+      this._paintRequirementLine(host);
+    }
   }
 
   static _onRemoveInvestment(event, target) {
@@ -2352,7 +2456,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   static _onClearRegFilters(event) {
     event.preventDefault();
     this._filters = blankFilterState();
-    this._uncuratedOnly = false;
     this._hiddenOnly = false;
     const el = this.element;
     const search = el.querySelector(`.${PREFIX}-reg-search`);
@@ -2404,21 +2507,44 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /**
-   * Commits the open feat to the world and drops it out of the queue.
+   * PUBLISHES the open feat and drops it out of the queue.
    *
-   * The write is surgical — see #commitFeat. Filing a feat that still has no Category
-   * is allowed and means "done with this for now": it leaves the session's queue, and
-   * because the queue is derived from the registry it is simply back the next time the
-   * registry opens. The pane says so before the button is pressed.
+   * This is the module's publication event: `filedAt` is what players are gated on, and
+   * this is the only place that writes it. The write itself is surgical — see #commitFeat
+   * — so filing one feat does not push a half-renamed Category or an untested formula
+   * live alongside it.
+   *
+   * A Category is required. Before v1.7.0 filing an uncurated feat was allowed and meant
+   * "done for now"; publishing one is meaningless, so the button is disabled instead and
+   * Skip covers that intent. The guard below is the defence, not the affordance.
    */
   static async _onCurationFile(event) {
     event.preventDefault();
     const uuid = this._curationUuid;
     if (!uuid) return;
 
+    const entry = this.#config.feats?.[uuid];
+    if (!entry?.category) {
+      ui.notifications?.warn(game.i18n.localize('RDHF.notify.fileNeedsCategory'));
+      return;
+    }
+
+    // Stamped BEFORE the commit, so the write carries it, and rolled back if the write
+    // fails — otherwise the working copy would say published while the world said
+    // nothing, the row would leave the queue, and the GM would believe it.
+    //
+    // filedAt uses ||= because a re-file must not move the publication date; curatedAt is
+    // assigned outright because a re-file IS a re-announcement, and it is what the
+    // "Newly added" window measures now that gaining a Category no longer does.
+    const before = { filedAt: entry.filedAt, curatedAt: entry.curatedAt };
+    const now = Date.now();
+    entry.filedAt ||= now;
+    entry.curatedAt = now;
+
     try {
       await this.#commitFeat(uuid);
     } catch (err) {
+      Object.assign(entry, before);
       console.error(`${MODULE_ID} | Failed to file feat ${uuid}:`, err);
       ui.notifications?.error(game.i18n.localize('RDHF.notify.fileFailed'));
       return;
@@ -2428,7 +2554,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // is answerable, and the fallback to the previous row keeps the selection where
     // the GM was working instead of throwing them to the top.
     this._curationUuid = nextInQueue(this._curationOrder(), uuid);
-    this._curationFiled.add(uuid);
     this.render();
   }
 

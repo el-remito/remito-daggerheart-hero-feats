@@ -29,7 +29,7 @@ export const SETTINGS = {
 export const INVEST_LAYOUTS = ['wide', 'grid'];
 
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */
-export const MIGRATION_VERSION = 2;
+export const MIGRATION_VERSION = 3;
 
 export const ACTOR_TYPES = { PC: 'character' };
 
