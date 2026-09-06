@@ -197,8 +197,20 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   live under `system` (`DhCharacter.getRollData`, `:33564`). `@tier` alone resolves to nothing.
   `featRollData()` in `data/actor-state.mjs` adds top-level `level` / `tier` / `prof` aliases so a
   GM can write `@level * 2`.
-- **`hasSpellcasting` must test `spellcastModifierTrait`, not `spellcastModifier`** — the latter is
-  the trait's *value* and is 0 both for a non-caster and for a caster whose trait is 0.
+- **`hasSpellcasting` must test `spellcastModifierTrait?.key` against `TRAITS`.** Neither the value
+  nor the object will do, and they fail in OPPOSITE directions. `spellcastModifier` is the trait's
+  *value* and is 0 both for a non-caster and for a caster whose trait is 0 — a false negative, and
+  the reason this note used to recommend the object. But `Boolean(spellcastModifierTrait)` is truthy
+  for nearly EVERY character: the getter (`:36259`) maps each subclass through
+  `{ ...this.traits[sc.system.spellcastingTrait], key: sc.system.spellcastingTrait }`, and
+  `spellcastingTrait` is `nullable, initial: null`, so a NON-caster subclass spreads `undefined`
+  into `{ key: null }` — a truthy object the getter's own `.filter(x => x)` cannot catch. The system
+  never notices, because its own readers take `.value` (→ 0) or compare `.key` (→ never matches a
+  trait id); only a truthiness test is deceived. That shipped from v1.0.0 to v1.7.1 and let any
+  character holding a subclass satisfy a `hasSpellcasting` atom. The KEY is the only branch that is
+  the fact itself, and `TRAITS.includes` rejects both `null` and `undefined` without a guard. The
+  `sys.class?.subclass?.system?.spellcastingTrait` fallback is a trait id STRING where the getter
+  returns an OBJECT, and that asymmetry is what made the truthiness test look sound.
 - **The level anchor** is `.character-header-sheet .name-row .level-div h3.label`
   (`templates/sheets/actors/character/header.hbs:12-38`). Under LIMITED permission the header part
   is not rendered at all — a missing anchor is normal, not an error.

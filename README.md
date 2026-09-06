@@ -167,6 +167,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.7.2
+- **Fixed: a Feat requiring a Spellcaster no longer offers itself to characters who cannot cast.** Any character with a subclass counted as a spellcaster, whether or not that subclass casts anything — so a `hasSpellcasting` requirement was met by almost everybody and the chip showed green. It now asks which trait the subclass casts with, and a subclass that names none is not a caster
+- A character who *does* cast with a trait sitting at 0 is still correctly a spellcaster
+
 ### v1.7.1
 - **You choose how long NEW and UPDATED last.** A new **Recency chips** section on the Automation tab. Until now both chips were a fixed window of the ten most recent Feats, which suits a table that files a few Feats a month and not one that drops a sixty-Feat pack in an evening
 - **Three ways to set each chip.** *By amount* keeps the newest few — either a fixed number, or a share of your published catalog, so the window grows as the catalog does. *By time* keeps a Feat chipped for a number of real days, however many that turns out to be. *Combined* applies both, and the chip goes as soon as either runs out

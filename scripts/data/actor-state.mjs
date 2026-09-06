@@ -187,11 +187,19 @@ export function buildActorSnapshot(actor) {
     ancestryName: sys.ancestry?.name ?? null,
     communityName: sys.community?.name ?? null,
     domains: (sys.domainData ?? []).map(d => game.i18n.localize(d.label ?? d.id)),
-    // spellcastModifier is the trait's VALUE and is 0 for a non-caster — but also 0 for
-    // a caster whose trait happens to be 0, so presence of the trait is the real test
-    // (DhCharacter.spellcastModifierTrait, build/daggerheart.js:33114).
-    hasSpellcasting: Boolean(
-      sys.spellcastModifierTrait ?? sys.class?.subclass?.system?.spellcastingTrait
+    // A caster is one whose subclass NAMES a spellcasting trait, so this tests the KEY.
+    // Both of the obvious tests are wrong, in opposite directions:
+    //   .value  is 0 for a non-caster, but also 0 for a caster whose trait is 0.
+    //   Boolean(spellcastModifierTrait) is truthy for nearly EVERY character. The getter
+    //     maps each subclass through `{ ...this.traits[sc.system.spellcastingTrait], key }`
+    //     (build/daggerheart.js:36259) and spellcastingTrait is `nullable, initial: null`,
+    //     so a NON-caster subclass spreads `undefined` into `{ key: null }` — a truthy
+    //     object the getter's own `.filter(x => x)` cannot catch. The system never notices
+    //     because its readers take `.value` (→ 0) or compare `.key` (→ never matches).
+    // The fallback is normalized to a key too: it is a trait id string where the getter
+    // returns an object, and that asymmetry is what let the truthiness test look sound.
+    hasSpellcasting: TRAITS.includes(
+      sys.spellcastModifierTrait?.key ?? sys.class?.subclass?.system?.spellcastingTrait
     ),
     featureNames: actor.items
       .filter(i => i.type === 'feature')
