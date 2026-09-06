@@ -15,10 +15,12 @@ import {
   DEFAULT_POINT_FORMULA,
   DEFAULT_INVESTMENT_BY_LEVEL,
   GENERAL_CATEGORY_ID,
-  INVEST_LAYOUTS
+  INVEST_LAYOUTS,
+  DEFAULT_RECENCY
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
 import { normalizeAutomation } from './logic/automation.mjs';
+import { normalizeRecency } from './logic/recency.mjs';
 
 /**
  * The source list as it stood at the last invalidation, so a registry write that did
@@ -144,6 +146,20 @@ export function registerSettings() {
       }
     }
   });
+
+  // How long the NEW and UPDATED chips last. Its own key rather than a corner of
+  // AUTOMATION even though the two share a tab: that rule DERIVES REQUIREMENTS, this
+  // decorates a chip, and a stored object named `automation` holding both would be a
+  // name the next reader has to un-learn. The tab is a surface; this is data.
+  //
+  // config: false and edited on the Automation tab, which is the only surface that can
+  // show three modes with the numbers each one actually uses.
+  game.settings.register(MODULE_ID, SETTINGS.RECENCY, {
+    scope: 'world',
+    config: false,
+    type: Object,
+    default: foundry.utils.deepClone(DEFAULT_RECENCY)
+  });
 }
 
 /**
@@ -183,6 +199,19 @@ export function getAutomation() {
 
 export async function setAutomation(automation) {
   return game.settings.set(MODULE_ID, SETTINGS.AUTOMATION, normalizeAutomation(automation));
+}
+
+/**
+ * How long each chip lasts, normalized. Same contract as getAutomation: every read is
+ * rebuilt from the defaults, so a partial or hand-edited value can never reach the
+ * window and a junk mode string can never reach the template.
+ */
+export function getRecency() {
+  return normalizeRecency(game.settings.get(MODULE_ID, SETTINGS.RECENCY));
+}
+
+export async function setRecency(recency) {
+  return game.settings.set(MODULE_ID, SETTINGS.RECENCY, normalizeRecency(recency));
 }
 
 /**
@@ -237,7 +266,6 @@ export function getPointFormula() {
   return game.settings.get(MODULE_ID, SETTINGS.POINT_FORMULA) || DEFAULT_POINT_FORMULA;
 }
 
-/** Whether the registry offers its Statistics tab. */
 /**
  * Actor ids set aside from the adoption figures.
  *
@@ -257,6 +285,7 @@ export async function setExcludedActors(ids) {
   return game.settings.set(MODULE_ID, SETTINGS.EXCLUDED_ACTORS, [...ids]);
 }
 
+/** Whether the registry offers its Statistics tab. */
 export function getShowStatistics() {
   return game.settings.get(MODULE_ID, SETTINGS.SHOW_STATS) !== false;
 }

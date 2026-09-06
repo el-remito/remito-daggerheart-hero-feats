@@ -252,6 +252,32 @@ export function isUncurated(feat) {
 }
 
 /**
+ * Every published Feat's uuid — and so, by its length, the denominator a percentage
+ * recency window resolves against (logic/recency.mjs).
+ *
+ * Stated once and read by both windows, so 10% means the same number of slots in the
+ * GM's registry and in every player's catalog. It deliberately measures PUBLICATION and
+ * not what any one reader can see: a player whose Category is hidden simply fills fewer
+ * of those slots, rather than being handed a different-sized window from everyone else.
+ *
+ * The list rather than the count, because the registry app needs both — the count for
+ * the denominator, the uuids to read live stamps off its working copy — and the
+ * predicate is worth stating once.
+ *
+ * It goes through normalizeFeat rather than reading `stored.filedAt` directly, because a
+ * pre-1.7.0 entry in a world whose GM has not logged in since the upgrade carries no
+ * such key at all, and the inline default is what reads it as published.
+ *
+ * @param {object} registry  a registry object — the saved setting, or a working copy
+ * @returns {string[]}
+ */
+export function publishedUuids(registry) {
+  return Object.entries(registry?.feats ?? {})
+    .filter(([uuid, stored]) => isPublished(normalizeFeat(uuid, stored)))
+    .map(([uuid]) => uuid);
+}
+
+/**
  * The full feat list, joined against its source Features.
  *
  * Withholding is decided by resolveVisibility below. Everything it withholds is still

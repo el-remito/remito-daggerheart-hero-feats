@@ -15,11 +15,18 @@ import {
   getAutomation,
   getCategories,
   getInvestmentsLayout,
+  getRecency,
+  getRegistry,
   getTypes,
   setInvestmentsLayout,
   taxonomyLabel
 } from '../settings.mjs';
-import { listFeats, typeLabels, getEnrichedDescription } from '../data/registry.mjs';
+import {
+  publishedUuids,
+  listFeats,
+  typeLabels,
+  getEnrichedDescription
+} from '../data/registry.mjs';
 import { onFeatureDocumentChanged } from '../data/resync.mjs';
 import {
   acquisitionOf,
@@ -33,13 +40,13 @@ import {
 import { checkRequirements, isEligible } from '../logic/requirements.mjs';
 import {
   matchesFilters,
-  newestCurated,
-  newestUpdated,
   blankFilterState,
   buildSearchText,
   byLevelThenName
 } from '../logic/filters.mjs';
+import { newestCurated, newestUpdated } from '../logic/recency.mjs';
 import { buildInvestmentSummary } from '../logic/investment.mjs';
+import { chipTooltip } from './recency-text.mjs';
 import { localizeCheck } from './requirement-text.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -187,14 +194,21 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     // rather than as a raw "Compendium.pack.Item.abc123".
     snapshot.featLabels = Object.fromEntries(feats.map(f => [f.uuid, f.name]));
 
-    // Recency is a property of the SET, decided once here rather than per row: the
-    // tenth-newest Feat stops being new when an eleventh is curated, with nothing about
-    // it changing. Measured over the list the PLAYER receives, so a Feat withheld from
-    // them never occupies one of the ten slots.
-    const fresh = newestCurated(feats);
-    // Its own window over its own timestamp, so "recently added" and "recently changed"
-    // cannot crowd each other out of ten slots they would otherwise share.
-    const changed = newestUpdated(feats);
+    // Recency is a property of the SET, decided once here rather than per row: under a
+    // fixed count the newest Feat displaces the oldest with nothing about either
+    // changing, and under a percentage the window widens as the catalog grows.
+    //
+    // WHICH Feats can occupy a slot is still measured over the list the PLAYER receives,
+    // so a Feat withheld from them never takes one. How MANY slots there are is not: the
+    // percentage resolves against the published catalog, so the GM's 10% and this
+    // player's 10% are the same number of slots however much is hidden from them.
+    const recency = getRecency();
+    const total = publishedUuids(getRegistry()).length;
+    const fresh = newestCurated(feats, recency.new, { total });
+    // Its own window over its own timestamp AND its own rule, so a busy week of
+    // publishing cannot crowd out the changed Feats and the two can be given different
+    // lifetimes.
+    const changed = newestUpdated(feats, recency.updated, { total });
 
     const views = feats
       .map(feat => {
@@ -233,6 +247,13 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       actor: this.actor,
       isGM,
       pool,
+      // Both chips' tooltips, formatted ONCE here rather than localized at each of the
+      // places a chip is drawn. The sentence has to name the mode and the resolved
+      // number, and a chip claiming "one of the 20 most recent" while 19 are drawn
+      // would be worse than saying nothing — so the string and the window read the same
+      // resolveRecency call.
+      newChipTooltip: chipTooltip('new', recency.new, total),
+      updatedChipTooltip: chipTooltip('updated', recency.updated, total),
       available,
       acquired,
       acquiredCount: acquired.length,

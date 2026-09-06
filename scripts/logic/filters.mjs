@@ -6,13 +6,11 @@
  *
  * Filtering runs on every keystroke and never triggers a re-render (the catalog toggles
  * row visibility in place), so these must stay cheap and allocation-light.
+ *
+ * Deciding WHICH Feats are new or updated lives in logic/recency.mjs as of v1.7.1 — it
+ * owns a stored rule now, which is a different job. This file only ever reads the
+ * answer, as `view.isNew` in matchesFilters below.
  */
-
-/**
- * How many Feats "Newly added" shows. A recency window, not a page: the point is
- * "what did I just file", so it stays small enough to read at a glance.
- */
-export const NEW_FEATS_LIMIT = 10;
 
 /** The filter state a fresh catalog opens with. */
 export function blankFilterState() {
@@ -26,57 +24,6 @@ export function blankFilterState() {
     hideOwned: false,
     newOnly: false
   };
-}
-
-/**
- * The most recently curated Feats, newest first.
- *
- * Recency is a property of the SET, not of a row — the tenth-newest Feat stops being
- * new when an eleventh is filed, without anything about it changing. So membership is
- * decided once per render and stamped onto the views as `isNew`, which is what lets
- * matchesFilters stay a per-row predicate and lets both windows filter from data
- * attributes without a context object.
- *
- * A Feat that has never been published carries 0 and is never new. Since v1.7.0 the
- * stamp is written by Curation's File, so "newly made available to players" is literally
- * what this measures rather than a proxy for it — gaining a Category no longer makes a
- * Feat visible, and so no longer makes it new.
- *
- * @param {Array<object>} views  feat views carrying `uuid` and `curatedAt`
- * @param {number} [limit]
- * @returns {Set<string>} uuids
- */
-export function newestCurated(views, limit = NEW_FEATS_LIMIT) {
-  return newestBy(views, 'curatedAt', limit);
-}
-
-/**
- * The most recently CHANGED Feats, newest first — the same window as newestCurated,
- * over its own timestamp, so "recently added" and "recently changed" are read the same
- * way and neither can crowd the other out.
- *
- * A Feat only becomes eligible for an `updatedAt` stamp once its curation has been
- * committed; see _syncField in the registry app. Authoring a Feat necessarily edits the
- * same fields that later count as changes, so without that boundary every freshly
- * curated Feat would report itself as updated.
- *
- * @param {Array<object>} views  feat views carrying `uuid` and `updatedAt`
- * @param {number} [limit]
- * @returns {Set<string>} uuids
- */
-export function newestUpdated(views, limit = NEW_FEATS_LIMIT) {
-  return newestBy(views, 'updatedAt', limit);
-}
-
-/** The shared window. Both chips are a recency SET, and there is one implementation. */
-function newestBy(views, field, limit) {
-  return new Set(
-    (views ?? [])
-      .filter(v => Number(v?.[field]) > 0)
-      .sort((a, b) => Number(b[field]) - Number(a[field]))
-      .slice(0, Math.max(0, limit))
-      .map(v => v.uuid)
-  );
 }
 
 /**

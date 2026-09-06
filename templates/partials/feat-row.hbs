@@ -38,14 +38,18 @@
                           updated until its curation has been committed, so the two
                           together mean it was published once and changed later, which
                           is the fact worth a slot on the line. --}}
+                    {{!-- The tooltip is resolved once per render, not localized here:
+                          it has to name the mode the GM chose and the number that mode
+                          actually resolves to. @root because this partial is invoked
+                          per row. --}}
                     {{#if this.isUpdated}}
                         <span class="rdhf-chip rdhf-chip--updated"
-                              data-tooltip="{{localize 'RDHF.catalog.updatedTooltip'}}">
+                              data-tooltip="{{@root.updatedChipTooltip}}">
                             {{localize "RDHF.catalog.updated"}}
                         </span>
                     {{else if this.isNew}}
                         <span class="rdhf-chip rdhf-chip--new"
-                              data-tooltip="{{localize 'RDHF.catalog.newTooltip'}}">
+                              data-tooltip="{{@root.newChipTooltip}}">
                             {{localize "RDHF.catalog.new"}}
                         </span>
                     {{/if}}

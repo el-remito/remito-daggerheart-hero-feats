@@ -1340,6 +1340,79 @@ details[open] > summary .rdhf-arrow {
     font-style: italic;
 }
 
+/* -- Recency: how long the NEW and UPDATED chips last --------------------- */
+
+/* One block per chip, boxed like .rdhf-checkline--boxed so the two rules read as two
+   separate settings rather than one long column of radios. */
+.rdhf-recency-rule {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-soft);
+}
+
+.rdhf-recency-title {
+    margin: 0;
+    font-size: var(--font-size-12, 0.75rem);
+    letter-spacing: 0.04em;
+    color: var(--rdhf-gold);
+}
+
+.rdhf-recency-modes {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+}
+
+/* Same reasoning as .rdhf-auto-table.is-disabled: a field the chosen mode ignores is
+   still readable and still editable, because its value is KEPT and the GM may well be
+   setting it up before switching to the mode that reads it. Dim, never disable. */
+.rdhf-recency-amount.is-disabled,
+.rdhf-recency-time.is-disabled,
+.rdhf-recency-field.is-disabled {
+    opacity: 0.55;
+}
+
+.rdhf-recency-amount,
+.rdhf-recency-time {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--rdhf-border);
+}
+
+/* The number sits indented under the radio that switches it on, so which field belongs
+   to which choice is carried by position rather than by a label repeating it. */
+.rdhf-recency-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 20px;
+}
+
+.rdhf-recency-field > span:first-child {
+    min-width: 54px;
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-ink-muted);
+}
+
+.rdhf-recency-field input[type="number"] {
+    width: 78px;
+    flex: 0 0 auto;
+}
+
+/* A percentage is the one field whose effect cannot be read off the field itself, so
+   the resolved count is printed beside it and repainted as the catalog grows. */
+.rdhf-recency-resolved {
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-gold);
+    white-space: nowrap;
+}
+
 /* ── Taxonomy: the fixed Category ─────────────────────────────────────────── */
 
 .rdhf-taxonomy-row.is-fixed input[readonly] {

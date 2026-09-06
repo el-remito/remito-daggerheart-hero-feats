@@ -22,11 +22,39 @@ export const SETTINGS = {
   SHOW_STATS: 'showStatistics',
   AUTOMATION: 'automation',
   INVEST_LAYOUT: 'investmentsLayout',
-  EXCLUDED_ACTORS: 'excludedActors'
+  EXCLUDED_ACTORS: 'excludedActors',
+  RECENCY: 'recency'
 };
 
 /** How the My Investments tab lays its Categories out. Per user, never shared. */
 export const INVEST_LAYOUTS = ['wide', 'grid'];
+
+/**
+ * How long a Feat wears its NEW or UPDATED chip.
+ *
+ * 'amount' keeps the newest N, where N is either `count` outright or `percent` of the
+ * published catalog. 'time' keeps everything stamped within `days`, however many that
+ * is. 'combined' is the INTERSECTION — whichever window expires first takes the chip,
+ * which is the same thing said from the other end.
+ */
+export const RECENCY_MODES = ['amount', 'time', 'combined'];
+
+/** How 'amount' finds its N. A percentage is resolved against the published Feat count. */
+export const RECENCY_AMOUNT_MODES = ['count', 'percent'];
+
+/**
+ * One rule per chip, and they are independent: "recently added" and "recently changed"
+ * are different questions and a busy week of one must not set the policy for the other.
+ *
+ * This default IS the behaviour every world had before v1.7.1 — the fixed window of ten
+ * that used to be NEW_FEATS_LIMIT — which is why this feature needs no migration. The
+ * fields a mode ignores are still carried, so switching modes and back finds the numbers
+ * where the GM left them.
+ */
+export const DEFAULT_RECENCY = {
+  new: { mode: 'amount', amountMode: 'count', count: 10, percent: 10, days: 14 },
+  updated: { mode: 'amount', amountMode: 'count', count: 10, percent: 10, days: 14 }
+};
 
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */
 export const MIGRATION_VERSION = 3;

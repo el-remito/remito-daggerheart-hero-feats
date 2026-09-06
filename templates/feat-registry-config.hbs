@@ -271,12 +271,15 @@
                                                         {{this.label}}
                                                     </span>
                                                 {{/each}}
+                                                {{!-- _buildChips repaints these two from
+                                                      this._recencyTooltips; keep the two
+                                                      in step. --}}
                                                 {{#if this.isUpdated}}
                                                     <span class="rdhf-chip rdhf-chip--updated"
-                                                          data-tooltip="{{localize 'RDHF.catalog.updatedTooltip'}}">{{localize "RDHF.catalog.updated"}}</span>
+                                                          data-tooltip="{{@root.updatedChipTooltip}}">{{localize "RDHF.catalog.updated"}}</span>
                                                 {{else if this.isNew}}
                                                     <span class="rdhf-chip rdhf-chip--new"
-                                                          data-tooltip="{{localize 'RDHF.catalog.newTooltip'}}">{{localize "RDHF.catalog.new"}}</span>
+                                                          data-tooltip="{{@root.newChipTooltip}}">{{localize "RDHF.catalog.new"}}</span>
                                                 {{/if}}
                                                 {{#if this.neverReveals}}
                                                     <span class="rdhf-chip rdhf-chip--warn"
@@ -895,6 +898,12 @@
 
         {{#if isAutomation}}
             <section class="rdhf-pane">
+                {{!-- Two unrelated world policies share this tab: rules that DERIVE
+                      requirements, and how long the recency chips last. Both are set
+                      once and then forgotten, which is what they have in common; they
+                      are stored under separate keys, because they are not the same
+                      thing. --}}
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.automation.name"}}</h4>
                 <p class="rdhf-hint">{{localize "RDHF.automation.intro"}}</p>
 
                 <h4 class="rdhf-rail-heading">{{localize "RDHF.automation.investment.name"}}</h4>
@@ -931,6 +940,83 @@
                 </div>
                 <button type="button" class="rdhf-text-btn" data-action="resetAutomation">
                     <i class="fa-solid fa-rotate-left"></i> {{localize "RDHF.automation.reset"}}
+                </button>
+
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.recency.name"}}</h4>
+                <p class="rdhf-hint">{{localize "RDHF.recency.intro"}}</p>
+
+                {{#each recencyRows}}
+                    <div class="rdhf-recency-rule" data-chip="{{this.chip}}">
+                        <h5 class="rdhf-recency-title">{{this.label}}</h5>
+                        <p class="rdhf-hint">{{this.hint}}</p>
+
+                        <div class="rdhf-recency-modes">
+                            <label class="rdhf-checkline">
+                                <input type="radio" name="rdhf-recency-mode-{{this.chip}}"
+                                       data-field="recencyMode" data-chip="{{this.chip}}"
+                                       value="amount" {{#if this.isAmount}}checked{{/if}}>
+                                <span>{{localize "RDHF.recency.mode.amount"}}</span>
+                            </label>
+                            <label class="rdhf-checkline">
+                                <input type="radio" name="rdhf-recency-mode-{{this.chip}}"
+                                       data-field="recencyMode" data-chip="{{this.chip}}"
+                                       value="time" {{#if this.isTime}}checked{{/if}}>
+                                <span>{{localize "RDHF.recency.mode.time"}}</span>
+                            </label>
+                            <label class="rdhf-checkline">
+                                <input type="radio" name="rdhf-recency-mode-{{this.chip}}"
+                                       data-field="recencyMode" data-chip="{{this.chip}}"
+                                       value="combined" {{#if this.isCombined}}checked{{/if}}>
+                                <span>{{localize "RDHF.recency.mode.combined"}}</span>
+                            </label>
+                        </div>
+
+                        {{!-- Blocks a mode ignores are DIMMED, not removed: the values
+                              are still stored, so switching modes and back finds them
+                              where they were left. _paintRecencyState toggles these. --}}
+                        <div class="rdhf-recency-amount {{#unless this.usesAmount}}is-disabled{{/unless}}">
+                            <label class="rdhf-checkline">
+                                <input type="radio" name="rdhf-recency-amount-{{this.chip}}"
+                                       data-field="recencyAmountMode" data-chip="{{this.chip}}"
+                                       value="count" {{#if this.isCount}}checked{{/if}}>
+                                <span>{{localize "RDHF.recency.amountMode.count"}}</span>
+                            </label>
+                            <label class="rdhf-recency-field rdhf-recency-count {{#unless this.isCount}}is-disabled{{/unless}}">
+                                <span>{{localize "RDHF.recency.count"}}</span>
+                                <input type="number" min="0" step="1" data-field="recencyCount"
+                                       data-chip="{{this.chip}}" value="{{this.count}}">
+                            </label>
+
+                            <label class="rdhf-checkline">
+                                <input type="radio" name="rdhf-recency-amount-{{this.chip}}"
+                                       data-field="recencyAmountMode" data-chip="{{this.chip}}"
+                                       value="percent" {{#if this.isPercent}}checked{{/if}}>
+                                <span>{{localize "RDHF.recency.amountMode.percent"}}</span>
+                            </label>
+                            <label class="rdhf-recency-field rdhf-recency-percent {{#unless this.isPercent}}is-disabled{{/unless}}">
+                                <span>{{localize "RDHF.recency.percent"}}</span>
+                                <input type="number" min="0" max="100" step="1" data-field="recencyPercent"
+                                       data-chip="{{this.chip}}" value="{{this.percent}}">
+                                {{!-- A percentage is the one field whose effect cannot be
+                                      read off the field itself. --}}
+                                <span class="rdhf-recency-resolved">{{localize "RDHF.recency.resolved" count=this.resolved}}</span>
+                            </label>
+                        </div>
+
+                        <div class="rdhf-recency-time {{#unless this.usesTime}}is-disabled{{/unless}}">
+                            <label class="rdhf-recency-field">
+                                <span>{{localize "RDHF.recency.days"}}</span>
+                                <input type="number" min="0" step="1" data-field="recencyDays"
+                                       data-chip="{{this.chip}}" value="{{this.days}}">
+                            </label>
+                        </div>
+
+                        <p class="rdhf-hint">{{localize "RDHF.recency.offHint"}}</p>
+                    </div>
+                {{/each}}
+
+                <button type="button" class="rdhf-text-btn" data-action="resetRecency">
+                    <i class="fa-solid fa-rotate-left"></i> {{localize "RDHF.recency.reset"}}
                 </button>
             </section>
         {{/if}}

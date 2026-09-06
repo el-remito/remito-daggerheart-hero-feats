@@ -167,6 +167,13 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.7.1
+- **You choose how long NEW and UPDATED last.** A new **Recency chips** section on the Automation tab. Until now both chips were a fixed window of the ten most recent Feats, which suits a table that files a few Feats a month and not one that drops a sixty-Feat pack in an evening
+- **Three ways to set each chip.** *By amount* keeps the newest few — either a fixed number, or a share of your published catalog, so the window grows as the catalog does. *By time* keeps a Feat chipped for a number of real days, however many that turns out to be. *Combined* applies both, and the chip goes as soon as either runs out
+- **The two chips are set separately**, because "recently added" and "recently changed" rarely move at the same pace. Set 0 anywhere to hide that chip entirely
+- **The tooltip now tells players the rule you chose** — how many Feats, or how many days — instead of the hard-coded "one of the ten" it used to say
+- Nothing changes until you change it: every world keeps the window of ten it already had
+
 ### v1.7.0
 - **File now publishes.** A Feat stays invisible to players until you press **File** on the Curation tab — giving it a Category is no longer enough. Previously, setting a Category and pressing **Save** pushed the Feat live and dropped it out of the queue in the same stroke, which meant half-curated Feats could reach your table without anyone deciding they were ready
 - **Save stores your work without showing it to anyone.** Curate as many Feats as you like, save, close, come back tomorrow: they are all still in the queue, exactly as you left them, still hidden from players. The queue survives reloads now, so you can no longer lose your place in a long pass

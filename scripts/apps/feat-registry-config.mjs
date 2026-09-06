@@ -16,7 +16,8 @@ import {
   ITEM_TYPES,
   SETTINGS,
   GENERAL_CATEGORY_ID,
-  DEFAULT_INVESTMENT_BY_LEVEL
+  DEFAULT_INVESTMENT_BY_LEVEL,
+  DEFAULT_RECENCY
 } from '../constants.mjs';
 import {
   getExcludedActors,
@@ -32,13 +33,16 @@ import {
   isFixedCategory,
   getShowStatistics,
   getAutomation,
-  setAutomation
+  setAutomation,
+  getRecency,
+  setRecency
 } from '../settings.mjs';
 import {
   loadAllSourceFeatures,
   normalizeFeat,
   blankFeat,
   isUncurated,
+  publishedUuids,
   invalidatePackCache,
   getEnrichedDescription,
   resolveQuietly,
@@ -61,13 +65,9 @@ import {
   stripRedundantInvestment
 } from '../logic/automation.mjs';
 import { describeRequirements, localizeCheck } from './requirement-text.mjs';
-import {
-  byLevelThenName,
-  matchesFilters,
-  blankFilterState,
-  newestCurated,
-  newestUpdated
-} from '../logic/filters.mjs';
+import { chipTooltip } from './recency-text.mjs';
+import { byLevelThenName, matchesFilters, blankFilterState } from '../logic/filters.mjs';
+import { recencyWindow, resolveRecency } from '../logic/recency.mjs';
 import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -148,6 +148,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   #types = null;
   #formula = null;
   #automation = null; // working copy of the Rule Automation setting
+  #recency = null; // working copy of the NEW / UPDATED chip windows
   #dragDrop = null;
   #openFeats = new Set();
   /**
@@ -175,14 +176,25 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._railOpen = { categories: true, types: true };
     // Which axis the statistics grid is showing. Swapping it repaints, never renders.
     this._statsAxis = 'category';
-    // uuids of the most recently curated feats. Recency belongs to the SET, not to a
-    // feat — the tenth-newest stops being new when an eleventh is filed, with nothing
-    // about it changing — so it is decided once and read by both the chips and the
-    // filter, which is what keeps them from disagreeing.
+    // uuids of the most recently published feats. Recency belongs to the SET, not to a
+    // feat — under a count the newest displaces the oldest with nothing about either
+    // changing, under a percentage the window widens as the catalog grows — so it is
+    // decided once and read by both the chips and the filter, which is what keeps them
+    // from disagreeing.
     this._newFeats = new Set();
-    // The same window over its own timestamp. Two sets rather than one so a busy week of
-    // curation cannot push every changed Feat out of the ten slots they would share.
+    // The same window over its own timestamp and its OWN rule. Two sets rather than one
+    // so a busy week of publishing cannot push every changed Feat out of slots they
+    // would otherwise share, and so the two can be given different lifetimes.
     this._updatedFeats = new Set();
+    // Both chips' tooltips, formatted once per render from the rule in force. The
+    // sentence names the mode and the resolved number, so it cannot be a fixed string
+    // and must not be localized separately at each place a chip is drawn.
+    this._recencyTooltips = { new: '', updated: '' };
+    // The published uuids, and so the percentage denominator, refreshed once per render.
+    // Publication cannot move without one — File, Reset and deleting a Category all
+    // render() — while a recency recompute happens on every keystroke that stamps a
+    // Feat, and normalizing the whole registry that often would be waste.
+    this._publishedUuids = [];
     // Actor ids the GM has set aside from the adoption figures. Session-local, like
     // every other thing this tab knows: the Statistics tab derives everything and
     // stores nothing, so there is no setting, no flag and no migration here either.
@@ -230,6 +242,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       addNarrative: FeatRegistryConfig._onAddNarrative,
       removeNarrative: FeatRegistryConfig._onRemoveNarrative,
       resetAutomation: FeatRegistryConfig._onResetAutomation,
+      resetRecency: FeatRegistryConfig._onResetRecency,
       exportRegistry: FeatRegistryConfig._onExport,
       importRegistry: FeatRegistryConfig._onImport,
       pruneOrphans: FeatRegistryConfig._onPrune,
@@ -299,6 +312,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.#types ??= foundry.utils.deepClone(getTypes());
     this.#formula ??= getPointFormula();
     this.#automation ??= foundry.utils.deepClone(getAutomation());
+    this.#recency ??= foundry.utils.deepClone(getRecency());
     this.#baseline ??= foundry.utils.deepClone(this.#snapshot());
 
     // Absorb rows that merely restate the rule, so a GM who applied this curve by hand
@@ -346,11 +360,22 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       checked: this._filters.types.includes(o.id)
     }));
 
+    // Which feats are published, and therefore the percentage denominator — the same
+    // one the player catalog uses, so 10% is the same number of slots on both sides.
+    // Refreshed here rather than at each recompute; see the note in the constructor.
+    this._publishedUuids = publishedUuids(this.#config);
+    const publishedTotal = this._publishedUuids.length;
+
     // Decided once for the whole list, before the views are built, because recency is
-    // a property of the set: the tenth-newest feat stops being new when an eleventh is
-    // filed without anything about it changing.
+    // a property of the set: which feats are in it moves when any of them is published,
+    // and how many fit moves when the catalog grows.
     this._recomputeNewFeats();
     this._recomputeUpdatedFeats();
+
+    this._recencyTooltips = {
+      new: chipTooltip('new', this.#recency.new, publishedTotal),
+      updated: chipTooltip('updated', this.#recency.updated, publishedTotal)
+    };
 
     const views = [...sources.values()]
       .map(source => {
@@ -459,6 +484,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         .map(Number)
         .sort((a, b) => b - a)
         .map(level => ({ level, count: this.#automation.investmentByLevel.table[String(level)] })),
+      // One block per chip, on the same tab as Rule Automation: both are world-level
+      // policy a GM sets once and then forgets. Every branch the pane needs is a
+      // precomputed boolean, because Handlebars has no `eq` here.
+      recencyRows: ['new', 'updated'].map(chip => this.#recencyRow(chip, publishedTotal)),
+      // Formatted once per render and read by the chips in the template; _buildChips
+      // reads the same two off this._recencyTooltips when it repaints a row.
+      newChipTooltip: this._recencyTooltips.new,
+      updatedChipTooltip: this._recencyTooltips.updated,
       sources: (this.#config.sources ?? []).map(s => {
         const label = game.packs.get(s.packId)?.metadata?.label ?? s.packId;
         return {
@@ -816,7 +849,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // Every editable field syncs into the working copy on input. Values arrive from
     // text inputs as strings, so numbers are coerced at the point of assignment.
     for (const input of el.querySelectorAll('[data-field]')) {
-      const event = input.matches('select, input[type="checkbox"]') ? 'change' : 'input';
+      const event = input.matches('select, input[type="checkbox"], input[type="radio"]')
+        ? 'change'
+        : 'input';
       input.addEventListener(event, ev => this._syncField(ev.currentTarget));
     }
 
@@ -1102,13 +1137,13 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     if (this._updatedFeats.has(feat.uuid)) {
       chips.push(
         this._chip('updated', game.i18n.localize('RDHF.catalog.updated'), {
-          tooltip: game.i18n.localize('RDHF.catalog.updatedTooltip')
+          tooltip: this._recencyTooltips.updated
         })
       );
     } else if (this._newFeats.has(feat.uuid)) {
       chips.push(
         this._chip('new', game.i18n.localize('RDHF.catalog.new'), {
-          tooltip: game.i18n.localize('RDHF.catalog.newTooltip')
+          tooltip: this._recencyTooltips.new
         })
       );
     }
@@ -1528,6 +1563,24 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
+    // The recency rules, likewise app-level. `data-chip` names which of the two the
+    // control belongs to, exactly as automationLevel's `data-level` names its row.
+    if (field.startsWith('recency')) {
+      const rule = this.#recency[input.dataset.chip];
+      if (!rule) return;
+      const whole = Math.max(0, Math.floor(Number(value) || 0));
+      if (field === 'recencyMode') rule.mode = String(value);
+      else if (field === 'recencyAmountMode') rule.amountMode = String(value);
+      else if (field === 'recencyCount') rule.count = whole;
+      else if (field === 'recencyPercent') rule.percent = Math.min(100, whole);
+      else if (field === 'recencyDays') rule.days = whole;
+      // Repainted, never re-rendered: render() would tear focus out of the number the
+      // GM is still typing into. The chips on the Feats tab pick the new rule up on the
+      // next render, which switching away from this tab already is.
+      this._paintRecencyState();
+      return;
+    }
+
     if (field.startsWith('category.') || field.startsWith('type.')) {
       const [kind, prop] = field.split('.');
       const list = kind === 'category' ? this.#categories : this.#types;
@@ -1656,31 +1709,77 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /**
-   * Recomputes which feats count as newly curated, and returns the uuids whose
+   * Recomputes which feats count as newly published, and returns the uuids whose
    * membership changed so the caller can repaint exactly those rows.
    *
-   * Filing one feat can move two rows: the new arrival gains the chip and whatever was
-   * tenth loses it. Repainting only the row being edited would leave that second row
-   * wearing a stale chip until the next full render — the same class of lag the rest of
-   * _refreshRow exists to prevent.
+   * Publishing one feat can move two rows: the arrival gains the chip and whatever fell
+   * off the end loses it. Repainting only the row being edited would leave that second
+   * row wearing a stale chip until the next full render — the same class of lag the rest
+   * of _refreshRow exists to prevent.
    */
   _recomputeNewFeats() {
-    return this.#recompute('_newFeats', newestCurated, 'curatedAt');
+    return this.#recompute('_newFeats', 'curatedAt', this.#recency.new);
   }
 
-  /** The same, for the changed window. Stamping one Feat can demote whatever was tenth. */
+  /** The same, for the changed window, under its own independent rule. */
   _recomputeUpdatedFeats() {
-    return this.#recompute('_updatedFeats', newestUpdated, 'updatedAt');
+    return this.#recompute('_updatedFeats', 'updatedAt', this.#recency.updated);
   }
 
-  /** One implementation: both chips are a recency SET decided over the whole list. */
-  #recompute(prop, windowFn, field) {
+  /**
+   * One chip's block on the Automation tab: its rule, plus every branch the pane needs
+   * as a boolean and the number a percentage actually resolves to.
+   *
+   * The resolved count is shown beside the percentage because a percentage is the one
+   * setting whose effect a GM cannot read off the field — 10% of a catalog they have
+   * not counted is not a number. It comes from resolveRecency, the same call the window
+   * and the tooltip make, so the three can never disagree.
+   *
+   * @param {'new'|'updated'} chip
+   * @param {number} total  published Feat count
+   */
+  #recencyRow(chip, total) {
+    const rule = this.#recency[chip];
+    const { limit } = resolveRecency(rule, total);
+    return {
+      chip,
+      ...rule,
+      isAmount: rule.mode === 'amount',
+      isTime: rule.mode === 'time',
+      isCombined: rule.mode === 'combined',
+      // The amount block is shown for both modes that use one.
+      usesAmount: rule.mode !== 'time',
+      usesTime: rule.mode !== 'amount',
+      isCount: rule.amountMode === 'count',
+      isPercent: rule.amountMode === 'percent',
+      resolved: limit,
+      // Localized here rather than in the template: every other {{localize}} in this
+      // markup takes a string literal, and these two keys are built from the chip name.
+      label: game.i18n.localize(`RDHF.recency.${chip}`),
+      hint: game.i18n.localize(`RDHF.recency.${chip}Hint`)
+    };
+  }
+
+  /**
+   * One implementation: both chips are a recency SET decided over the whole list.
+   *
+   * PUBLISHED feats only, and that matters for the DENOMINATOR rather than for
+   * membership: an unpublished feat carries curatedAt 0 and could never have been a
+   * member anyway. But a percentage resolves against this list's length, and counting
+   * the Curation queue into it would compute the GM's 10% over feats no player can see
+   * — a wider window here than the one every catalog draws.
+   *
+   * The uuid list is the per-render cache; the STAMPS are read live off the working
+   * copy, because _syncField mutates updatedAt between renders and this has to see it.
+   */
+  #recompute(prop, field, rule) {
     const before = this[prop];
-    const after = windowFn(
-      Object.entries(this.#config.feats ?? {}).map(([uuid, stored]) => ({
-        uuid,
-        [field]: Number(stored?.[field]) || 0
-      }))
+    const uuids = this._publishedUuids;
+    const after = recencyWindow(
+      uuids.map(uuid => ({ uuid, [field]: Number(this.#config.feats?.[uuid]?.[field]) || 0 })),
+      field,
+      rule,
+      { total: uuids.length }
     );
     this[prop] = after;
     return [...new Set([...before, ...after])].filter(uuid => before.has(uuid) !== after.has(uuid));
@@ -1733,6 +1832,39 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     const pane = this.element?.querySelector(`.${PREFIX}-auto-table`);
     if (!pane) return;
     pane.classList.toggle('is-disabled', this.#automation.investmentByLevel.enabled !== true);
+  }
+
+  /**
+   * Greys the fields the chosen mode ignores, and rewrites the resolved count beside a
+   * percentage. Repaint, never a re-render — see the note in _syncField.
+   *
+   * The ignored fields are DIMMED rather than removed: their values are still stored,
+   * and a GM switching modes to look and switching back must find their numbers where
+   * they left them rather than at the default.
+   */
+  _paintRecencyState() {
+    const total = this._publishedUuids.length;
+    for (const block of this.element?.querySelectorAll(`.${PREFIX}-recency-rule`) ?? []) {
+      const rule = this.#recency[block.dataset.chip];
+      if (!rule) continue;
+      const { limit } = resolveRecency(rule, total);
+      block
+        .querySelector(`.${PREFIX}-recency-amount`)
+        ?.classList.toggle('is-disabled', rule.mode === 'time');
+      block
+        .querySelector(`.${PREFIX}-recency-time`)
+        ?.classList.toggle('is-disabled', rule.mode === 'amount');
+      block
+        .querySelector(`.${PREFIX}-recency-count`)
+        ?.classList.toggle('is-disabled', rule.amountMode !== 'count');
+      block
+        .querySelector(`.${PREFIX}-recency-percent`)
+        ?.classList.toggle('is-disabled', rule.amountMode !== 'percent');
+      const resolved = block.querySelector(`.${PREFIX}-recency-resolved`);
+      if (resolved) {
+        resolved.textContent = game.i18n.format('RDHF.recency.resolved', { count: limit });
+      }
+    }
   }
 
   /**
@@ -2270,6 +2402,18 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.render();
   }
 
+  /**
+   * Restores both chip windows to the fixed ten every world had before v1.7.1. Still a
+   * working copy until Save, and a render because every radio and field on the pane
+   * moves at once — the one place here where repainting would mean rebuilding the
+   * markup the template declares.
+   */
+  static _onResetRecency(event) {
+    event.preventDefault();
+    this.#recency = foundry.utils.deepClone(DEFAULT_RECENCY);
+    this.render();
+  }
+
   /** Removes one requirement reference chip and rewrites the field behind it. */
   static _onRemoveReference(event, target) {
     event.preventDefault();
@@ -2576,14 +2720,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
   /* ── Unsaved work ────────────────────────────────────────────────────────── */
 
-  /** The four working copies as one object. References, not a clone. */
+  /**
+   * The six working copies as one object. References, not a clone.
+   *
+   * Everything the footer Save writes has to appear here or #isDirty cannot see it and
+   * the close prompt will discard it without asking — which is why a new working copy
+   * is added to this list in the same edit that declares it.
+   */
   #snapshot() {
     return {
       registry: this.#config,
       categories: this.#categories,
       types: this.#types,
       formula: this.#formula,
-      automation: this.#automation
+      automation: this.#automation,
+      recency: this.#recency
     };
   }
 
@@ -2646,7 +2797,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     return this.#stableJson(this.#snapshot()) !== this.#stableJson(this.#baseline);
   }
 
-  /** Writes all four working copies through, and rebases so the app is clean again. */
+  /** Writes all six working copies through, and rebases so the app is clean again. */
   async #commit() {
     this.#adoptRedundantInvestment();
     await setRegistry(this.#config);
@@ -2654,6 +2805,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     await setTypes(this.#types);
     await game.settings.set(MODULE_ID, SETTINGS.POINT_FORMULA, this.#formula);
     await setAutomation(this.#automation);
+    await setRecency(this.#recency);
     invalidatePackCache();
     this.#baseline = foundry.utils.deepClone(this.#snapshot());
     ui.notifications?.info(game.i18n.localize('RDHF.notify.saved'));

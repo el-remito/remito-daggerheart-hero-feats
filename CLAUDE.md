@@ -51,16 +51,18 @@ scripts/
     curation.mjs            the Curation queue's membership rule and advance order
     visibility.mjs          the withholding precedence: visible / hidden / revealed
     automation.mjs          Rule Automation: the derived-requirement rules
+    recency.mjs             how long a Feat wears its NEW / UPDATED chip
   apps/
     requirement-text.mjs    the ONLY place a requirement descriptor becomes display text
+    recency-text.mjs        the ONLY place a recency rule becomes a chip tooltip
     feat-catalog.mjs        player + GM catalog (one instance per actor, tracked in openCatalogs)
     feat-registry-config.mjs  GM registry (7 tabs), registered via registerMenu
   badge/badge.mjs           renderActorSheetV2 injection next to Level
 ```
 
 Import direction is one-way: `apps/` → `data/` → `logic/` → `constants.mjs`. `requirement-text.mjs`
-is the one module inside `apps/` that another app imports; it is a leaf (it reaches only `logic/`),
-so the direction still holds and there is no cycle.
+and `recency-text.mjs` are the two modules inside `apps/` that another app imports; both are leaves
+(they reach only `logic/`), so the direction still holds and there is no cycle.
 
 ## Data shapes
 
@@ -111,6 +113,16 @@ coercion and `Object.keys()` yields strings either way — `investmentForLevel` 
 `getAutomation()` runs every read through `normalizeAutomation`, which rebuilds the table from the
 ten default keys rather than copying the stored one, so a partial or hand-edited value cannot reach
 the rule.
+
+World setting `recency` (v1.7.1) is one rule per chip — `{ new: rule, updated: rule }`, where a rule
+is `{ mode, amountMode, count, percent, days }`. `mode` is `amount` / `time` / `combined` and
+`amountMode` is `count` / `percent`; `getRecency()` runs every read through `normalizeRecency`, the
+same defensive-reader contract `automation` gets. It is **its own key rather than a corner of
+`automation`**, even though both are edited on the Automation tab and folding it in would have cost
+no plumbing at all: that rule DERIVES REQUIREMENTS and this decorates a chip, and a stored object
+named `automation` holding both would be a name the next reader has to un-learn. The tab is a
+surface; the setting is data. **No migration** — `DEFAULT_RECENCY` is the fixed window of ten every
+world had before, so nothing moves until a GM moves it.
 
 **`general` is a fixed Category**, seeded from `DEFAULT_CATEGORIES` and re-inserted by
 `getCategories()` if a world ever loses it. It exists so a feat can be *curated* — and therefore
@@ -497,27 +509,28 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   rather than restating it).
 - **"Newly added" is a property of the SET, and that is why nothing is stored per feat.**
   `curatedAt` on a registry entry is a timestamp, stamped by **Curation's File** for the moment a
-  feat was ANNOUNCED to players (and cleared to 0 when it is unpublished) — but *membership* of the
-  newest ten is decided by `newestCurated()` over the whole list, once per render, because the
-  tenth-newest feat stops being new when an eleventh is filed with nothing about it changing. So
-  the flag reaching the row is `isNew`, derived, never persisted, and `matchesFilters` stays a
-  per-row predicate reading `view.isNew` — which is what lets both windows filter from `data-*`
-  attributes with no context object. The player catalog measures the window over the list the
-  PLAYER receives, so a withheld feat never occupies one of the ten slots. **No migration**:
-  `normalizeFeat`'s inline default reads an entry written before v1.5.0 as `curatedAt: 0`, and 0 is
-  never new.
+  feat was ANNOUNCED to players (and cleared to 0 when it is unpublished) — but *membership* is
+  decided by `newestCurated()` over the whole list, once per render, because a feat's standing
+  changes when OTHER feats are published with nothing about it changing. So the flag reaching the
+  row is `isNew`, derived, never persisted, and `matchesFilters` stays a per-row predicate reading
+  `view.isNew` — which is what lets both windows filter from `data-*` attributes with no context
+  object. The player catalog measures WHICH feats can occupy a slot over the list the PLAYER
+  receives, so a withheld feat never takes one. **No migration**: `normalizeFeat`'s inline default
+  reads an entry written before v1.5.0 as `curatedAt: 0`, and 0 is never new.
   **The STAMP moved in v1.7.0; the reader did not, and that is deliberate.** `_syncField`'s
   `category` case no longer stamps, because gaining a Category no longer makes a Feat visible — a
   Feat can now sit curated in the queue for a week before anyone sees it. Pointing the window at
   `filedAt` instead would have been the obvious move and is a trap: `_onMarkRecency` is a TOGGLE
   (`feat[field] = Number(feat[field]) > 0 ? 0 : Date.now()`), so clicking a lit "Mark as New" would
   write `filedAt = 0` and **unpublish the Feat** — turning a cosmetic control into the Unpublish
-  action this design deliberately does not have. Moving the stamp costs one line and leaves
-  `newestCurated`, `#recompute`, `_onMarkRecency`, `_paintRecencyButtons` and `markedNew` untouched.
+  action this design deliberately does not have. Moving the stamp costs one line and left
+  `newestCurated`, `_onMarkRecency`, `_paintRecencyButtons` and `markedNew` untouched. The trap is
+  unchanged by v1.7.1 making the window configurable: `_onMarkRecency` still toggles the stamp, so
+  pointing any of this at `filedAt` would still unpublish a Feat.
 - **Curating one feat repaints two rows.** `_recomputeNewFeats()` returns the uuids whose
-  membership changed, and `_syncField` repaints each — the arrival gains the chip and whatever was
-  tenth loses it. Repainting only the edited row left the second wearing a stale chip until the
-  next full render, the exact lag the rest of `_refreshRow` exists to prevent.
+  membership changed, and `_syncField` repaints each — the arrival gains the chip and whatever fell
+  off the end loses it. Repainting only the edited row left the second wearing a stale chip until
+  the next full render, the exact lag the rest of `_refreshRow` exists to prevent.
 - **The exclude set is the ONE thing the Statistics tab persists**, and it is a `world` setting
   (v1.6.0). "This sheet is a test dummy, not real play data" is a fact about the world, true for
   whoever opens the tab — the opposite of `INVEST_LAYOUT`, which is a display preference on one
@@ -768,12 +781,46 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   description". `new-smoke.mjs` reads the literal out of the source file rather than restating it,
   so adding a field there without deciding whether it counts as a change fails a test — the same
   discipline the `r.category && r.count` filter got in v1.4.3.
-- **The recency chips are two windows, not one.** `newestCurated` and `newestUpdated` are the same
-  function over different timestamps (`newestBy`), and two SETS rather than one so a busy week of
-  curation cannot push every changed Feat out of ten slots they would share. Both are still a
-  property of the SET, recomputed per render, never persisted — `#recompute` is now the one
-  implementation and `_recomputeNewFeats` / `_recomputeUpdatedFeats` are its two callers, each
-  returning the uuids whose membership moved so exactly those rows repaint.
+- **The recency chips are two windows, not one, and since v1.7.1 two RULES.** `newestCurated` and
+  `newestUpdated` are the same function over different timestamps (`recencyWindow`), and two SETS
+  rather than one so a busy week of publishing cannot push every changed Feat out of slots they
+  would share — which is now also why they take separate rules: "recently added" and "recently
+  changed" rarely move at the same pace. Both are still a property of the SET, recomputed per
+  render, never persisted — `#recompute` is the one implementation and `_recomputeNewFeats` /
+  `_recomputeUpdatedFeats` are its two callers, each returning the uuids whose membership moved so
+  exactly those rows repaint.
+- **The window moved to `logic/recency.mjs`, and it owns a stored rule.** `NEW_FEATS_LIMIT = 10` was
+  one policy imposed on every world: a table filing two Feats a month wants a DURATION, a table
+  dropping a sixty-Feat pack wants a cap, and ten is right for neither. `SETTINGS.RECENCY` holds one
+  rule per chip — `mode` of `amount` / `time` / `combined`, with the amount either a `count` or a
+  `percent`. It is a separate module rather than more functions on `filters.mjs` for the reason
+  `logic/investment.mjs` is: a different question over the same data, and it owns a normalizer, which
+  is the shape `logic/automation.mjs` already has. **No migration** — the default IS the old fixed
+  ten, so no world moves until its GM moves it.
+  Three details are load-bearing. **`combined` is the INTERSECTION**, which is the same statement as
+  "whichever expires first wins". **A `days` of 0 is stated, not derived**: every other zero falls
+  out of the arithmetic as an empty slice, but a cutoff of `now` would still admit a Feat published
+  in that millisecond, and the pane promises 0 hides the chip. And the fields a mode ignores are
+  **kept, never cleared**, so switching modes to look and switching back finds the numbers where the
+  GM left them.
+- **The percentage denominator is PUBLICATION, not the reader's list, and that is a deliberate
+  departure.** Which feats may occupy a slot is still measured over the list each window is handed;
+  how MANY slots exist is not. `publishedUuids()` (`data/registry.mjs`) states the predicate once and
+  both windows resolve against its length, so a GM setting 10% gets the same slot count as every
+  player however much is hidden from them — a player whose Category is hidden simply fills fewer of
+  those slots. Had it been the reader's list, one setting would have meant a different window per
+  person. The registry app caches the uuids **once per render** (`this._publishedUuids`) because
+  publication cannot move without a render — File, Reset and deleting a Category all call `render()`
+  — while `#recompute` runs on every keystroke that stamps a Feat; the STAMPS are still read live off
+  the working copy, because `_syncField` mutates `updatedAt` between renders.
+- **The chip tooltips are formatted once per render, in `apps/recency-text.mjs`.** They were a
+  hard-coded "one of the ten" in SIX places — two Handlebars sites in the catalog partial, two in the
+  registry template, and two `localize` calls in `_buildChips` — which the moment the window became
+  configurable were all wrong, and under `time` describe the wrong KIND of window entirely. The mode
+  picks the key (`RDHF.catalog.newTooltip.<mode>`) and `resolveRecency` supplies the number, so the
+  sentence and the window read the same resolution and a tooltip cannot promise 20 while 19 are
+  drawn. It is a second leaf inside `apps/` beside `requirement-text.mjs`, for the same reason: two
+  apps render the same thing and the wording belongs in one place.
 - **The manual mark exists because the hook that would replace it cannot safely write.** Editing a
   Feature's actions changes what a Feat DOES and reaches no registry field. An `updateItem` hook
   could notice, but the registry is a world setting the GM edits through a working copy saved on
@@ -781,8 +828,8 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   is the same reason the registry app is never re-rendered from document hooks. So the GM says so
   instead, in the expanded row body (Re-sync and Reset stay in the always-visible `<summary>`;
   these are one level deeper because they are an occasional correction). The button reflects the
-  STORED stamp, not chip membership: a control that switched itself off because an eleventh Feat
-  was stamped elsewhere would be reporting someone else's edit.
+  STORED stamp, not chip membership: a control that switched itself off because another Feat was
+  stamped elsewhere and pushed this one out of the window would be reporting someone else's edit.
 - **Secret Feats are not audit supply, and the audit says so.** `buildInvestmentReach` asks what a
   player can reach today, and a Feat waiting on a prerequisite cannot be counted on — so the
   `withheld` predicate is unchanged. But a Category that passes only because its secrets were
