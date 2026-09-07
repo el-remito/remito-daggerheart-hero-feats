@@ -112,7 +112,7 @@
                                   it cannot know — worse than not showing it at all. --}}
                             <span class="rdhf-chip rdhf-chip--req {{#if this.soft}}is-soft{{else}}{{#if this.met}}is-met{{else}}is-unmet{{/if}}{{/if}}"
                                   {{#if this.soft}}data-tooltip="{{localize 'RDHF.requirement.narrativeTooltip'}}"{{/if}}>
-                                <i class="fa-solid {{#if this.soft}}fa-circle-question{{else}}{{#if this.met}}fa-check{{else}}fa-xmark{{/if}}{{/if}}"></i>
+                                <i class="fa-solid {{#if this.soft}}fa-question{{else}}{{#if this.met}}fa-check{{else}}fa-xmark{{/if}}{{/if}}"></i>
                                 {{this.label}}
                             </span>
                         {{/each}}

@@ -167,6 +167,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.7.4
+- **Fixed: the narrative requirement chip's icon.** The question mark was drawn as a filled gold dot with the mark punched out of it, which at chip size left it unreadable; it is now a plain question mark, matching the tick and cross on the other requirement chips
+- The icon also sat slightly above the text it labelled. It now lines up with the first line of the clause
+
 ### v1.7.3
 - **Fixed: the Statistics tab reported every Feat as not published.** The Catalog shape counters read **0 published**, the whole catalog sat in the *Not published* row of the Category grid, and every Category read as empty in Coverage gaps — however many Feats you had actually filed. The Type grid was unaffected, which is why the two axes disagreed
 - The figures were only ever wrong on that tab: players saw the Feats you filed, and the Curation queue counted correctly throughout

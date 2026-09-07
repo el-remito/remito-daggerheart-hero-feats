@@ -176,6 +176,17 @@
     border-radius: 6px;
 }
 
+/* Font Awesome declares `line-height: 1` on every icon class, so the <i> is a 1em box
+   while the text beside it sits centred in .rdhf-chip's 1.6em line box. Under
+   align-items: center that difference is invisible; under the flex-start above — which
+   a two-line clause needs, so the icon stays beside the FIRST line — the short box pins
+   to the top and the glyph rides above the text it labels. Inheriting the chip's own
+   line-height gives the icon a box the same height as that first line, so it centres in
+   it, and a wrapping clause still keeps its icon on line one. */
+.rdhf-chip--req > i {
+    line-height: inherit;
+}
+
 .rdhf-chip--req.is-met {
     border-color: color-mix(in srgb, var(--rdhf-met) 45%, transparent);
     color: var(--rdhf-met);
@@ -189,7 +200,12 @@
 /* Stated by the GM, uncheckable by the module. Gold because it is INFORMATIONAL and not
    a verdict — met-green and unmet-red are both verdicts, and this clause has none. Gold
    is already the module's neutral-informational tone (.rdhf-chip--level, --category); the
-   only other gold chip is NEW, which is FILLED, so outline versus fill keeps them apart. */
+   only other gold chip is NEW, which is FILLED, so outline versus fill keeps them apart.
+   Its icon is the bare `fa-question` glyph, not `fa-circle-question`: the disc version is
+   a FILLED circle with the mark punched out of it, so at chip size the question mark was
+   a sliver of background colour inside a gold dot — unreadable, and a filled badge on the
+   one chip whose meaning is carried by being an outline. The bare glyph also puts it in
+   the same visual family as the fa-check and fa-xmark beside it. */
 .rdhf-chip--req.is-soft {
     border-color: var(--rdhf-gold-soft);
     color: var(--rdhf-gold);

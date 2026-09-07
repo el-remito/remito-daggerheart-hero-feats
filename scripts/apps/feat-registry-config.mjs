@@ -1997,7 +1997,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       ...labels.map(entry =>
         this._chip('req', entry.label, {
           state: entry.soft ? 'is-soft' : '',
-          icon: entry.soft ? 'fa-solid fa-circle-question' : null,
+          icon: entry.soft ? 'fa-solid fa-question' : null,
           tooltip: entry.soft ? game.i18n.localize('RDHF.requirement.narrativeTooltip') : null
         })
       )
