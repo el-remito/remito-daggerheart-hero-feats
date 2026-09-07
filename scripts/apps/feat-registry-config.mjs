@@ -645,6 +645,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       category: view.category,
       types: view.types,
       hidden: view.hidden,
+      // Carried, not derived to a boolean here: buildCatalogStats asks isPublished() of
+      // the record itself, both for the Published / Not published counters and for the
+      // Category grid's load-bearing publication gate. A record without this stamp reads
+      // as never filed, which put every feat in the not-published pen and every Category
+      // row at 0 while the Type grid — which has no publication gate — stayed correct.
+      // The unresolved feats appended below spread the whole normalized entry and so
+      // always carried it; this half of the list did not, and the two must agree.
+      filedAt: view.filedAt,
       withheld: withheld(view),
       standalone: view.standalone,
       // Load-bearing for buildInvestmentReach: without it every exempt feat would be

@@ -167,6 +167,10 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.7.3
+- **Fixed: the Statistics tab reported every Feat as not published.** The Catalog shape counters read **0 published**, the whole catalog sat in the *Not published* row of the Category grid, and every Category read as empty in Coverage gaps — however many Feats you had actually filed. The Type grid was unaffected, which is why the two axes disagreed
+- The figures were only ever wrong on that tab: players saw the Feats you filed, and the Curation queue counted correctly throughout
+
 ### v1.7.2
 - **Fixed: a Feat requiring a Spellcaster no longer offers itself to characters who cannot cast.** Any character with a subclass counted as a spellcaster, whether or not that subclass casts anything — so a `hasSpellcasting` requirement was met by almost everybody and the chip showed green. It now asks which trait the subclass casts with, and a subclass that names none is not a caster
 - A character who *does* cast with a trait sitting at 0 is still correctly a spellcaster

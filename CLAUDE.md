@@ -509,6 +509,15 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   all unfiled reads as an empty Category in Coverage gaps — correct under the new model, and one
   click from being fixed. `secret()` and `#neverReveals` moved to `isPublished` too: both mean
   "withheld ONLY by a reveal-mode entry", and an unfiled feat is withheld for a stronger reason.
+  **`_buildStats` therefore has to CARRY `filedAt` onto its records, not just collapse it into
+  `withheld`.** That was the v1.7.3 bug: the record map lists its fields one by one while the
+  unresolved feats appended after it spread the whole normalized entry, so half the list arrived
+  stamped and half did not — and `buildCatalogStats` asks `isPublished` of the record itself, for
+  the Published counter and for the Category grid's gate. Every feat read as never filed: 0
+  published, the whole catalog in the pen, every Category row 0 and every Category reported as a
+  coverage gap, while the Type grid — which has no publication gate — stayed right and made the
+  disagreement visible. A field-by-field map beside a spread is the shape to watch: anything the
+  pure layer reads off a record has to appear in BOTH halves.
 - **Findings group by *(Category, Level, requirement)*** and are ordered **lowest Level first**
   inside a Category, Categories by their worst shortfall. Under a fixpoint a blockage cascades —
   unreachable Level 5 feats make the Level 6 ones unreachable too, with a bigger shortfall — so the
