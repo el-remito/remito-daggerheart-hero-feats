@@ -18,7 +18,7 @@ import {
   setRegistry,
   getCategories,
   getTypes,
-  getAutomation,
+  getAutomationRule,
   taxonomyLabel
 } from '../settings.mjs';
 import { blankRequirements, normalizeRequirements } from '../logic/requirements.mjs';
@@ -319,7 +319,7 @@ export async function listFeats({
   const hiddenTypes = new Map(getTypes().filter(t => t?.hidden).map(t => [t.id, t.reveal === true]));
   // Read once for the whole list, not per feat: the rule is world-level and cannot
   // change mid-loop.
-  const rule = getAutomation().investmentByLevel;
+  const rule = getAutomationRule();
   const out = [];
 
   for (const [uuid, source] of sources) {

@@ -145,9 +145,12 @@ function tiersFor(feats, category, counts, limit, rule) {
  * carries `unlocks: 0` by construction, and `forward: true` so the row can say so.
  */
 function forwardTiers(category, counts, room, rule, real) {
-  // The General test is redundant now that the summary never lists it, and kept because
-  // it is the correct statement for this function read on its own.
-  if (room <= 0 || !rule?.enabled || !ruleAppliesToCategory(category)) return [];
+  // General never reaches here, since the summary does not list it; a Category the GM
+  // flagged as not a progression track does, keeps its card, and loses only this look
+  // ahead — the curve governs nothing there, so a forward mark would be a promise the
+  // catalog contradicts. That is why `rule` has to be the one built with
+  // withUntrackedCategories.
+  if (room <= 0 || !rule?.enabled || !ruleAppliesToCategory(category, rule)) return [];
 
   const have = Number(counts?.[category]) || 0;
   // Past the deepest mark already shown, so a forward tier can never sit below a real

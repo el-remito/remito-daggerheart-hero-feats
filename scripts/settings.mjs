@@ -19,7 +19,7 @@ import {
   DEFAULT_RECENCY
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
-import { normalizeAutomation } from './logic/automation.mjs';
+import { normalizeAutomation, withUntrackedCategories } from './logic/automation.mjs';
 import { normalizeRecency } from './logic/recency.mjs';
 
 /**
@@ -195,6 +195,17 @@ export async function setRegistry(registry) {
  */
 export function getAutomation() {
   return normalizeAutomation(game.settings.get(MODULE_ID, SETTINGS.AUTOMATION));
+}
+
+/**
+ * The Default Investment by Level rule as every reader must be handed it: the stored
+ * rule joined to the Categories it stands aside for (General, and any the GM flagged
+ * as not a progression track). The two live in different settings, and a reader given
+ * the bare rule would derive investment in a flagged Category — so the player-facing
+ * callers take it from here rather than from getAutomation().
+ */
+export function getAutomationRule() {
+  return withUntrackedCategories(getAutomation().investmentByLevel, getCategories());
 }
 
 export async function setAutomation(automation) {

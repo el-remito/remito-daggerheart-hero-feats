@@ -131,7 +131,11 @@ of three hundred Feats cannot answer by scrolling.
   instead. Click any cell to jump to the Feats tab filtered to exactly it — including empty cells,
   which is usually the point.
 - **Coverage gaps**: Categories and Levels you have not written for, and prerequisites pointing at
-  a Feat that is no longer registered.
+  a Feat that is no longer registered. General, and any Category you mark as *not a progression
+  track* on the Taxonomy tab, is left out — an empty Level in a bucket is not something to fill.
+- **Level ceilings**: while Default Investment by Level is on, how high each Category's ladder
+  actually goes — whether a Feat you filed tomorrow at each Level could ever be taken, given the
+  Feats already beneath it. A Category that stops at Level 4 says so, and by how many Feats.
 - **Trait demand** — how many Feats gate on each Trait. A catalog that leans hard on one Trait
   leaves characters built any other way with little to buy, and that is invisible when you are
   reading Feats one at a time.
@@ -166,6 +170,15 @@ https://raw.githubusercontent.com/el-remito/remito-daggerheart-hero-feats/main/m
 Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.7.1).
 
 ## Changelog
+
+### v1.8.0
+- **Level ceilings, in Statistics → Coverage gaps.** The Unreachable Feats check only ever looked at Feats you had already written, so a Category with nothing filed at Level 5 was never asked about Level 5 — a clean result did not mean the Category could carry a character to the top. The new panel asks, for every Category and every Level, whether a Feat you filed there tomorrow could ever be taken under your Automation curve, and reports the highest Level each Category reaches: *"Blades · reaches Level 4 — Level 5 needs 7, has 5 (short by 2)"*. Click a finding to open that Category on the Feats tab
+- It is measured only while **Default Investment by Level** is on, since without the curve a new Feat asks for no investment and every Level would pass. Like the existing check, it counts only Feats a player can actually reach, and looks at the investment requirement alone
+- **Level ladder switch.** A new stairs toggle on each Category in the Taxonomy tab, lit while the Category is a level ladder. Switch it off for a grab-bag, or a Category that only ever holds high-Level Feats. Such a Category is left out of Coverage gaps and Level ceilings, and **Rule Automation adds no investment requirement to its Feats**, exactly as with General. Its Feats stay visible and acquirable, and any investment rows you wrote on them yourself still apply
+- **General never has a level ladder.** It no longer shows up in Coverage gaps, and its stairs on the Taxonomy tab are shown switched off and locked
+- Coverage gaps now lists the Categories it did not check, so a clean result is never mistaken for a checked one
+- **A tidier Taxonomy tab.** Each toggle is now a single icon button that lights when it is on — gold for *level ladder*, red for *hidden*, green for *stays hidden until earned* — each explained in plain words by its tooltip, so names are no longer cut off and the Category and Type rows line up with each other. The icon field shows the icon as you type it, and an empty dashed square when the class draws nothing. *Stays hidden until earned* is always shown, greyed out until the entry is hidden, instead of leaving a gap in the row
+- Nothing changes in your world until you switch a ladder off: no migration, and every Category other than General starts as a level ladder
 
 ### v1.7.4
 - **Fixed: the narrative requirement chip's icon.** The question mark was drawn as a filled gold dot with the mark punched out of it, which at chip size left it unreadable; it is now a plain question mark, matching the tick and cross on the other requirement chips

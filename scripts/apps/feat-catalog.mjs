@@ -12,7 +12,7 @@
 
 import { ITEM_TYPES, MODULE_ID, PREFIX, SETTINGS, TEMPLATES, ACTOR_TYPES } from '../constants.mjs';
 import {
-  getAutomation,
+  getAutomationRule,
   getCategories,
   getInvestmentsLayout,
   getRecency,
@@ -271,7 +271,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           categoryLabels: snapshot.categoryLabels,
           // Read for the forward tier alone: the look ahead past everything the Feats
           // currently ask for, which only exists while the rule is on.
-          rule: getAutomation().investmentByLevel
+          rule: getAutomationRule()
         })
       ),
       // Carried so a re-render for any other reason paints the layout this user chose;

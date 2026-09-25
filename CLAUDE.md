@@ -47,7 +47,7 @@ scripts/
     requirements.mjs        structured checks + the AND/OR expression grammar
     points.mjs              total / spent / remaining
     filters.mjs             catalog filter predicate and sort comparators
-    statistics.mjs          catalog-shape, coverage-gap and adoption derivation
+    statistics.mjs          catalog-shape, coverage-gap, reach, Level-ceiling and adoption derivation
     curation.mjs            the Curation queue's membership rule and advance order
     visibility.mjs          the withholding precedence: visible / hidden / revealed
     automation.mjs          Rule Automation: the derived-requirement rules
@@ -95,7 +95,8 @@ World setting `registry`:
 }
 ```
 
-World settings `categories` / `types` are `[{ id, label, icon, description, hidden }]`. A `label`
+World settings `categories` / `types` are `[{ id, label, icon, description, hidden, reveal }]`, and a
+Category may also carry `untracked` (below). A `label`
 starting with `RDHF.` is an i18n key (the seeded entries); anything else is literal GM text. Editing
 a seeded label in the Taxonomy tab converts it to literal text — that is intended.
 
@@ -105,6 +106,21 @@ before v1.4.2 has no such key, and `undefined` is falsy, which is the same inlin
 and `getTypes()` still return hidden entries, because the GM has to be able to file into one and the
 Taxonomy tab has to render its own checkbox. The filtering lives at exactly two call sites: the
 withhold in `listFeats`, and the player half of the catalog rail.
+
+`untracked` (v1.8.0, Categories only) marks a Category as **having no level ladder** — a bucket
+rather than a ladder. (The UI calls the idea "level ladder" throughout; code and comments still say
+"progression track" / `untracked`.) **The toggle is the INVERSE of the stored flag**: the stairs are
+lit when the Category IS a ladder, because every lit Taxonomy glyph states the fact it shows — lit
+stairs meaning "no ladder" read as the opposite. The checkbox is `data-field="category.tracked"`
+and `_syncField` writes `entry.untracked = !checked`; the stored key stays `untracked` so an entry
+without it reads as a ladder, which is what every pre-v1.8.0 Category was. It is exempt from Rule Automation exactly as General is, and it raises no
+Coverage-gaps warning and gets no Level-ceiling row. **No migration**, the same `undefined`-is-falsy
+default as `hidden`. **General is untracked by CODE, not by a stored flag**: `untrackedCategoryIds()`
+adds `GENERAL_CATEGORY_ID` unconditionally, and the Taxonomy tab renders its stairs unlit,
+`disabled` and with no `data-field` at all, so there is nothing to seed and no stored value can put General on
+the curve. It deliberately does **not** touch the Unreachable Feats audit's scope: a flagged
+Category's authored investment rows are still checked, because a blocked Feat is an error whatever
+the Category is for.
 
 World setting `automation` is `{ investmentByLevel: { enabled, table } }`, where `table` maps a
 Level to the number of Feats required in a Category. **Its keys are strings**: the setting
@@ -523,6 +539,28 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   unreachable Level 5 feats make the Level 6 ones unreachable too, with a bigger shortfall — so the
   old worst-shortfall-first sort would have put the symptom above the cause. The summary line
   counts blocked **feats**, not findings, because `checked` counts feats.
+- **Level ceilings ask about HYPOTHETICAL Feats, which is what the audit above cannot do**
+  (v1.8.0). `buildInvestmentReach` only tests Feats that exist, so a Category with nothing at Level
+  5 was never asked about Level 5 and a clean audit said nothing about whether the ladder reaches
+  the top. `buildLevelCeilings` asks, for each Category the rule applies to and each Level 1–10,
+  whether a Feat filed there tomorrow could be acquired: `investmentForLevel(L)` against the
+  Category's supply at ≤ L. Three things are load-bearing. **Supply comes from `settleReach`**, the
+  private helper both functions now call, so "reached" means one thing on both panels and a row of
+  Feats that only supply each other counts for nothing here too; a hypothetical Feat is never its
+  own supply because it is not in the set. **It runs only while the rule is on**: the curve is the
+  only requirement a Feat that does not exist can be predicted to carry, and with the rule off
+  every Level would pass vacuously — the panel says so instead of printing a false all-clear.
+  **Blocked Levels are listed, not inferred from the first**: supply only grows with L but a
+  GM-edited curve need not, so a Level above a failing one can pass; `ceiling` is the Level below
+  the FIRST failure. The app passes only non-hidden Categories, because a withheld Category has no
+  supply and would always read as stuck at Level 1. A finding's button opens the whole Category
+  (no `data-level`): the fix is supply anywhere at or below the blocked Level, and the blocked cell
+  itself is usually empty.
+- **An untracked Category is silent in Coverage gaps but still FILLS a Level.** `buildGaps` skips
+  untracked rows for `emptyCells` and `emptyCategories`, but they still count for `emptyLevels`,
+  whose question is "no Feat at any Category" — a General Feat at Level 7 is a real Feat a player
+  can take. `gaps.untracked` lists what was skipped, and the panel prints it, so a clean list is
+  never mistaken for a checked one. The heat grid is unchanged: it describes shape, not warnings.
 - Requirements other than investment on the supplying feats — Trait minimums, prerequisites, class
   — are still not modelled, so a pass means "not provably impossible", never "comfortable"; the
   panel says so. With the seeded curve a Category still needs 15 feats at or below Level 10 to
@@ -625,9 +663,24 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   construction and `forward: true` so the row can say "nothing there yet"; and **General never gets
   one**, since the rule derives nothing for it.
 - **The General carve-out is exported, not restated.** `eligibleForRule` is private and takes a
-  *feat*; `forwardTiers` has only a Category id. `ruleAppliesToCategory(category)` in
+  *feat*; `forwardTiers` has only a Category id. `ruleAppliesToCategory(category, rule)` in
   `logic/automation.mjs` holds the test and `eligibleForRule` calls it — one statement, two
   readers, instead of a copy in `investment.mjs` that drifts the next time General is revisited.
+- **The rule is built WITH its exempt Categories, once, where it is read** (v1.8.0). The curve and
+  the taxonomy are two settings, but every reader of the rule needs both, so
+  `withUntrackedCategories(rule, categories)` joins them into `rule.exempt` and
+  `ruleAppliesToCategory` consults it. There are exactly three builders, and a new reader must use
+  one of them rather than `getAutomation().investmentByLevel`: `getAutomationRule()` in
+  `settings.mjs` (for `listFeats` and the catalog's forward tier), and the registry app's private
+  `#rule` getter, which joins the **working** curve to the **working** taxonomy so a tick shows
+  before Save — `_buildStats`, `_paintAutoInvestment`, `_paintRequirementLine` and
+  `#adoptRedundantInvestment` all read it. Only the Automation tab's *writes* touch `#automation`
+  directly. General is ALSO tested by id inside `ruleAppliesToCategory`, so a reader handed the bare
+  rule loses a GM's flagged Category but can never re-enable automation on General.
+  The consequence to accept: a Feat whose redundant row was adopted and stripped, filed in a
+  Category that is later flagged, is left with no investment requirement at all — which is exactly
+  what "the curve no longer governs this Category" means. The adoption pass itself leaves a flagged
+  Category's rows alone, since `isRedundantInvestment` asks the same question.
 - **`SETTINGS.INVEST_LAYOUT` is the module's only `client` setting, and it is `config: false`.**
   It is a display preference on a *player's* window, so a world setting would let a GM impose it on
   people it does not affect them to change; and the toggle lives on the My Investments tab, where
@@ -654,6 +707,34 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   real button's markup made inert and `visibility: hidden` — a real button rather than a hand-sized
   spacer, so it stays exactly as wide as the thing it stands in for however that button is later
   restyled, and `visibility` rather than `hidden`, which would occupy nothing at all.
+- **A control that is merely UNAVAILABLE should be drawn disabled, not held invisible** (v1.8.0).
+  The reveal toggle used to be `visibility: hidden` until its entry was hidden — the rule above,
+  applied to a control that is only waiting. Once a fourth control sat after it, the invisible
+  slot read as a hole in the middle of every Category row. It is now always drawn, dimmed and
+  `disabled` until the eye is lit; `_syncField` flips `disabled` when `hidden` changes, and the
+  stored `reveal` is left alone so re-hiding resumes the GM's choice. The spacer rule still holds
+  for General's delete button, which is ABSENT, not waiting.
+- **Taxonomy toggles light from their OWN box, never from a row class** (v1.8.0). Each is a
+  `<label class="rdhf-taxonomy-toggle">` wrapping an `.rdhf-sr-only` checkbox, lit through
+  `:has(input:checked)` — a `<label>` rather than a `<button>` because core's button rule
+  would impose its height and centring, and a label already toggles the box it wraps. The row
+  classes used to light every toggle in the row at once (`.is-hidden .rdhf-taxonomy-hide`), which
+  is how the stairs turned red on a hidden Category. `is-hidden` on the row now drives only the
+  dimmed text fields. Reveal lights on `input:checked:not(:disabled)`, so a stored mode that is
+  not in force never claims to be. The context therefore no longer carries `revealing` or row
+  `is-revealing` / `is-untracked` classes.
+- **The two Taxonomy columns align by construction, not by matching text lengths.** Each
+  `.rdhf-taxonomy-col` spans two rows of the pane's grid with `grid-template-rows: subgrid`, so both
+  `.rdhf-taxonomy-head`s share one row sized by the taller and both lists start at the same height.
+  A per-toggle key under each hint was tried in v1.8.0 and removed: Categories has one more toggle
+  than Types, so its key was always a line longer and pushed its rows out of step. The toggles are
+  explained by their tooltips; the key strings survive as each hidden checkbox's `aria-label`.
+- **An icon field shows what it draws.** `_paintIconPreview` sets the preview `<i>`'s classes from
+  the text and reads `getComputedStyle(preview, '::before').content`: Font Awesome draws every
+  glyph there, and a class list naming no icon leaves it `none` / `normal`, which becomes
+  `is-empty` (a faint dashed square). The class string cannot be validated any other way — any
+  text is a valid class list. The preview needs `z-index: 1`: the input after it in the source
+  painted its background over the glyph.
 - **My Investments is a summary, so the rail is hidden while it shows.** `_applyFilters` toggles
   `.rdhf-rail` **and `is-summary` on `.rdhf-catalog-body`** — hiding the rail alone was the v1.5.1
   bug: the body is a two-track grid (`230px minmax(0, 1fr)`) with the rail as item 1, and a grid
@@ -874,8 +955,8 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   every entry for a GM, who is also the person who has to find what they just withdrew.
 - Rule Automation scope decisions worth not re-litigating: the investment number counts **acquired
   Feats**, not a sum of their Levels and not Feat Points (`categoryCounts` unchanged); **General is
-  exempt** by explicit design, as is any uncurated feat; the opt-out is **one boolean covering every
-  future rule**, not one per rule; and the Statistics requirement-usage bars keep counting
+  exempt** by explicit design, as is any uncurated feat and any Category the GM flags
+  `untracked`; the opt-out is **one boolean covering every future rule**, not one per rule; and the Statistics requirement-usage bars keep counting
   **authored** rows only — the rule reaches nearly every feat, so folding it in would peg that bar
   at ~100% and destroy the signal the panel exists to give. That decision stands, but it read as a
   bug to the GM who reported it: 112 feats, the rule on, and an Investment bar saying 10, with
@@ -894,3 +975,17 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `deleteItem` / `createItem` for non-embedded Features, which re-renders open catalogs. The
   registry app is deliberately NOT re-rendered there — it holds an unsaved working copy and the GM
   may be mid-edit; its next render re-reads the now-empty caches anyway.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on `el-remito/remito-daggerheart-hero-feats`, driven through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical labels are used as-is: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root, both created lazily. See `docs/agents/domain.md`.

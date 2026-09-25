@@ -54,6 +54,7 @@ import {
   buildAdoptionStats,
   buildInvestmentReach,
   buildCatalogStats,
+  buildLevelCeilings,
   UNPUBLISHED_ROW
 } from '../logic/statistics.mjs';
 import { isPublished } from '../logic/visibility.mjs';
@@ -62,7 +63,10 @@ import {
   applyAutoInvestment,
   autoInvestmentRow,
   investmentForLevel,
-  stripRedundantInvestment
+  ruleAppliesToCategory,
+  stripRedundantInvestment,
+  untrackedCategoryIds,
+  withUntrackedCategories
 } from '../logic/automation.mjs';
 import { describeRequirements, localizeCheck } from './requirement-text.mjs';
 import { chipTooltip } from './recency-text.mjs';
@@ -306,6 +310,18 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     }
   }
 
+  /**
+   * The investmentByLevel rule as the logic layer must be handed it: the WORKING copy of
+   * the curve joined to the WORKING copy of the taxonomy, so a Category ticked as "not a
+   * progression track" a moment ago stops deriving before Save — the same contract every
+   * other figure in this window honours. Every READ of the rule goes through here; only
+   * the Automation tab's writes touch #automation directly. Handing the bare rule to
+   * applyAutoInvestment would derive investment in a flagged Category.
+   */
+  get #rule() {
+    return withUntrackedCategories(this.#automation?.investmentByLevel, this.#categories ?? []);
+  }
+
   async _prepareContext(_options) {
     this.#config ??= foundry.utils.deepClone(getRegistry());
     this.#categories ??= foundry.utils.deepClone(getCategories());
@@ -514,21 +530,23 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       // it a GM holding a 200-Feat pack was told to go and register one.
       hasAnyFeats: views.length > 0,
       unpublishedCount: this._unpublishedTotal,
-      // `revealing` is the mode actually in force — reveal only means anything on an
-      // entry that is withheld in the first place, and the row shows its control only
-      // then. `reveal` itself is carried too, because the checkbox renders its own state.
+      // Each toggle renders its own box's state, and CSS lights it from that box, so the
+      // row carries no derived "revealing" class any more — the reveal box is simply
+      // disabled while the entry is not hidden, and a disabled box never lights.
       categories: this.#categories.map(c => ({
         ...c,
         resolved: taxonomyLabel(c),
         reveal: c.reveal === true,
-        revealing: c.hidden === true && c.reveal === true,
-        fixed: isFixedCategory(c.id)
+        fixed: isFixedCategory(c.id),
+        // The level-ladder toggle is lit when the Category IS one — the inverse of the
+        // stored `untracked`. General never is, by code rather than by a stored flag, so its
+        // box renders unlit and locked whatever the entry holds.
+        tracked: !isFixedCategory(c.id) && c.untracked !== true
       })),
       types: this.#types.map(t => ({
         ...t,
         resolved: taxonomyLabel(t),
-        reveal: t.reveal === true,
-        revealing: t.hidden === true && t.reveal === true
+        reveal: t.reveal === true
       })),
       formula: this.#formula,
       formulaPreview: this._previewFormula(),
@@ -683,7 +701,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       feats: records,
       categories: localCategories,
       types: this.#types.map(t => ({ id: t.id, label: taxonomyLabel(t), icon: t.icon })),
-      unpublishedLabel: game.i18n.localize('RDHF.stats.counter.unpublished')
+      unpublishedLabel: game.i18n.localize('RDHF.stats.counter.unpublished'),
+      // The WORKING taxonomy, so a Category ticked as not a progression track a moment
+      // ago drops out of the gaps list before Save.
+      untracked: untrackedCategoryIds(this.#categories)
     });
 
     const adoption = buildAdoptionStats({
@@ -695,12 +716,23 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     // Reads the working copy of BOTH the registry and the automation curve, so a
     // Category filed or a table value retuned a moment ago is already reflected —
     // the same contract every other figure on this tab honours.
+    const rule = this.#rule;
     const reach = buildInvestmentReach({
       feats: records,
       categories: localCategories,
-      rule: this.#automation.investmentByLevel
+      rule
     });
     const categoryLabels = Object.fromEntries(localCategories.map(c => [c.id, c.label]));
+
+    // Same records, same rule, so "reached" means one thing on both panels. A hidden
+    // Category is left out: nothing in it is supply, so it would always read as stuck at
+    // Level 1 — a ladder no player is standing on is not a finding. The rule itself
+    // drops General and the untracked Categories, through ruleAppliesToCategory.
+    const ceilings = buildLevelCeilings({
+      feats: records,
+      categories: localCategories.filter(c => !hiddenCategories.has(c.id)),
+      rule
+    });
 
     return {
       catalog: this._decorateCatalog(catalog),
@@ -729,6 +761,26 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
             met: false
           }).label
         }))
+      },
+      ceilings: {
+        enabled: ceilings.enabled,
+        maxLevel: ceilings.maxLevel,
+        total: ceilings.rows.length,
+        clean: ceilings.enabled && ceilings.rows.every(row => row.blocked.length === 0),
+        // Only the ladders that stop short are listed; a clean one is counted in the
+        // summary line rather than printed, as the reach audit does for its Feats.
+        rows: ceilings.rows
+          .filter(row => row.blocked.length > 0)
+          .map(row => {
+            const [first, ...rest] = row.blocked;
+            return {
+              ...row,
+              first,
+              // Handlebars cannot slice or join, so the tail is a finished string.
+              also: rest.map(b => b.level).join(', '),
+              hasAlso: rest.length > 0
+            };
+          })
       },
       adoption: {
         ...adoption,
@@ -831,6 +883,26 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     };
   }
 
+  /**
+   * Repaints the glyph beside a Taxonomy icon field from what the GM has typed.
+   *
+   * Whether a class actually DRAWS anything cannot be told from the class string — any
+   * text is a valid class list — so it is read off the result: Font Awesome draws every
+   * glyph in `::before`, and a class list naming no icon leaves that pseudo-element with
+   * no content. `is-empty` then shows a faint dashed square, which says "this draws
+   * nothing" where a blank would be indistinguishable from a font still loading.
+   *
+   * @param {HTMLInputElement} input  the icon text field
+   */
+  _paintIconPreview(input) {
+    const preview = input?.closest(`.${PREFIX}-icon-field`)?.querySelector(`.${PREFIX}-icon-preview`);
+    if (!preview) return;
+    preview.className = `${PREFIX}-icon-preview ${String(input.value ?? '').trim()}`;
+    const content = getComputedStyle(preview, '::before').content;
+    const draws = Boolean(content) && !['none', 'normal', '""', "''"].includes(content);
+    preview.classList.toggle('is-empty', !draws);
+  }
+
   /** Evaluates the formula against MOCK_ACTOR so a GM sees breakage before saving. */
   _previewFormula() {
     try {
@@ -853,6 +925,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     await super._onRender(context, options);
     this._dragDrop.bind(this.element);
     const el = this.element;
+
+    // Only the Taxonomy tab has icon fields; elsewhere this finds nothing.
+    for (const input of el.querySelectorAll('.rdhf-icon-field .rdhf-icon-input')) {
+      this._paintIconPreview(input);
+    }
 
     // Every editable field syncs into the working copy on input. Values arrive from
     // text inputs as strings, so numbers are coerced at the point of assignment.
@@ -1593,22 +1670,29 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       const [kind, prop] = field.split('.');
       const list = kind === 'category' ? this.#categories : this.#types;
       const entry = list.find(e => e.id === input.closest('[data-entry-id]')?.dataset.entryId);
-      // Every other taxonomy field is text; `hidden` and `reveal` are the checkboxes,
-      // and String(true) would store the word rather than the flag.
-      const flag = prop === 'hidden' || prop === 'reveal';
-      if (entry) entry[prop] = flag ? value === true : String(value);
+      // Every other taxonomy field is text; `hidden`, `reveal` and `tracked` are the
+      // checkboxes, and String(true) would store the word rather than the flag. `tracked`
+      // is the level-ladder toggle, lit when the Category IS a ladder, and is stored as its
+      // inverse `untracked` — the key an entry without it reads as absent, i.e. a ladder.
+      if (entry && prop === 'tracked') entry.untracked = value !== true;
+      else if (entry) {
+        const flag = prop === 'hidden' || prop === 'reveal';
+        entry[prop] = flag ? value === true : String(value);
+      }
       // Repainted, not re-rendered — the Taxonomy tab is a form the GM may be several
-      // fields into, and render() would reset its scroll and steal focus. The class
-      // drives the dimmed row and the lit eye, so without this the state only appears
-      // on the next render for some other reason.
-      if (entry && flag) {
+      // fields into, and render() would reset its scroll and steal focus. The toggles
+      // light themselves from their own boxes (CSS :has), so only two things need
+      // writing here: the row's withheld dimming, and the reveal box's availability.
+      if (entry && prop === 'hidden') {
         const row = input.closest('[data-entry-id]');
         row?.classList.toggle('is-hidden', entry.hidden === true);
-        // The reveal mode only means anything while the entry is withheld, so its
-        // control is shown only then — visibility, not display, so the row's columns
-        // stay lined up with its neighbours either way.
-        row?.classList.toggle('is-revealing', entry.hidden === true && entry.reveal === true);
+        // Reveal only means anything while the entry is withheld. The stored `reveal`
+        // is left alone, so un-hiding and re-hiding resumes the mode the GM chose; a
+        // disabled box does not light, so the row never claims a mode not in force.
+        const reveal = row?.querySelector(`[data-field="${kind}.reveal"]`);
+        if (reveal) reveal.disabled = entry.hidden !== true;
       }
+      if (prop === 'icon') this._paintIconPreview(input);
       return;
     }
 
@@ -1897,7 +1981,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     };
 
     const uuid = host.dataset.uuid;
-    const rule = this.#automation?.investmentByLevel;
+    const rule = this.#rule;
     const feat = normalizeFeat(uuid, this.#config.feats?.[uuid]);
 
     // Off, or a Level the curve asks nothing of: there is nothing to announce, and a
@@ -1923,8 +2007,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
-    // General is exempt by design. Stated rather than left blank, so a GM filing under
-    // General learns why this feat is the one without an automatic requirement.
+    // General is exempt by design, and so is any Category the GM flagged as not a
+    // progression track. Stated rather than left blank, so a GM filing there learns why
+    // this feat is the one without an automatic requirement. General keeps its own
+    // sentence because its reason is the module's, not the GM's.
     if (feat.category === GENERAL_CATEGORY_ID) {
       say('RDHF.registry.autoInvestmentGeneral', null, true);
       return;
@@ -1932,6 +2018,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
     const category =
       taxonomyLabel(this.#categories.find(c => c.id === feat.category)) || feat.category;
+
+    if (!ruleAppliesToCategory(feat.category, rule)) {
+      say('RDHF.registry.autoInvestmentUntracked', { category }, true);
+      return;
+    }
     const row = autoInvestmentRow(feat, rule);
 
     if (row) {
@@ -1971,10 +2062,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     if (!line) return;
 
     const uuid = host.dataset.uuid;
-    const feat = applyAutoInvestment(
-      normalizeFeat(uuid, this.#config.feats?.[uuid]),
-      this.#automation?.investmentByLevel
-    );
+    const feat = applyAutoInvestment(normalizeFeat(uuid, this.#config.feats?.[uuid]), this.#rule);
 
     const labels = describeRequirements(feat, {
       categoryLabels: Object.fromEntries(
@@ -2763,7 +2851,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * @returns {boolean}  whether anything changed
    */
   #adoptRedundantInvestment(only = null) {
-    const rule = this.#automation?.investmentByLevel;
+    const rule = this.#rule;
     if (!rule?.enabled || !this.#config?.feats) return false;
 
     let changed = false;

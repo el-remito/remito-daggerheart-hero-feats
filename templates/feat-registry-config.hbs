@@ -790,12 +790,23 @@
         {{/if}}
 
         {{#if isTaxonomy}}
+            {{!-- Every toggle is a single icon button: a <label> wrapping a visually hidden
+                  checkbox, lit from its own box by CSS (:has). The box keeps its data-field,
+                  so _syncField reads it exactly as before, and it carries an aria-label since
+                  the label holds no text. The tooltips carry the full wording.
+
+                  Each column is a head and a list, and the two heads share ONE grid row
+                  (subgrid), so the first rows of both lists always start at the same height
+                  however long either hint runs or wraps. --}}
             <section class="rdhf-pane rdhf-taxonomy">
                 <div class="rdhf-taxonomy-col">
-                    <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.categories"}}</h4>
-                    <p class="rdhf-hint">{{localize "RDHF.registry.categoriesHint"}}</p>
+                    <div class="rdhf-taxonomy-head">
+                        <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.categories"}}</h4>
+                        <p class="rdhf-hint">{{localize "RDHF.registry.categoriesHint"}}</p>
+                    </div>
+                    <div class="rdhf-taxonomy-list">
                     {{#each categories}}
-                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}} {{#if this.hidden}}is-hidden{{/if}} {{#if this.revealing}}is-revealing{{/if}}" data-entry-id="{{this.id}}">
+                        <div class="rdhf-taxonomy-row {{#if this.fixed}}is-fixed{{/if}} {{#if this.hidden}}is-hidden{{/if}}" data-entry-id="{{this.id}}">
                             {{#if this.fixed}}
                                 {{!-- General is the Category that lets a feat be curated
                                       without inventing a filing system, so it may not be
@@ -805,21 +816,48 @@
                             {{else}}
                                 <input type="text" data-field="category.label" value="{{this.resolved}}">
                             {{/if}}
-                            <input type="text" class="rdhf-icon-input" data-field="category.icon" value="{{this.icon}}"
-                                   placeholder="fa-solid fa-flask">
-                            <label class="rdhf-taxonomy-hide"
+                            <span class="rdhf-icon-field">
+                                <i class="rdhf-icon-preview {{this.icon}}" aria-hidden="true"></i>
+                                <input type="text" class="rdhf-icon-input" data-field="category.icon" value="{{this.icon}}"
+                                       placeholder="fa-solid fa-flask">
+                            </span>
+                            {{!-- Level ladder: LIT means the Category IS one, so the lit glyph
+                                  states the fact, as the crossed-out eye does. The stored flag is
+                                  the inverse (`untracked`, so an old entry with no key reads as a
+                                  ladder); `category.tracked` is translated in _syncField. General
+                                  never has one, by code: unlit, locked, and no data-field, since
+                                  there is no stored value for it to write. --}}
+                            {{#if this.fixed}}
+                                <label class="rdhf-taxonomy-toggle rdhf-taxonomy-toggle--tracked"
+                                       data-tooltip="{{localize 'RDHF.registry.taxonomyTrackedFixedHint'}}">
+                                    <input type="checkbox" class="rdhf-sr-only" disabled
+                                           aria-label="{{localize 'RDHF.registry.keyTracked'}}">
+                                    <i class="fa-solid fa-stairs"></i>
+                                </label>
+                            {{else}}
+                                <label class="rdhf-taxonomy-toggle rdhf-taxonomy-toggle--tracked"
+                                       data-tooltip="{{localize 'RDHF.registry.taxonomyTrackedHint'}}">
+                                    <input type="checkbox" class="rdhf-sr-only" data-field="category.tracked"
+                                           aria-label="{{localize 'RDHF.registry.keyTracked'}}"
+                                           {{#if this.tracked}}checked{{/if}}>
+                                    <i class="fa-solid fa-stairs"></i>
+                                </label>
+                            {{/if}}
+                            <label class="rdhf-taxonomy-toggle rdhf-taxonomy-toggle--hidden"
                                    data-tooltip="{{localize 'RDHF.registry.taxonomyHiddenHint'}}">
-                                <input type="checkbox" data-field="category.hidden"
+                                <input type="checkbox" class="rdhf-sr-only" data-field="category.hidden"
+                                       aria-label="{{localize 'RDHF.registry.keyHiddenCategory'}}"
                                        {{#if this.hidden}}checked{{/if}}>
                                 <i class="fa-solid fa-eye-slash"></i>
                             </label>
-                            {{!-- Only meaningful while the entry is withheld, so it is
-                                  shown only then — by visibility, so the columns stay
-                                  lined up whichever way the row is set. --}}
-                            <label class="rdhf-taxonomy-hide rdhf-taxonomy-reveal"
+                            {{!-- Always drawn, disabled until the eye is lit: reveal only means
+                                  anything on a withheld entry. _syncField flips `disabled`
+                                  when the eye changes. --}}
+                            <label class="rdhf-taxonomy-toggle rdhf-taxonomy-toggle--reveal"
                                    data-tooltip="{{localize 'RDHF.registry.taxonomyRevealHint'}}">
-                                <input type="checkbox" data-field="category.reveal"
-                                       {{#if this.reveal}}checked{{/if}}>
+                                <input type="checkbox" class="rdhf-sr-only" data-field="category.reveal"
+                                       aria-label="{{localize 'RDHF.registry.keyReveal'}}"
+                                       {{#if this.reveal}}checked{{/if}} {{#unless this.hidden}}disabled{{/unless}}>
                                 <i class="fa-solid fa-lock-open"></i>
                             </label>
                             {{#unless this.fixed}}
@@ -843,26 +881,35 @@
                     <button type="button" class="rdhf-text-btn" data-action="addCategory">
                         <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addCategory"}}
                     </button>
+                    </div>
                 </div>
 
                 <div class="rdhf-taxonomy-col">
-                    <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.types"}}</h4>
-                    <p class="rdhf-hint">{{localize "RDHF.registry.typesHint"}}</p>
+                    <div class="rdhf-taxonomy-head">
+                        <h4 class="rdhf-rail-heading">{{localize "RDHF.registry.types"}}</h4>
+                        <p class="rdhf-hint">{{localize "RDHF.registry.typesHint"}}</p>
+                    </div>
+                    <div class="rdhf-taxonomy-list">
                     {{#each types}}
-                        <div class="rdhf-taxonomy-row {{#if this.hidden}}is-hidden{{/if}} {{#if this.revealing}}is-revealing{{/if}}" data-entry-id="{{this.id}}">
+                        <div class="rdhf-taxonomy-row {{#if this.hidden}}is-hidden{{/if}}" data-entry-id="{{this.id}}">
                             <input type="text" data-field="type.label" value="{{this.resolved}}">
-                            <input type="text" class="rdhf-icon-input" data-field="type.icon" value="{{this.icon}}"
-                                   placeholder="fa-solid fa-tag">
-                            <label class="rdhf-taxonomy-hide"
-                                   data-tooltip="{{localize 'RDHF.registry.taxonomyHiddenHint'}}">
-                                <input type="checkbox" data-field="type.hidden"
+                            <span class="rdhf-icon-field">
+                                <i class="rdhf-icon-preview {{this.icon}}" aria-hidden="true"></i>
+                                <input type="text" class="rdhf-icon-input" data-field="type.icon" value="{{this.icon}}"
+                                       placeholder="fa-solid fa-tag">
+                            </span>
+                            <label class="rdhf-taxonomy-toggle rdhf-taxonomy-toggle--hidden"
+                                   data-tooltip="{{localize 'RDHF.registry.taxonomyTypeHiddenHint'}}">
+                                <input type="checkbox" class="rdhf-sr-only" data-field="type.hidden"
+                                       aria-label="{{localize 'RDHF.registry.keyHiddenType'}}"
                                        {{#if this.hidden}}checked{{/if}}>
                                 <i class="fa-solid fa-eye-slash"></i>
                             </label>
-                            <label class="rdhf-taxonomy-hide rdhf-taxonomy-reveal"
+                            <label class="rdhf-taxonomy-toggle rdhf-taxonomy-toggle--reveal"
                                    data-tooltip="{{localize 'RDHF.registry.taxonomyRevealHint'}}">
-                                <input type="checkbox" data-field="type.reveal"
-                                       {{#if this.reveal}}checked{{/if}}>
+                                <input type="checkbox" class="rdhf-sr-only" data-field="type.reveal"
+                                       aria-label="{{localize 'RDHF.registry.keyReveal'}}"
+                                       {{#if this.reveal}}checked{{/if}} {{#unless this.hidden}}disabled{{/unless}}>
                                 <i class="fa-solid fa-lock-open"></i>
                             </label>
                             <button type="button" class="rdhf-icon-btn rdhf-danger" data-action="removeType">
@@ -873,6 +920,7 @@
                     <button type="button" class="rdhf-text-btn" data-action="addType">
                         <i class="fa-solid fa-plus"></i> {{localize "RDHF.registry.addType"}}
                     </button>
+                    </div>
                 </div>
             </section>
         {{/if}}
@@ -918,6 +966,7 @@
                       whether to enable it, and needs to know what it will NOT touch. --}}
                 <ul class="rdhf-key-list rdhf-auto-notes">
                     <li>{{localize "RDHF.automation.exempt.general"}}</li>
+                    <li>{{localize "RDHF.automation.exempt.untracked"}}</li>
                     <li>{{localize "RDHF.automation.exempt.uncurated"}}</li>
                     <li>{{localize "RDHF.automation.exempt.authored"}}</li>
                     <li>{{localize "RDHF.automation.exempt.flag"}}</li>
@@ -1179,6 +1228,18 @@
                     <p class="rdhf-hint">{{localize "RDHF.stats.noGaps"}}</p>
                 {{/if}}
 
+                {{!-- Said out loud, so a clean list is never mistaken for a checked one.
+                      These Categories still fill a Level for "Levels with no Feats". --}}
+                {{#if stats.catalog.gaps.untracked.length}}
+                    <p class="rdhf-hint rdhf-gaps-untracked">
+                        <i class="fa-solid fa-stairs"></i>
+                        <span>{{localize "RDHF.stats.gapsUntracked"}}</span>
+                        {{#each stats.catalog.gaps.untracked}}
+                            <span class="rdhf-chip rdhf-chip--category">{{this.label}}</span>
+                        {{/each}}
+                    </p>
+                {{/if}}
+
                 {{!-- Which Feats can never be acquired at all. Sits in Coverage gaps
                       rather than on the Automation tab: a shortfall is answered by
                       authoring Feats, and this is the panel about what the catalog is
@@ -1226,6 +1287,52 @@
                         <i class="fa-solid fa-lock-open"></i>
                         {{localize "RDHF.stats.reachSecrets" count=stats.reach.secretsExcluded}}
                     </p>
+                {{/if}}
+
+                {{!-- The Unreachable Feats audit asks about Feats that exist; this asks
+                      about the ones that do not yet — whether a Feat filed at each Level
+                      could ever be taken. Its requirement can only be predicted from the
+                      curve, so it is measured only while the rule is on. --}}
+                <h5 class="rdhf-sub">{{localize "RDHF.stats.ceiling"}}</h5>
+                {{#if stats.ceilings.enabled}}
+                    <p class="rdhf-hint">{{localize "RDHF.stats.ceilingHint"}}</p>
+                    {{#if stats.ceilings.total}}
+                        {{#if stats.ceilings.clean}}
+                            <p class="rdhf-stats-line rdhf-reach-ok">
+                                <i class="fa-solid fa-circle-check"></i>
+                                <span>{{localize "RDHF.stats.ceilingClean" level=stats.ceilings.maxLevel}}</span>
+                                <strong>{{stats.ceilings.total}}</strong>
+                            </p>
+                        {{else}}
+                            <p class="rdhf-stats-line">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>{{localize "RDHF.stats.ceilingBlocked" level=stats.ceilings.maxLevel}}</span>
+                                <strong>{{stats.ceilings.rows.length}}</strong> / <strong>{{stats.ceilings.total}}</strong>
+                            </p>
+                            <ul class="rdhf-gap-list">
+                                {{#each stats.ceilings.rows}}
+                                    <li>
+                                        {{!-- No data-level: the fix is supply anywhere at or
+                                              below the blocked Level, so the whole ladder is
+                                              what the GM needs to see, not one empty cell. --}}
+                                        <button type="button" class="rdhf-gap-btn" data-action="focusCell"
+                                                data-row="{{this.category}}" data-axis="category">
+                                            {{this.label}} &middot; {{localize "RDHF.stats.ceilingReaches" level=this.ceiling}}
+                                        </button>
+                                        <span class="rdhf-reach-detail">
+                                            {{localize "RDHF.stats.ceilingNeeds" level=this.first.level need=this.first.need have=this.first.have}}
+                                            ({{localize "RDHF.stats.reachShort"}} {{this.first.short}}){{#if this.hasAlso}}.
+                                            {{localize "RDHF.stats.ceilingAlso" levels=this.also}}{{/if}}
+                                        </span>
+                                    </li>
+                                {{/each}}
+                            </ul>
+                        {{/if}}
+                    {{else}}
+                        <p class="rdhf-hint">{{localize "RDHF.stats.ceilingNone"}}</p>
+                    {{/if}}
+                {{else}}
+                    <p class="rdhf-hint">{{localize "RDHF.stats.ceilingOff"}}</p>
                 {{/if}}
 
                 {{#if stats.catalog.brokenReferences.length}}

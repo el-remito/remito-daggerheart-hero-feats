@@ -916,7 +916,27 @@ details[open] > summary .rdhf-arrow {
     gap: var(--spacer-12, 12px);
 }
 
+/* Each column spans two rows of the pane's grid and adopts them (subgrid): the heads
+   of both columns sit in one shared row, sized by the taller, so the first entries of
+   both lists always line up — a hint that wraps to two lines on one side cannot push
+   that side's rows down. When the pane narrows to one column each column simply takes
+   its own two rows. */
+.rdhf-taxonomy {
+    align-items: start;
+}
+
 .rdhf-taxonomy-col {
+    display: grid;
+    grid-row: span 2;
+    grid-template-rows: subgrid;
+    row-gap: 4px;
+}
+
+.rdhf-taxonomy-head .rdhf-hint {
+    margin: 0;
+}
+
+.rdhf-taxonomy-list {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -2243,44 +2263,6 @@ details[open] > summary .rdhf-arrow {
 
 /* ── v1.4.2: hiding a Category or Type ────────────────────────────────────── */
 
-/* The taxonomy row is a flex line, so the toggle only has to refuse to stretch —
-   the label field keeps flex: 1 and gives up the width. Core sizes a bare checkbox
-   generously, hence the explicit box. */
-.rdhf-taxonomy-hide {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 0 0 auto;
-    padding: 0 6px;
-    color: var(--rdhf-ink-muted);
-    cursor: pointer;
-}
-
-/* Core sizes the box AND draws the tick inside it; forcing the box down to 14px left the
-   glyph drawn to the original size and overflowing into the eye beside it. Only the
-   margin and the refusal to stretch are ours. */
-.rdhf-taxonomy-hide input[type='checkbox'] {
-    flex: 0 0 auto;
-    margin: 0;
-}
-
-.rdhf-taxonomy-hide i {
-    flex: 0 0 auto;
-    line-height: 1;
-    font-size: var(--font-size-11, 0.7rem);
-    opacity: 0.55;
-}
-
-/* Lit once the entry is actually withheld, so the state reads down the column at a
-   glance rather than one checkbox at a time. */
-.rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-hide {
-    color: var(--rdhf-unmet);
-}
-
-.rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-hide i {
-    opacity: 1;
-}
-
 /* Holds the deleted button's width on the fixed Category's row. Invisible rather than
    absent, because a display:none element occupies nothing and the flex:1 label field
    would swallow the freed width, taking the icon field and the hide toggle out of line
@@ -2540,25 +2522,6 @@ details[open] > summary .rdhf-arrow {
     color: var(--rdhf-gold);
 }
 
-/* The reveal mode only means anything on an entry that is withheld, so its control is
-   shown only then — by VISIBILITY, so the row's columns stay lined up either way. Same
-   reason .rdhf-taxonomy-spacer exists one row up. */
-.rdhf-taxonomy-reveal {
-    visibility: hidden;
-}
-
-.rdhf-taxonomy-row.is-hidden .rdhf-taxonomy-reveal {
-    visibility: visible;
-}
-
-/* Lit only while the mode is actually in force, matching how the eye behaves beside it. */
-.rdhf-taxonomy-row.is-revealing .rdhf-taxonomy-reveal {
-    color: var(--rdhf-met);
-}
-
-.rdhf-taxonomy-row.is-revealing .rdhf-taxonomy-reveal i {
-    opacity: 1;
-}
 
 /* The manual recency marks. In the expanded body, so they are a deliberate visit. */
 .rdhf-mark-row {
@@ -2584,5 +2547,145 @@ details[open] > summary .rdhf-arrow {
 .rdhf-reach-secrets {
     display: flex;
     align-items: baseline;
+    gap: 6px;
+}
+
+/* ── v1.8.0: Categories that are not progression tracks ───────────────────── */
+
+/* The Taxonomy tab's toggles are single icon buttons, lit when on. Each used to be a
+   checkbox with a glyph beside it — about 50px apiece, three to a Category row, which
+   is what squeezed the names down to "Swordmas". The checkbox is still there and still
+   what _syncField reads; it is only hidden from sight (.rdhf-sr-only), so the keyboard
+   and screen readers reach it exactly as before. A <label>, not a <button>: core's
+   button rule would impose its own height and centring, and clicking a label already
+   toggles the box it wraps.
+
+   Each toggle lights from ITS OWN box through :has(), never from a row class. The row
+   classes used to light every toggle in the row at once, which is how the stairs came
+   to turn red on a hidden Category — the ladder is not a withhold. One colour per fact,
+   the module's own: gold for "has a level ladder" (neutral information, not a
+   verdict), red for withheld, green for revealing. Every lit glyph states the fact it
+   shows, which is why the stairs light for a ladder rather than for its absence. */
+.rdhf-taxonomy-toggle {
+    position: relative; /* anchors the visually hidden box */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 26px;
+    height: 26px;
+    border: 1px solid var(--rdhf-border);
+    border-radius: 3px;
+    background: var(--rdhf-panel-soft);
+    color: var(--rdhf-ink-muted);
+    cursor: pointer;
+}
+
+.rdhf-taxonomy-toggle i {
+    font-size: var(--font-size-12, 0.75rem);
+    line-height: 1;
+    opacity: 0.5;
+}
+
+.rdhf-taxonomy-toggle:hover {
+    border-color: var(--rdhf-gold);
+}
+
+.rdhf-taxonomy-toggle:has(input:focus-visible) {
+    outline: 2px solid var(--rdhf-gold);
+    outline-offset: 1px;
+}
+
+.rdhf-taxonomy-toggle:has(input:checked) i {
+    opacity: 1;
+}
+
+.rdhf-taxonomy-toggle--tracked:has(input:checked) {
+    color: var(--rdhf-gold);
+    border-color: var(--rdhf-gold-soft);
+    background: var(--rdhf-gold-dim);
+}
+
+.rdhf-taxonomy-toggle--hidden:has(input:checked) {
+    color: var(--rdhf-unmet);
+    border-color: color-mix(in srgb, var(--rdhf-unmet) 55%, transparent);
+    background: color-mix(in srgb, var(--rdhf-unmet) 14%, transparent);
+}
+
+/* Reveal is always drawn and simply unavailable until the eye is lit. It used to be
+   invisible while holding its width, which left a hole in the middle of the row. A
+   stored reveal on an unhidden entry is kept (it resumes when the entry is hidden
+   again), so a checked-but-disabled box must NOT light: only the mode in force does. */
+.rdhf-taxonomy-toggle--reveal:has(input:checked:not(:disabled)) {
+    color: var(--rdhf-met);
+    border-color: color-mix(in srgb, var(--rdhf-met) 55%, transparent);
+    background: color-mix(in srgb, var(--rdhf-met) 14%, transparent);
+}
+
+.rdhf-taxonomy-toggle:has(input:disabled) {
+    cursor: default;
+}
+
+.rdhf-taxonomy-toggle--reveal:has(input:disabled),
+.rdhf-taxonomy-toggle--tracked:has(input:disabled) {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+.rdhf-taxonomy-toggle:has(input:disabled):hover {
+    border-color: var(--rdhf-border);
+}
+
+/* General's stairs are locked OFF — it never has a ladder — and wear the same dimmed,
+   dashed look as an unavailable reveal: not something this row can change. */
+
+/* The icon field shows what it draws. The glyph sits in a square inside the field's left
+   edge, so the preview costs the row no width; the class text scrolls in the space
+   beside it. A class that draws nothing cannot be detected by CSS alone, so
+   _paintIconPreview reads the glyph's ::before and sets is-empty, which swaps the empty
+   square for a faint dashed one — "this draws nothing" rather than a blank that could
+   be a loading font. */
+.rdhf-icon-field {
+    position: relative;
+    display: flex;
+    flex: 0 0 150px; /* 130px of text beside the glyph square: fits "fa-solid fa-flask" */
+    min-width: 0;
+}
+
+.rdhf-taxonomy-row .rdhf-icon-field .rdhf-icon-input {
+    flex: 1 1 auto !important;
+    min-width: 0;
+    padding-left: 26px;
+}
+
+.rdhf-icon-preview {
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-12, 0.75rem);
+    color: var(--rdhf-ink);
+    pointer-events: none;
+    border: 1px dashed transparent;
+    border-radius: 2px;
+    /* Core positions text inputs, and a positioned sibling LATER in the source paints
+       over an earlier one — which is how the input's background hid the glyph. */
+    z-index: 1;
+}
+
+.rdhf-icon-preview.is-empty {
+    border-color: var(--rdhf-border);
+}
+
+
+/* The "Not checked" line under Coverage gaps, laid out like the other stat lines. */
+.rdhf-gaps-untracked {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
 }

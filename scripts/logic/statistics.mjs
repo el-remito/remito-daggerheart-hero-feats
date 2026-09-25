@@ -18,7 +18,11 @@ import { TRAITS, RESOURCE_REQS } from '../constants.mjs';
 // those rules here, where they would drift from the ones the catalog actually
 // evaluates. evaluateInvestment above all: the reach audit has to read an AND/OR chain
 // exactly as checkRequirements does, and that precedence gets stated once.
-import { applyAutoInvestment } from './automation.mjs';
+import {
+  applyAutoInvestment,
+  investmentForLevel,
+  ruleAppliesToCategory
+} from './automation.mjs';
 import { evaluateInvestment } from './requirements.mjs';
 import { isPublished } from './visibility.mjs';
 
@@ -52,6 +56,8 @@ export const REQUIREMENT_KINDS = [
  * @param {Array<{id: string, label: string}>} args.categories
  * @param {Array<{id: string, label: string}>} args.types
  * @param {string} [args.unpublishedLabel]  localized label for the not-published grid row
+ * @param {string[]} [args.untracked]  Category ids that are not progression tracks
+ *                                     (untrackedCategoryIds) — never reported as gaps
  * @param {number} [args.maxLevel]
  * @returns {object}
  */
@@ -60,9 +66,11 @@ export function buildCatalogStats({
   categories = [],
   types = [],
   unpublishedLabel = 'Not published',
+  untracked = [],
   maxLevel = LEVEL_COLUMNS
 } = {}) {
   const list = Array.isArray(feats) ? feats.filter(Boolean) : [];
+  const untrackedIds = new Set(Array.isArray(untracked) ? untracked : []);
   const columns = levelColumns(list, maxLevel);
 
   // Published, not merely curated: measuring "has a Category" here would put a figure on
@@ -123,7 +131,7 @@ export function buildCatalogStats({
     requirementUsage: buildRequirementUsage(list),
     traitDemand: buildTraitDemand(list),
     resourceDemand: buildResourceDemand(list),
-    gaps: buildGaps(categoryGrid, columns),
+    gaps: buildGaps(categoryGrid, columns, untrackedIds),
     brokenReferences: buildBrokenReferences(list)
   };
 }
@@ -221,23 +229,8 @@ function buildGrid(rowDefs, columns, feats, belongs) {
  * @returns {{checked: number, blocked: Array<object>, worst: number}}
  */
 export function buildInvestmentReach({ feats = [], categories = [], rule = null } = {}) {
-  const list = Array.isArray(feats) ? feats.filter(Boolean) : [];
   const labels = new Map(categories.map(c => [c.id, c.label]));
-
-  // Supply is what a player could actually acquire, so every withhold drops out: the
-  // per-Feat Hidden flag, a hidden Category, a hidden Type and unpublished alike. The app
-  // collapses all four into `withheld`, because it is the layer that can see the
-  // taxonomy; `hidden` is still honoured for a caller that has not.
-  const candidates = list.filter(f => f.withheld !== true && f.hidden !== true);
-
-  const chains = new Map();
-  for (const feat of candidates) chains.set(feat, effectiveInvestment(feat, rule));
-
-  const reachable = reachableSet(candidates, chains);
-
-  // The supply that actually exists, measured once the set has settled. This is what
-  // the findings report, and what their shortfalls are computed against.
-  const supply = cumulativeCounts(candidates.filter(f => reachable.has(f)));
+  const { candidates, chains, reachable, supply } = settleReach(feats, rule);
 
   const groups = new Map();
   let checked = 0;
@@ -304,6 +297,109 @@ export function buildInvestmentReach({ feats = [], categories = [], rule = null 
     blocked,
     worst: blocked.reduce((top, b) => Math.max(top, b.shortfall), 0)
   };
+}
+
+/**
+ * The settled reachability both audits read: which Feats are supply, the chain each one
+ * carries, the least fixpoint over them, and the cumulative supply once it has settled.
+ *
+ * Shared rather than restated so the Level ceilings can never measure supply by a
+ * different rule from the Unreachable Feats findings beside them — the two panels
+ * answer "can this Feat be reached" and "could a Feat filed here be reached", and they
+ * are only comparable if "reached" means one thing.
+ */
+function settleReach(feats, rule) {
+  const list = Array.isArray(feats) ? feats.filter(Boolean) : [];
+
+  // Supply is what a player could actually acquire, so every withhold drops out: the
+  // per-Feat Hidden flag, a hidden Category, a hidden Type and unpublished alike. The app
+  // collapses all four into `withheld`, because it is the layer that can see the
+  // taxonomy; `hidden` is still honoured for a caller that has not.
+  const candidates = list.filter(f => f.withheld !== true && f.hidden !== true);
+
+  const chains = new Map();
+  for (const feat of candidates) chains.set(feat, effectiveInvestment(feat, rule));
+
+  const reachable = reachableSet(candidates, chains);
+
+  // The supply that actually exists, measured once the set has settled. This is what
+  // the findings report, and what their shortfalls are computed against.
+  const supply = cumulativeCounts(candidates.filter(f => reachable.has(f)));
+
+  return { candidates, chains, reachable, supply };
+}
+
+/* ── Level ceilings ────────────────────────────────────────────────────────── */
+
+/**
+ * How high each progression Category's ladder actually goes: for every Level, whether a
+ * Feat filed there TOMORROW could ever be acquired.
+ *
+ * The Unreachable Feats audit only asks about Feats that exist, so a Category with
+ * nothing at Level 5 is never asked about Level 5 at all, and a clean audit said nothing
+ * about whether the ladder reaches the top. This asks about a HYPOTHETICAL Feat at each
+ * Level instead. The only requirement such a Feat can be predicted to carry is the one
+ * the curve would derive for it, which is why this runs only while the rule is on:
+ * with the rule off a new Feat asks for nothing, and every Level would pass vacuously.
+ *
+ * A hypothetical Feat at Level L needs `investmentForLevel(L)` Feats in its own Category
+ * at or below L, counted from the SETTLED reachable supply — the same fixpoint the audit
+ * uses, so a row of Feats that only supply each other still counts for nothing. It is
+ * never its own supply, because it is not in the set. Only the Investment requirement is
+ * modelled, exactly as the audit: a passing Level means "not provably impossible".
+ *
+ * Blocked Levels are listed one by one rather than assumed to run on from the first:
+ * supply only grows with L, but a GM-edited curve need not, so a Level above a failing
+ * one can pass. `ceiling` is the Level below the FIRST failure, which is the one the
+ * GM has to author towards.
+ *
+ * @param {object} args
+ * @param {Array<object>} args.feats       the same records buildInvestmentReach is given
+ * @param {Array<{id: string, label: string}>} args.categories  the Categories to measure
+ * @param {object} args.rule               { enabled, table, exempt } — see withUntrackedCategories
+ * @param {number} [args.maxLevel]
+ * @returns {{enabled: boolean, maxLevel: number, rows: Array<object>}}
+ */
+export function buildLevelCeilings({
+  feats = [],
+  categories = [],
+  rule = null,
+  maxLevel = LEVEL_COLUMNS
+} = {}) {
+  const top = Math.max(1, Math.floor(Number(maxLevel) || LEVEL_COLUMNS));
+  if (rule?.enabled !== true) return { enabled: false, maxLevel: top, rows: [] };
+
+  const { supply } = settleReach(feats, rule);
+  const rows = [];
+
+  for (const category of Array.isArray(categories) ? categories : []) {
+    if (!category?.id || !ruleAppliesToCategory(category.id, rule)) continue;
+
+    const blocked = [];
+    for (let level = 1; level <= top; level++) {
+      const need = investmentForLevel(level, rule.table);
+      const have = countsAt(supply, level)[category.id] ?? 0;
+      if (have < need) blocked.push({ level, need, have, short: need - have });
+    }
+
+    rows.push({
+      category: category.id,
+      label: category.label ?? category.id,
+      ceiling: blocked.length ? blocked[0].level - 1 : top,
+      blocked
+    });
+  }
+
+  // Blocked ladders first, the shortest first — that is where authoring pays most —
+  // then alphabetical, so a clean catalog reads as a stable list.
+  rows.sort(
+    (a, b) =>
+      Number(b.blocked.length > 0) - Number(a.blocked.length > 0) ||
+      a.ceiling - b.ceiling ||
+      String(a.label).localeCompare(String(b.label))
+  );
+
+  return { enabled: true, maxLevel: top, rows };
 }
 
 /** A Feat's Level as a number, defaulted the way every other reader here defaults it. */
@@ -532,13 +628,21 @@ function buildResourceDemand(feats) {
  *
  * The not-published row is skipped throughout: an empty cell there is the *goal*, not a
  * gap, and listing it as one would invert the meaning of the whole panel.
+ *
+ * A Category that is not a progression track — General, or one the GM flagged — raises
+ * no warning of its own: it is a bucket, not a ladder, and an empty Level in it is not
+ * something to author towards. It still COUNTS for `emptyLevels`, whose question is
+ * "no Feat at any Category": a General Feat at Level 7 is a real Feat a player can take,
+ * so that Level is not empty. `untracked` lists the ids that were set aside, in grid
+ * order, so the panel can say what it did not check.
  */
-function buildGaps(grid, columns) {
+function buildGaps(grid, columns, untracked = new Set()) {
   const real = grid.rows.filter(r => !r.isUnpublished);
   const emptyCells = [];
   const emptyCategories = [];
 
   for (const row of real) {
+    if (untracked.has(row.id)) continue;
     if (!row.total) {
       emptyCategories.push({ id: row.id, label: row.label });
       continue; // a Category with nothing at all is one finding, not ten
@@ -552,7 +656,12 @@ function buildGaps(grid, columns) {
     real.every(row => row.cells.find(c => c.level === level)?.count === 0)
   );
 
-  return { emptyCells, emptyCategories, emptyLevels };
+  return {
+    emptyCells,
+    emptyCategories,
+    emptyLevels,
+    untracked: real.filter(row => untracked.has(row.id)).map(row => ({ id: row.id, label: row.label }))
+  };
 }
 
 /**

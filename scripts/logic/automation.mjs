@@ -94,7 +94,7 @@ function authoredRows(feat) {
  */
 export function isRedundantInvestment(feat, rule) {
   if (!rule?.enabled) return false;
-  if (!eligibleForRule(feat)) return false;
+  if (!eligibleForRule(feat, rule)) return false;
 
   const count = investmentForLevel(feat.level, rule.table);
   if (!count) return false;
@@ -119,10 +119,50 @@ export function stripRedundantInvestment(feat, rule) {
   return { ...feat, requirements: { ...feat.requirements, categoryInvestment: kept } };
 }
 
-/** Category-level eligibility: curated, and not the fixed General Category. */
-function eligibleForRule(feat) {
+/** Category-level eligibility: curated, and not a Category outside the progression. */
+function eligibleForRule(feat, rule) {
   if (!feat || feat.autoExempt === true) return false;
-  return ruleAppliesToCategory(feat.category);
+  return ruleAppliesToCategory(feat.category, rule);
+}
+
+/* ── Categories outside the progression ────────────────────────────────────── */
+
+/**
+ * The Categories that are NOT progression tracks: General always, plus any entry the
+ * GM flagged `untracked` on the Taxonomy tab. Such a Category is a bucket rather than a
+ * ladder, so the curve derives nothing for it, Coverage gaps does not warn about its
+ * empty cells and the Level-ceiling audit does not measure it.
+ *
+ * General is included by id rather than by a stored flag — the same fixed-by-code
+ * treatment isFixedCategory gives its name — so there is nothing to seed and nothing to
+ * migrate, and no stored value can ever put General back on the curve.
+ *
+ * This is the ONE statement of the carve-out. Automation and statistics both read it.
+ *
+ * @param {Array<{id: string, untracked?: boolean}>} categories
+ * @returns {string[]}
+ */
+export function untrackedCategoryIds(categories) {
+  const ids = new Set([GENERAL_CATEGORY_ID]);
+  for (const entry of Array.isArray(categories) ? categories : []) {
+    if (entry?.id && entry.untracked === true) ids.add(entry.id);
+  }
+  return [...ids];
+}
+
+/**
+ * The investmentByLevel rule carrying the ids it must stand aside for, as `exempt`.
+ *
+ * The rule and the taxonomy are two settings, but every reader of the rule needs both,
+ * so they are joined once where the rule is BUILT rather than at each call site. Never
+ * mutates: the registry app passes its working copy.
+ *
+ * @param {object|null|undefined} rule  { enabled, table }
+ * @param {Array<object>} categories
+ * @returns {object}
+ */
+export function withUntrackedCategories(rule, categories) {
+  return { ...(rule ?? {}), exempt: untrackedCategoryIds(categories) };
 }
 
 /**
@@ -131,16 +171,20 @@ function eligibleForRule(feat) {
  * Exported because two callers need the carve-out and they hold different things:
  * eligibleForRule has a feat, while My Investments has only a Category id and asks
  * whether the curve governs it before offering a look ahead. Stating it once here
- * is what stops the two drifting the next time General is revisited.
+ * is what stops the two drifting the next time the carve-out is revisited.
  *
  * null === uncurated, and General is the GM's stated carve-out: it is the "no filing
- * system yet" Category, so demanding investment in it would gate the entry point.
+ * system yet" Category, so demanding investment in it would gate the entry point. It is
+ * tested by id as well as through `rule.exempt`, so a caller that forgets to build the
+ * rule with withUntrackedCategories can lose a GM's flagged Category — never General.
  *
  * @param {string|null|undefined} category
+ * @param {{exempt?: string[]}|null} [rule]
  * @returns {boolean}
  */
-export function ruleAppliesToCategory(category) {
-  return Boolean(category) && category !== GENERAL_CATEGORY_ID;
+export function ruleAppliesToCategory(category, rule = null) {
+  if (!category || category === GENERAL_CATEGORY_ID) return false;
+  return !(Array.isArray(rule?.exempt) && rule.exempt.includes(category));
 }
 
 /**
@@ -155,7 +199,7 @@ export function ruleAppliesToCategory(category) {
  */
 export function autoInvestmentRow(feat, rule) {
   if (!rule?.enabled) return null;
-  if (!eligibleForRule(feat)) return null;
+  if (!eligibleForRule(feat, rule)) return null;
 
   const count = investmentForLevel(feat.level, rule.table);
   if (!count) return null;
