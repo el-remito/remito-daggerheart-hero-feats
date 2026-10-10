@@ -171,6 +171,9 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.8.1
+- **Fixed: *Only feats I qualify for* showed nothing once a character had spent all their Feat Points.** The filter was asking "can I buy this right now?" instead of "do I meet its requirements?". It now shows every Feat whose requirements you meet, whether or not you have a point to spend. The acquire button on those Feats stays dimmed until you do
+
 ### v1.8.0
 - **Level ceilings, in Statistics → Coverage gaps.** The Unreachable Feats check only ever looked at Feats you had already written, so a Category with nothing filed at Level 5 was never asked about Level 5 — a clean result did not mean the Category could carry a character to the top. The new panel asks, for every Category and every Level, whether a Feat you filed there tomorrow could ever be taken under your Automation curve, and reports the highest Level each Category reaches: *"Blades · reaches Level 4 — Level 5 needs 7, has 5 (short by 2)"*. Click a finding to open that Category on the Feats tab
 - It is measured only while **Default Investment by Level** is on, since without the curve a new Feat asks for no investment and every Level would pass. Like the existing check, it counts only Feats a player can actually reach, and looks at the investment requirement alone

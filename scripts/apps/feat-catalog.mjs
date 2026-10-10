@@ -220,7 +220,10 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           typesAttr: (feat.types ?? []).join('|'),
           isGM,
           checks: evaluation.checks.map(localizeCheck),
+          // Can acquire now (drives the + button) vs meets the requirements (drives the
+          // eligibility filter). Only the second ignores points.
           eligible: evaluation.ok,
+          qualifies: evaluation.qualifies,
           owned: evaluation.owned,
           unmetCount: evaluation.failures.length,
           free: acquisitionOf(state, feat.uuid)?.free === true,
@@ -397,7 +400,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       category: row.dataset.category || null,
       types: (row.dataset.types || '').split('|').filter(Boolean),
       owned: row.dataset.owned === 'true',
-      eligible: row.dataset.eligible === 'true',
+      qualifies: row.dataset.qualifies === 'true',
       isNew: row.dataset.new === 'true',
       searchText: row.dataset.search || ''
     };

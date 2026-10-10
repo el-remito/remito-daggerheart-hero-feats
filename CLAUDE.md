@@ -747,6 +747,12 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   catalog's job to advertise, and this tab is about standing.
 - **Permissive requirement failure.** An unrecognized expression atom returns `true`. A GM's typo
   must not silently lock a feat away with no visible cause.
+- **Qualifying is not being able to buy.** `isEligible` returns two answers: `qualifies`, which
+  is the requirements alone, and `ok`, which also needs a point and the Feat not already owned.
+  The row carries both. The eligibility filter reads `qualifies` (via `data-qualifies`), and the
+  `+` button's `is-blocked` reads `eligible` (= `ok`). Until v1.8.1 the filter read `ok`, so a
+  character with every point spent saw an empty catalog under *Only feats I qualify for*. The GM
+  registry's `_applyRegFilters` passes `qualifies: true`, because there is no character to measure.
 - **Formula evaluation goes through `Roll`**, never `eval` or `new Function`. The registry's live
   preview uses the system's own idiom — `Roll.replaceFormulaData` then `Roll.safeEval` — because a
   point pool has no business rolling dice.

@@ -297,17 +297,25 @@ export function prerequisiteState(feat, snapshot) {
 /**
  * Whole-feat eligibility, including the point cost. Cost is a flat 1 Feat Point.
  *
+ * Two answers, because two readers ask different questions. `qualifies` is the
+ * requirements alone — what the "Only feats I qualify for" filter means, and true for a
+ * character with no points left. `ok` is whether the Feat can be ACQUIRED right now, which
+ * also needs a point and not already owning it. The filter read `ok` until v1.8.1, so a
+ * character who had spent every point saw an empty catalog.
+ *
  * @param {object} feat
  * @param {object} snapshot
  * @param {number} remainingPoints
- * @returns {{ok: boolean, checks: Array, failures: Array, hasPoints: boolean, owned: boolean}}
+ * @returns {{ok: boolean, qualifies: boolean, checks: Array, failures: Array,
+ *            hasPoints: boolean, owned: boolean}}
  */
 export function isEligible(feat, snapshot, remainingPoints) {
   const checks = checkRequirements(feat, snapshot);
   const failures = checks.filter(c => !c.met);
   const owned = Boolean(snapshot.acquiredUuids?.includes(feat.uuid));
   const hasPoints = Number(remainingPoints) >= 1;
-  return { ok: !owned && hasPoints && failures.length === 0, checks, failures, hasPoints, owned };
+  const qualifies = failures.length === 0;
+  return { ok: !owned && hasPoints && qualifies, qualifies, checks, failures, hasPoints, owned };
 }
 
 /* ── Expression grammar (escape hatch) ─────────────────────────────────────── */

@@ -1604,7 +1604,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         category: row.dataset.category || null,
         types: (row.dataset.types || '').split('|').filter(Boolean),
         owned: false,
-        eligible: true,
+        qualifies: true,
         isNew: row.dataset.new === 'true',
         searchText: row.dataset.search || ''
       };

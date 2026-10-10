@@ -2,7 +2,7 @@
  * filters.mjs
  * Pure catalog filtering and sorting. Operates on "feat views" — the flattened records
  * the catalog builds in _prepareContext ({ uuid, name, level, category, types[],
- * description, eligible, owned, published }).
+ * description, qualifies, owned, published }).
  *
  * Filtering runs on every keystroke and never triggers a re-render (the catalog toggles
  * row visibility in place), so these must stay cheap and allocation-light.
@@ -36,7 +36,8 @@ export function matchesFilters(view, state) {
   const s = state ?? blankFilterState();
 
   if (s.hideOwned && view.owned) return false;
-  if (s.eligibleOnly && !view.eligible && !view.owned) return false;
+  // Requirements only, never points: "qualify" is not "can afford" (see isEligible).
+  if (s.eligibleOnly && !view.qualifies && !view.owned) return false;
   if (s.newOnly && !view.isNew) return false;
 
   const min = s.levelMin;
