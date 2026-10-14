@@ -3,8 +3,9 @@
  * The actor-side gather step for the registry's Statistics tab.
  *
  * This is the only new place the module reads actors for statistics, and it reads
- * nothing it does not already read elsewhere: acquisition flags through getState, and
- * the point pool through getPointPool. It writes nothing at all.
+ * nothing it does not already read elsewhere: acquisition flags through getState (and,
+ * since v1.9.0, the Refunded / Revoked rows beside them), and the point pool through
+ * getPointPool. It writes nothing at all.
  *
  * Scope is deliberate — **only characters that own at least one Feat**. That keeps the
  * ledger free of rows of zeros, at the cost that a character who has never opened the
@@ -18,7 +19,9 @@ import { MODULE_ID } from '../constants.mjs';
 import { characters, getPointPool, getState } from './actor-state.mjs';
 
 /**
- * Every character with at least one acquisition, with their point pool resolved.
+ * Every character with at least one acquisition OR one logged refund or revoke, with
+ * their point pool resolved. A character who handed back their only Feat still has
+ * Recent activity to show; buildAdoptionStats keeps them out of the table itself.
  *
  * getPointPool evaluates the world's Roll formula, so this is async and one Roll is
  * evaluated per character. It runs only when the Statistics tab is actually open — the
@@ -26,14 +29,14 @@ import { characters, getPointPool, getState } from './actor-state.mjs';
  * ordinary registry render.
  *
  * @returns {Promise<Array<{actorId: string, name: string, level: number, img: string|null,
- *                          acquired: Array<object>, pool: object}>>}
+ *                          acquired: Array<object>, history: Array<object>, pool: object}>>}
  */
 export async function gatherLedger() {
   const rows = [];
 
   for (const actor of characters()) {
     const state = getState(actor);
-    if (!state.acquired.length) continue;
+    if (!state.acquired.length && !state.ledger.length) continue;
 
     let pool;
     try {
@@ -51,6 +54,7 @@ export async function gatherLedger() {
       level: actor.system?.levelData?.level?.current ?? 0,
       img: actor.img ?? null,
       acquired: state.acquired,
+      history: state.ledger,
       pool
     });
   }

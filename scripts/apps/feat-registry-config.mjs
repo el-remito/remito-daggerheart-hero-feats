@@ -786,7 +786,19 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
           // Formatted here rather than in logic/: a date is a localized display string,
           // and the pure layer never touches game.i18n or the user's locale. An entry
           // acquired before the timestamp existed carries 0 and shows a dash.
-          when: formatDay(entry.at)
+          when: formatDay(entry.at),
+          actionLabel: game.i18n.localize(`RDHF.stats.action.${entry.action}`),
+          isUndo: entry.action === 'refunded' || entry.action === 'revoked',
+          // Why a refund happened, and what it went with. Revoked needs no reason: a
+          // GM's decision is its own explanation.
+          detail: [
+            entry.reason ? game.i18n.localize(`RDHF.stats.reason.${entry.reason}`) : '',
+            entry.cascadeLabel
+              ? game.i18n.format('RDHF.stats.cascadeOf', { name: entry.cascadeLabel })
+              : ''
+          ]
+            .filter(Boolean)
+            .join(' · ')
         }))
       },
       hasFeats: records.length > 0,
@@ -2221,7 +2233,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * Sets one character aside from the adoption figures, or puts them back.
    *
    * This one DOES re-render, unlike the axis and gap toggles beside it: the numbers
-   * themselves move — Most taken, Recent acquisitions and every counter — so there is
+   * themselves move — Most taken, Recent activity and every counter — so there is
    * no repaint short of rebuilding the panel, and rebuilding it by hand would duplicate
    * markup the template already declares. The scroll position is preserved by render()
    * as it is for every other action here.

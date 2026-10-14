@@ -701,7 +701,7 @@ export function isUuidLike(ref) {
  *
  * @param {object} args
  * @param {Array<object>} args.feats   normalized feats, for resolving names
- * @param {Array<object>} args.ledger  [{ actorId, name, level, acquired[], pool }]
+ * @param {Array<object>} args.ledger  [{ actorId, name, level, acquired[], history[], pool }]
  * @param {number} [args.recentLimit]
  * @returns {object}
  */
@@ -721,7 +721,9 @@ export function buildAdoptionStats({
   const skip = excluded instanceof Set ? excluded : new Set(excluded ?? []);
   const counted = ledger.filter(entry => !skip.has(entry.actorId));
 
-  const characters = ledger.map(entry => {
+  // The table lists characters who OWN a Feat; one whose whole history is refunds is
+  // in `ledger` only so their refunds reach Recent activity below.
+  const characters = ledger.filter(entry => (entry.acquired ?? []).length > 0).map(entry => {
     const pool = entry.pool ?? {};
     return {
       actorId: entry.actorId,
@@ -752,11 +754,37 @@ export function buildAdoptionStats({
         actorId: entry.actorId,
         actorName: entry.name,
         at: Number(acquisition.at) || 0,
+        // Acquired / Granted / Refunded / Revoked: one vocabulary for every row, so the
+        // app has one switch to localize rather than a flag per kind.
+        action: acquisition.free === true ? 'granted' : 'acquired',
         free: acquisition.free === true,
         known: byUuid.has(acquisition.uuid)
       });
     }
+    // A refund or revoke REMOVES the acquisition it undoes, so the purchase row is
+    // gone and only this one is left — Recent activity describes what the table holds
+    // now, plus how it got there. The stored name covers a Feat since unregistered.
+    for (const row of entry.history ?? []) {
+      recent.push({
+        uuid: row.uuid,
+        label: byUuid.has(row.uuid) ? label(row.uuid) : row.name ?? row.uuid,
+        actorId: entry.actorId,
+        actorName: entry.name,
+        at: Number(row.at) || 0,
+        action: row.action === 'revoked' ? 'revoked' : 'refunded',
+        reason: row.reason ?? null,
+        cascadeOf: row.cascadeOf ?? null,
+        cascadeLabel: row.cascadeOf
+          ? byUuid.has(row.cascadeOf)
+            ? label(row.cascadeOf)
+            : (entry.history.find(h => h.uuid === row.cascadeOf)?.name ?? row.cascadeOf)
+          : null,
+        free: false,
+        known: byUuid.has(row.uuid)
+      });
+    }
   }
+  const acquisitions = recent.filter(r => r.action === 'acquired' || r.action === 'granted').length;
 
   // Which Categories the counted characters actually play. Derived from the SAME
   // `counted` list as everything else here, so setting a character aside moves this
@@ -804,9 +832,9 @@ export function buildAdoptionStats({
     // Newest first. An acquisition recorded before the timestamp existed sorts last,
     // which is where a 0 belongs.
     recent: recent.sort((a, b) => b.at - a.at).slice(0, recentLimit),
-    acquisitions: recent.length,
-    charactersWithFeats: counted.length,
-    excludedCount: characters.length - counted.length
+    acquisitions,
+    charactersWithFeats: counted.filter(entry => (entry.acquired ?? []).length > 0).length,
+    excludedCount: characters.filter(c => c.excluded).length
   };
 }
 

@@ -2057,6 +2057,24 @@ details[open] > summary .rdhf-arrow {
     white-space: nowrap;
 }
 
+/* v1.9.0: every Recent activity row names what happened. Acquired is the quiet default;
+   Granted keeps its existing gift tone; the two undo verbs read in the "changed" hue the
+   owner's notice uses, because a refund is almost always the end of that story. */
+.rdhf-recent-detail {
+    color: var(--rdhf-ink-muted);
+    font-size: 0.9em;
+}
+
+.rdhf-chip--action {
+    flex: 0 0 auto;
+}
+
+.rdhf-chip--refunded,
+.rdhf-chip--revoked {
+    border-color: var(--rdhf-changed);
+    color: var(--rdhf-changed);
+}
+
 /* ── The reference block: chips and search first, raw UUIDs last ──────────── */
 
 .rdhf-ref-block {

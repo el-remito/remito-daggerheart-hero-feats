@@ -1524,14 +1524,12 @@
                     <h5 class="rdhf-sub">{{localize "RDHF.stats.recent"}}</h5>
                     <ul class="rdhf-recent">
                         {{#each stats.adoption.recent}}
-                            <li>
+                            {{!-- Every row names what happened. A refund or revoke
+                                  removed the purchase it undoes, so it stands alone. --}}
+                            <li class="{{#if this.isUndo}}is-undo{{/if}}">
                                 <span class="rdhf-recent-who">{{this.actorName}}</span>
-                                <span class="rdhf-recent-what">{{this.label}}</span>
-                                {{#if this.free}}
-                                    <span class="rdhf-chip rdhf-chip--granted">
-                                        {{localize "RDHF.catalog.granted"}}
-                                    </span>
-                                {{/if}}
+                                <span class="rdhf-recent-what">{{this.label}}{{#if this.detail}} <span class="rdhf-recent-detail">({{this.detail}})</span>{{/if}}</span>
+                                <span class="rdhf-chip rdhf-chip--action rdhf-chip--{{this.action}}">{{this.actionLabel}}</span>
                                 <span class="rdhf-recent-when">{{this.when}}</span>
                             </li>
                         {{/each}}

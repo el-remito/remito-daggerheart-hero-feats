@@ -289,7 +289,8 @@ export async function grantFeat(actor, uuid, { free = false } = {}) {
 
 /**
  * GM-only. Deletes the item this acquisition created and forgets the acquisition,
- * refunding the point if one was charged.
+ * refunding the point if one was charged — and, since v1.9.0, logs a Revoked row, so a
+ * GM's undo is as visible under Recent activity as a player's refund.
  * @param {Actor} actor
  * @param {string} uuid
  * @returns {Promise<boolean>}
@@ -299,7 +300,10 @@ export async function revokeFeat(actor, uuid) {
   const entry = acquisitionOf(state, uuid);
   if (!entry) return false;
 
-  if (entry.itemId && actor.items.get(entry.itemId)) {
+  const item = entry.itemId ? actor.items.get(entry.itemId) : null;
+  // Read before the delete: the row keeps the name the character knew the Feat by.
+  const name = item?.name ?? uuid;
+  if (item) {
     try {
       await actor.deleteEmbeddedDocuments('Item', [entry.itemId]);
     } catch (err) {
@@ -307,7 +311,11 @@ export async function revokeFeat(actor, uuid) {
     }
   }
 
-  await setState(actor, { ...state, acquired: state.acquired.filter(e => e.uuid !== uuid) });
+  await setState(actor, {
+    ...state,
+    acquired: state.acquired.filter(e => e.uuid !== uuid),
+    ledger: [...state.ledger, { uuid, name, at: Date.now(), action: 'revoked', reason: null, cascadeOf: null }]
+  });
   return true;
 }
 
