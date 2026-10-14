@@ -192,6 +192,10 @@ export function blankFeat(uuid) {
     // edits the same fields that later count as changes, so the stamp is withheld until
     // the curation has been committed. See _syncField in the registry app.
     updatedAt: 0,
+    // The GM's word to OWNERS about the change `updatedAt` marks (v1.9.0). Written only
+    // by the Save-time dialog, and replaced whenever `updatedAt` moves, so it can never
+    // describe an older change than the one it is shown beside.
+    updateNote: '',
     // When this feat was PUBLISHED by Curation's File. 0 = never published, and
     // `published <=> filedAt > 0` is the whole of the player-visibility gate. Written
     // EXPLICITLY here so a genuinely new feat is never mistaken for a pre-1.7.0 entry,
@@ -223,6 +227,7 @@ export function normalizeFeat(uuid, stored) {
     autoExempt: stored.autoExempt === true,
     curatedAt: Number(stored.curatedAt) || 0,
     updatedAt: Number(stored.updatedAt) || 0,
+    updateNote: typeof stored.updateNote === 'string' ? stored.updateNote : '',
     // An entry written before v1.7.0 has no such key at all, and under the old rule a
     // Category alone made a feat visible — so one is read as published, using its own
     // curation stamp as the date because that IS the moment it reached players. The `|| 1`

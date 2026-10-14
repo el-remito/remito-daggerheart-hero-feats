@@ -2812,7 +2812,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
 
   static async _onSave(event) {
     event.preventDefault();
-    await this.#commit();
+    // False when the GM chose "Back to editing" in the change-note dialog.
+    if (!(await this.#commit())) return;
     this.close();
   }
 
@@ -2895,9 +2896,15 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     return this.#stableJson(this.#snapshot()) !== this.#stableJson(this.#baseline);
   }
 
-  /** Writes all six working copies through, and rebases so the app is clean again. */
+  /**
+   * Writes all six working copies through, and rebases so the app is clean again.
+   *
+   * @returns {Promise<boolean>}  false when the GM went back to editing from the
+   *   change-note dialog, in which case nothing was written
+   */
   async #commit() {
     this.#adoptRedundantInvestment();
+    if (!(await this.#settleUpdateNotes())) return false;
     await setRegistry(this.#config);
     await setCategories(this.#categories);
     await setTypes(this.#types);
@@ -2907,6 +2914,100 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     invalidatePackCache();
     this.#baseline = foundry.utils.deepClone(this.#snapshot());
     ui.notifications?.info(game.i18n.localize('RDHF.notify.saved'));
+    return true;
+  }
+
+  /**
+   * Asks the GM what changed, for every PUBLISHED Feat this Save stamps UPDATED, and
+   * settles every Feat's `updateNote` against its stamp.
+   *
+   * Lives inside #commit so both Saves — the footer button and the close prompt's —
+   * raise it; Curation's File goes through #commitFeat and never stamps UPDATED
+   * ("authoring is not changing"), so it never asks, and that is intended.
+   *
+   * A note belongs to ONE change. So the rule is not "keep unless edited" but "replace
+   * whenever the stamp moves": a Feat whose `updatedAt` differs from the baseline takes
+   * whatever the dialog says for it — blank included — and one that is not in the dialog
+   * (unpublished, or a Mark as UPDATED toggled back off) loses its note outright. The
+   * fields start EMPTY, with the old note shown beneath for reference: prefilling would
+   * let a GM pressing OK carry yesterday's explanation onto today's change.
+   *
+   * @returns {Promise<boolean>}  false when the GM chose Back to editing
+   */
+  async #settleUpdateNotes() {
+    const feats = this.#config?.feats ?? {};
+    const savedFeats = this.#baseline?.registry?.feats ?? {};
+    const moved = Object.keys(feats).filter(
+      uuid => (Number(feats[uuid]?.updatedAt) || 0) !== (Number(savedFeats[uuid]?.updatedAt) || 0)
+    );
+    if (!moved.length) return true;
+
+    const asked = moved.filter(uuid => {
+      const feat = normalizeFeat(uuid, feats[uuid]);
+      return feat.updatedAt > 0 && isPublished(feat);
+    });
+
+    let notes = {};
+    if (asked.length) {
+      const escape = foundry.utils.escapeHTML;
+      const rows = asked
+        .map(uuid => {
+          const name = escape(this.#sourceNames?.get(uuid) ?? uuid);
+          const previous = normalizeFeat(uuid, savedFeats[uuid]).updateNote;
+          return (
+            `<li class="${PREFIX}-note-row">` +
+            `<label class="${PREFIX}-note-name">${name}` +
+            `<input type="text" maxlength="300" data-note-uuid="${escape(uuid)}" ` +
+            `placeholder="${escape(game.i18n.localize('RDHF.updateNote.placeholder'))}"></label>` +
+            (previous
+              ? `<p class="${PREFIX}-note-previous">${escape(
+                  game.i18n.format('RDHF.updateNote.previous', { note: previous })
+                )}</p>`
+              : '') +
+            `</li>`
+          );
+        })
+        .join('');
+
+      // One button per outcome, each callback returning its own value — the result of
+      // a DialogV2 IS the pressed button's callback return (see _onGrantAnyway).
+      const result = await foundry.applications.api.DialogV2.wait({
+        window: { title: game.i18n.localize('RDHF.updateNote.title') },
+        position: { width: 520 },
+        content:
+          `<p>${game.i18n.localize('RDHF.updateNote.body')}</p>` +
+          `<ul class="${PREFIX}-note-list">${rows}</ul>`,
+        rejectClose: false,
+        buttons: [
+          {
+            action: 'save',
+            icon: 'fa-solid fa-floppy-disk',
+            label: 'RDHF.updateNote.save',
+            default: true,
+            callback: (_event, button) =>
+              Object.fromEntries(
+                [...button.form.querySelectorAll('[data-note-uuid]')].map(input => [
+                  input.dataset.noteUuid,
+                  input.value.trim()
+                ])
+              )
+          },
+          {
+            action: 'back',
+            icon: 'fa-solid fa-pen',
+            label: 'RDHF.updateNote.back',
+            callback: () => 'back'
+          }
+        ]
+      });
+      // Only Save returns an object. Back returns its action string, and a dismissed
+      // dialog returns null — dismissing must never be the thing that writes.
+      if (!result || typeof result !== 'object') return false;
+      notes = result;
+    }
+
+    for (const uuid of moved) feats[uuid].updateNote = notes[uuid] ?? '';
+    return true;
   }
 
   /**
@@ -2978,8 +3079,10 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       ]
     });
 
-    if (choice === 'save') await this.#commit();
-    else if (choice !== 'discard') return this; // cancel, or the dialog was dismissed
+    if (choice === 'save') {
+      // Back to editing from the change-note dialog keeps the window open, unsaved.
+      if (!(await this.#commit())) return this;
+    } else if (choice !== 'discard') return this; // cancel, or the dialog was dismissed
 
     return super.close(options);
   }

@@ -650,6 +650,35 @@ details[open] > summary .rdhf-arrow {
     font-size: 0.9em;
 }
 
+/* The Save-time "What changed?" dialog (v1.9.0). A DialogV2 lives outside any .rdhf
+   root, so it reads Foundry's own variables rather than the module tokens. */
+.rdhf-note-list {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.rdhf-note-name {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-weight: 600;
+}
+
+.rdhf-note-name input {
+    font-weight: normal;
+}
+
+.rdhf-note-previous {
+    margin: 4px 0 0;
+    font-size: 0.85em;
+    font-style: italic;
+    opacity: 0.65;
+}
+
 /* ── Registry ─────────────────────────────────────────────────────────────── */
 
 .rdhf-registry-layout {
