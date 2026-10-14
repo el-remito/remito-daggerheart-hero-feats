@@ -2587,11 +2587,11 @@ details[open] > summary .rdhf-arrow {
     letter-spacing: 0.04em;
 }
 
-/* v1.9.1: the UPDATED tooltip — date, the GM's note, then the window sentence. It
-   renders inside core's #tooltip, outside every module window, so these classes are
-   prefixed and nothing else reaches them. The note is the reason for hovering, so it is
-   set apart; the window sentence is background and steps back. */
-.rdhf-tooltip-updated {
+/* v1.9.1: the NEW and UPDATED tooltips, mirrors of each other — a date, UPDATED's note,
+   then the window line. They render inside core's #tooltip, outside every module window,
+   so these classes are prefixed and nothing else reaches them. The note is the reason
+   for hovering, so it is set apart. */
+.rdhf-tooltip-recency {
     display: flex;
     flex-direction: column;
     gap: 0.3em;
@@ -2607,10 +2607,6 @@ details[open] > summary .rdhf-arrow {
 .rdhf-tooltip-note.is-pending {
     border-left-style: dashed;
     opacity: 0.8;
-}
-.rdhf-tooltip-window {
-    opacity: 0.75;
-    font-size: 0.9em;
 }
 
 /* "Changed since you took it" — the owner's half of the UPDATED fact, so the same hue,

@@ -56,7 +56,7 @@ import {
   recentWindowLeft,
   refundRoute
 } from '../logic/ownership.mjs';
-import { chipTooltip, updatedChipTooltip } from './recency-text.mjs';
+import { chipTooltip, windowLine } from './recency-text.mjs';
 import { formatDay } from './date-text.mjs';
 import { localizeCheck } from './requirement-text.mjs';
 
@@ -222,9 +222,10 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     // publishing cannot crowd out the changed Feats and the two can be given different
     // lifetimes.
     const changed = newestUpdated(feats, recency.updated, { total });
-    // The window half of every UPDATED tooltip, formatted once; each chip adds its own
-    // Feat's date and note above it.
-    const updatedWindowText = chipTooltip('updated', recency.updated, total);
+    // The window line of every recency tooltip, formatted once per chip; each chip adds
+    // its own Feat's date (and, for UPDATED, the GM's note) above it.
+    const newLine = windowLine(recency.new, total);
+    const updatedLine = windowLine(recency.updated, total);
 
     // Refund controls are the OWNER's: a GM has Revoke, which needs no window. Decided
     // once per render; a window that shuts while the catalog is open is caught again at
@@ -273,6 +274,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           ),
           hidden: feat.hidden === true,
           isNew: fresh.has(feat.uuid),
+          newTooltip: fresh.has(feat.uuid) ? chipTooltip('new', newLine, { at: feat.curatedAt }) : '',
           // Both chips are drawn where both apply (v1.9.0). UPDATED cannot arise on a
           // feat still being authored — the stamp is withheld until curation is
           // committed — so where both are set the feat really was published inside the
@@ -282,7 +284,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           // Every reader of the chip sees the GM's note, not only the owners: it says what
           // the chip says changed. The owner's change block keeps its own copy.
           updatedTooltip: changed.has(feat.uuid)
-            ? updatedChipTooltip(updatedWindowText, { at: feat.updatedAt, note: feat.updateNote })
+            ? chipTooltip('updated', updatedLine, { at: feat.updatedAt, note: feat.updateNote })
             : '',
           // Worn until the feat is acquired, which needs no expiry of its own: an owned
           // feat is `owned`, and the chip is not drawn for one.
@@ -302,12 +304,6 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       actor: this.actor,
       isGM,
       pool,
-      // NEW's tooltip, formatted ONCE here rather than localized at each place the chip
-      // is drawn. The sentence has to name the mode and the resolved number, and a chip
-      // claiming "one of the 20 most recent" while 19 are drawn would be worse than
-      // saying nothing — so the string and the window read the same resolveRecency call.
-      // UPDATED's is per Feat (v1.9.1), on the view, built on the same sentence.
-      newChipTooltip: chipTooltip('new', recency.new, total),
       available,
       acquired,
       acquiredCount: acquired.length,

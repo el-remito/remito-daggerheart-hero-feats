@@ -276,13 +276,12 @@
                                                         {{this.label}}
                                                     </span>
                                                 {{/each}}
-                                                {{!-- _buildChips repaints these two
-                                                      (NEW from this._recencyTooltips,
-                                                      UPDATED from #updatedTooltip); keep
-                                                      the two in step. --}}
+                                                {{!-- _buildChips repaints these two,
+                                                      both tooltips from #recencyTooltip;
+                                                      keep the two in step. --}}
                                                 {{#if this.isNew}}
                                                     <span class="rdhf-chip rdhf-chip--new"
-                                                          data-tooltip="{{@root.newChipTooltip}}">{{localize "RDHF.catalog.new"}}</span>
+                                                          data-tooltip-html="{{this.newTooltip}}">{{localize "RDHF.catalog.new"}}</span>
                                                 {{/if}}
                                                 {{#if this.isUpdated}}
                                                     <span class="rdhf-chip rdhf-chip--updated"

@@ -72,7 +72,7 @@ import {
   withUntrackedCategories
 } from '../logic/automation.mjs';
 import { describeRequirements, localizeCheck } from './requirement-text.mjs';
-import { chipTooltip, updatedChipTooltip } from './recency-text.mjs';
+import { chipTooltip, windowLine } from './recency-text.mjs';
 import { formatDay } from './date-text.mjs';
 import { byLevelThenName, matchesFilters, blankFilterState } from '../logic/filters.mjs';
 import { recencyWindow, resolveRecency } from '../logic/recency.mjs';
@@ -377,8 +377,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this._recomputeUpdatedFeats();
 
     this._recencyTooltips = {
-      new: chipTooltip('new', this.#recency.new, publishedTotal),
-      updated: chipTooltip('updated', this.#recency.updated, publishedTotal)
+      new: windowLine(this.#recency.new, publishedTotal),
+      updated: windowLine(this.#recency.updated, publishedTotal)
     };
 
     const views = [...sources.values()]
@@ -393,8 +393,9 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
           published: isPublished(feat),
           uncurated: isUncurated(feat),
           isNew: this._newFeats.has(source.uuid),
+          newTooltip: this._newFeats.has(source.uuid) ? this.#recencyTooltip('new', feat) : '',
           isUpdated: this._updatedFeats.has(source.uuid),
-          updatedTooltip: this._updatedFeats.has(source.uuid) ? this.#updatedTooltip(feat) : '',
+          updatedTooltip: this._updatedFeats.has(source.uuid) ? this.#recencyTooltip('updated', feat) : '',
           // The BUTTON reflects the stored stamp, not chip membership: the chip is
           // decided over the whole list, and a control that switched itself off because
           // an eleventh Feat was stamped elsewhere would report someone else's edit.
@@ -494,10 +495,6 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       // precomputed boolean, because Handlebars has no `eq` here.
       recencyRows: ['new', 'updated'].map(chip => this.#recencyRow(chip, publishedTotal)),
       refunds: this.#refunds,
-      // Formatted once per render and read by the chips in the template; _buildChips
-      // reads the same off this._recencyTooltips when it repaints a row. UPDATED's is
-      // per Feat (#updatedTooltip), built on this._recencyTooltips.updated.
-      newChipTooltip: this._recencyTooltips.new,
       sources: (this.#config.sources ?? []).map(s => {
         const label = game.packs.get(s.packId)?.metadata?.label ?? s.packId;
         return {
@@ -1173,15 +1170,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /**
-   * The UPDATED chip's tooltip for one working-copy Feat. A stamp that has moved since
-   * the last Save has no note yet — "What changed?" asks for it on Save — so the stored
-   * note, which belongs to the PREVIOUS change, is held back and the chip says the note
-   * is still to come instead.
+   * A recency chip's tooltip for one working-copy Feat, on the window line formatted once
+   * per render in this._recencyTooltips. Read by the template's views and by
+   * _buildChips, so a repaint and a full render cannot disagree.
+   *
+   * For UPDATED, a stamp that has moved since the last Save has no note yet — "What
+   * changed?" asks for it on Save — so the stored note, which belongs to the PREVIOUS
+   * change, is held back and the chip says the note is still to come instead.
    */
-  #updatedTooltip(feat) {
+  #recencyTooltip(chip, feat) {
+    if (chip === 'new') {
+      return chipTooltip('new', this._recencyTooltips.new, { at: feat.curatedAt });
+    }
     const saved = this.#baseline?.registry?.feats?.[feat.uuid];
     const notePending = (Number(saved?.updatedAt) || 0) !== (Number(feat.updatedAt) || 0);
-    return updatedChipTooltip(this._recencyTooltips.updated, {
+    return chipTooltip('updated', this._recencyTooltips.updated, {
       at: feat.updatedAt,
       note: feat.updateNote,
       notePending
@@ -1241,14 +1244,14 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     if (this._newFeats.has(feat.uuid)) {
       chips.push(
         this._chip('new', game.i18n.localize('RDHF.catalog.new'), {
-          tooltip: this._recencyTooltips.new
+          tooltipHtml: this.#recencyTooltip('new', feat)
         })
       );
     }
     if (this._updatedFeats.has(feat.uuid)) {
       chips.push(
         this._chip('updated', game.i18n.localize('RDHF.catalog.updated'), {
-          tooltipHtml: this.#updatedTooltip(feat)
+          tooltipHtml: this.#recencyTooltip('updated', feat)
         })
       );
     }
