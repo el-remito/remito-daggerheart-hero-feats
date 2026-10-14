@@ -52,17 +52,20 @@ scripts/
     visibility.mjs          the withholding precedence: visible / hidden / revealed
     automation.mjs          Rule Automation: the derived-requirement rules
     recency.mjs             how long a Feat wears its NEW / UPDATED chip
+    ownership.mjs           the owner's end: pending changes, the refund rule, planRefund's cascade
   apps/
     requirement-text.mjs    the ONLY place a requirement descriptor becomes display text
     recency-text.mjs        the ONLY place a recency rule becomes a chip tooltip
+    date-text.mjs           the ONLY place a timestamp becomes a date (formatDay)
     feat-catalog.mjs        player + GM catalog (one instance per actor, tracked in openCatalogs)
     feat-registry-config.mjs  GM registry (7 tabs), registered via registerMenu
   badge/badge.mjs           renderActorSheetV2 injection next to Level
 ```
 
-Import direction is one-way: `apps/` → `data/` → `logic/` → `constants.mjs`. `requirement-text.mjs`
-and `recency-text.mjs` are the two modules inside `apps/` that another app imports; both are leaves
-(they reach only `logic/`), so the direction still holds and there is no cycle.
+Import direction is one-way: `apps/` → `data/` → `logic/` → `constants.mjs`. `requirement-text.mjs`,
+`recency-text.mjs` and `date-text.mjs` are the three modules inside `apps/` that another app imports;
+all are leaves (they reach only `logic/`, or nothing), so the direction still holds and there is no
+cycle.
 
 ## Data shapes
 
@@ -81,6 +84,8 @@ World setting `registry`:
       hidden: false,             // GM secret: withheld even once curated
       autoExempt: false,         // opts this feat out of every Rule Automation rule
       summary: '',               // GM teaser; blank falls back to the description
+      updatedAt: 0,              // last mechanically relevant change once published; drives UPDATED
+      updateNote: '',            // the GM's word to owners about THAT change (v1.9.0)
       standalone: false,         // registered by drag and drop, not from a pack source
       requirements: {
         resources: { hitPoints, stress, hope, evasion },   // minimum MAX values
@@ -152,7 +157,7 @@ strips the type everywhere.
 then alphabetical by displayed label, `getTypes()` alphabetical. That is the only way the two filter
 rails, the curation dropdowns and the Taxonomy tab can be guaranteed to agree.
 
-`SETTINGS.MIGRATION` holds an integer against `MIGRATION_VERSION` (**3** as of v1.7.0). A migration
+`SETTINGS.MIGRATION` holds an integer against `MIGRATION_VERSION` (**4** as of v1.9.0). A migration
 that throws leaves the number alone and is retried next load rather than half-applying and being
 forgotten. Migrations are GM-only, so every read path still has to tolerate un-migrated data.
 
@@ -166,11 +171,36 @@ a genuinely new feat can never be mistaken for a legacy one. The migration is id
 `filedAt !== undefined` guard, not by the version alone, so a world saved between a failed run and a
 retry is not re-stamped with a later date.
 
+Migration 4 (v1.9.0) is the first to write **actor flags** rather than a world setting: it stamps
+`seenAt = now` on every acquisition that has none, so the owner's change notice starts clean instead
+of lighting up for every edit a GM ever made after somebody bought a Feat. Idempotent by its own
+`seenAt === undefined` guard. The un-migrated read path is covered by `CHANGE_NOTICE_EPOCH`
+(`constants.mjs`), a fixed floor `isPendingChange` applies under `at` and `seenAt` alike — a
+player who loads the release before their GM sees nothing older than the release, and the
+migration then narrows that to "nothing older than this world's upgrade".
+
+World setting `refunds` (v1.9.0) is `{ recent: { enabled, hours }, changed: { enabled } }`, both
+`false` by default, read through `normalizeRefunds` (`logic/ownership.mjs`) on every access — the
+defensive-reader contract `recency` and `automation` keep. **Its own key, for the reason `recency`
+is not folded into `automation`:** it is a PERMISSION, the chips are decoration, and the Automation
+tab that edits all three is only the surface. No migration: the default is off.
+
 Actor flag `actor.flags['remito-daggerheart-hero-feats'].state`:
 
 ```js
-{ acquired: [{ uuid, itemId, free, at }], pointAdjustment: 0 }
+{
+  acquired: [{ uuid, itemId, free, at, seenAt }],
+  ledger:   [{ uuid, name, at, action, reason, cascadeOf }],   // v1.9.0
+  pointAdjustment: 0
+}
 ```
+
+`seenAt` is the owner's last **Keep** — see the change-notice note below. `ledger` records the
+decisions that REMOVE an acquisition — a player's Refund (`action: 'refunded'`, `reason: 'recent' |
+'updated'`, `cascadeOf` the Feat it went with) and a GM's Revoke (`'revoked'`) — which would
+otherwise leave no trace, because the acquisition record they remove was the only place the purchase
+was written. It keeps the Feat's `name` because the registry entry may be gone by the time
+Statistics reads the row. It is an array for the same reason `acquired` is.
 
 `itemId` is the embedded Item the acquisition created, so a revoke deletes exactly that item.
 `free: true` marks a GM grant that did not charge a point, is excluded from `spent`, and is what
@@ -278,12 +308,16 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   gone as of v1.7.0 — nothing on the Feats tab can be uncurated now, so the switch could only ever
   match zero rows.
 
-  **UPDATED is a chip, not a filter.** It was briefly both; a switch for it earns nothing that
-  reading the list does not already give, and every filter is a control a player has to understand
-  before they can ignore it. So `isUpdated` travels through the CONTEXT to the chip and stops
-  there — no `updatedOnly` in `blankFilterState`, no branch in `matchesFilters`, and no
-  `data-updated` attribute, since that attribute exists only so `matchesFilters` can stay a per-row
-  predicate with no context object. `isNew` still needs all four.
+  **UPDATED is a filter as well as a chip — since v1.9.0, deliberately.** It was briefly both in
+  v1.6.0 and the switch was removed, on the argument that it earned nothing reading the list did
+  not already give. That argument assumed the fixed window of ten that existed then, which a reader
+  takes in at a glance; since v1.7.1 the window is a share of the catalog or a number of days, and
+  the UPDATED set can be large and scattered across a long list. So **Recently updated Feats** sits
+  beside **Newly added Feats** in the narrowing section of both rails, and `isUpdated` now has all
+  four pieces `isNew` has: `updatedOnly` in `blankFilterState`, a branch in `matchesFilters`, a
+  `data-updated` attribute on both row templates, and the `_refreshRow` repaint of that attribute.
+  **Each switch matches its OWN window, and both ticked narrow like every other switch** — the
+  Feats new AND updated. That set is not empty by construction, which is the next note's job.
 - **A rail renders its own state, in both apps.** `filters.search`, the level values, each box's
   `checked` and `railOpen` all travel through the context. Filtering never re-renders, so for a
   long time nothing had to be carried — but both windows re-render for other reasons (an
@@ -604,7 +638,8 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **Dates are formatted by `formatDay`, never by `toLocaleDateString`.** The Recent acquisitions
   list followed whatever locale the browser was in, so one world showed two orders on two machines
   — and 01/02 against 02/01 leaves a reader no way to tell which they have. DD/MM/YYYY, built from
-  the parts, stated once.
+  the parts, stated once — in `apps/date-text.mjs` since v1.9.0, when the catalog's "Changed on"
+  line became the second reader.
 - **"Most played Categories" is summed inside `buildAdoptionStats`, from the same `counted` list**
   as every other figure there, so the exclude toggles move it too — counting it off the registry
   somewhere else would have produced a panel describing two different tables. It measures acquired
@@ -779,6 +814,65 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   anything else is refused with a hint — otherwise curating on the Feats tab silently registered
   new source feats.
 
+- **The owner's change notice is a property of ONE acquisition, and that is why it is not the
+  recency window** (v1.9.0). `isPendingChange` (`logic/ownership.mjs`) is `updatedAt > max(at,
+  seenAt, CHANGE_NOTICE_EPOCH)`. The UPDATED window expires for everyone whatever anybody does; this
+  waits for an answer, so a player away longer than the window is still told, and a change made
+  before the purchase never counts because they bought the current version. A Keep answers for every
+  change up to its moment and none after, so a Feat changed again is pending again with no state of
+  its own to reset. It deliberately keeps UPDATED's meaning — Level or requirements, or the manual
+  Mark — so a change to a Feature's text or actions reaches owners only through Mark as UPDATED.
+  **No toast and no chat**: the signals are persistent and passive — the sheet badge, the My Feats
+  tab (pulse plus a count pill that stops at 0), and the row's chip and expanded change block — and
+  answering is the acknowledgement, never opening or expanding anything.
+- **The badge has ONE ring, strongest state first: pending, then overspent, then unspent.** The
+  pending decision outranks the points because it is the one with an action attached (and refunding
+  the changed Feat is often what cures an overspend), while unspent points can wait for ever. The
+  tooltip states every applicable fact joined by ` · `, so the ring hides nothing it outranks.
+  `applyGlow` removes all three classes before painting one, because it now runs more than once per
+  badge: **a registry Save repaints every badge in place** (`repaintBadges`, from the `updateSetting`
+  hook in `hero-feats.mjs`). A change to an owned Feat arrives as a SETTING write, which re-renders
+  no sheet, and re-rendering every open sheet to recolour a 20px circle is the flicker the module
+  avoids everywhere else. The catalog needs nothing new: its broad `updateSetting` hook already
+  re-renders on any module setting.
+- **"What changed?" is asked inside `#commit`, so both Saves raise it, and `#commit` now returns a
+  boolean.** Back to editing (or a dismissed dialog) writes nothing, and both callers — `_onSave` and
+  the close prompt's Save — keep the window open on `false`. A note belongs to ONE change, so the
+  rule is "replace whenever the stamp moves", not "keep unless edited": every Feat whose `updatedAt`
+  differs from the baseline takes what the dialog says for it, blank included, and one not in the
+  dialog (unpublished, or a Mark toggled back off) loses its note. Fields start EMPTY with the old
+  note beneath: prefilling would let a GM pressing Save carry yesterday's explanation onto today's
+  change. Curation's File goes through `#commitFeat`, never stamps UPDATED, and so never asks. The
+  dialog reads its fields off `button.form` and returns an OBJECT; Back returns its action string —
+  `_onSubmit`'s `?? button.action` would turn a `null` callback into `'back'` anyway — so the test
+  is "is the result an object", which also rejects the dismissed `null`.
+- **`planRefund` decides everything before anything is written, and the cascade is precise by
+  construction.** A Feat D goes with R only when D's `requirements.features` names R (uuid, or R's
+  exact name via the now-exported `sameName`) **and** that clause flips from met to unmet with R
+  removed — evaluated through `checkRequirements`, never by reading the list. The flip is what keeps
+  it precise: an any-of D still meets through another entry, or a name a same-named class Feature
+  still answers (`withoutFeats` removes ONE copy of each refunded Feat's name), stays met and is not
+  cascaded. Transitive to a fixpoint along those links only. It **never** follows an Investment chain
+  or a `hasFeature:` atom — one refund must not unwind a whole Investment ladder — and those surface
+  as `warnings` ("qualified before, not after", so a Feat that was already failing is not blamed). If
+  any Feat in the set has no open route, **the whole refund is blocked**: a buyer's-remorse undo must
+  never remove a GM grant. The catalog feeds it `listFeats({ forGM: true, keepUuids })` records, so the
+  requirements it reads are the ones the player is shown, Rule Automation applied.
+- **Refund routes: `updated` wins, and a row never offers two Refunds.** `refundRoute` returns
+  `updated` when the changed route is on and the Feat is pending, else `recent` while the window is
+  open, else `null` — and `null` outright for a free grant. A recent refund is an icon in the summary
+  controls (the GM's Revoke slot) with an hours-left tooltip; a changed one is the Refund half of
+  Keep / Refund, and the row chip then reads "Keep or refund?" instead of "Changed". Both are the
+  OWNER's — a GM sees neither, having Revoke — and `_onRefund` re-plans from the flag at the click,
+  because the window may have shut since the render.
+- **Recent activity: a refund removes the purchase it undoes, so only the refund row is left.**
+  `buildAdoptionStats` reads `history` (the ledger) beside `acquired` and labels every row with one
+  `action` vocabulary — acquired / granted / refunded / revoked — so the app has one switch to
+  localize. Most taken and Most played Categories read `acquired` only: they measure what is HELD. A
+  character whose only history is refunds is gathered (so their rows reach the list) but filtered out
+  of the character table, which still lists owners only; `excludedCount` therefore counts excluded
+  ROWS rather than subtracting list lengths.
+
 ## Known scope simplifications
 
 - Feat cost is a flat 1 Feat Point; there is no per-feat cost field.
@@ -875,8 +969,13 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   announce itself as changed. **Authoring is not changing.** The boundary is the one the app already
   keeps: `#curationCommitted` asks `#baseline`, the saved world as of the last `#commit` (Save) or
   `#commitFeat` (Curation's File). Before it nothing stamps however many fields are touched; after
-  it every mechanically relevant edit does. This is why UPDATED can win the row outright: where both
-  chips apply the Feat really was published once and changed afterwards.
+  it every mechanically relevant edit does. So where both chips apply the Feat really was published
+  inside the NEW window and changed afterwards — and since v1.9.0 **both chips are drawn**. UPDATED
+  used to win the row outright, which was fine while nothing filtered on it; once each recency switch
+  filters on its own window, a row kept by "Newly added" while wearing only UPDATED reads as a bug,
+  and "both ticked" would keep rows that showed no sign of being new. Every row a recency switch
+  keeps wears the chip that kept it. NEW is drawn first, in the template and in `_buildChips`
+  alike.
   **It reads `filedAt` as of v1.7.0, not `curatedAt`.** The old test was a proxy that was exact only
   while a saved Category WAS publication; once File is the gate, a footer Save would push the stamp
   into the baseline and arm UPDATED for a Feat nobody has seen. `filedAt` is the fact itself, so
@@ -981,6 +1080,14 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   `deleteItem` / `createItem` for non-embedded Features, which re-renders open catalogs. The
   registry app is deliberately NOT re-rendered there — it holds an unsaved working copy and the GM
   may be mid-edit; its next render re-reads the now-empty caches anyway.
+- Change-notice and refund scope decisions worth not re-litigating (v1.9.0, issue #1): **no toast
+  and no chat** — the glow, the tab count and the row are persistent, and a toast was judged spam;
+  **no GM "pending decisions" view** — the GM sees the same glow on any sheet they open; **no diff of
+  what changed** — the registry keeps no previous values, and the GM's note covers the change that
+  matters most to an owner (text or actions), which no diff of registry fields could see; **Re-sync
+  does not stamp UPDATED**, because a re-sync is not by itself a change; **the cascade never follows
+  Investment chains or expression atoms**; **a player can never refund a GM grant**; and **Keep is
+  not logged**, being the default outcome with nothing to follow up.
 
 ## Agent skills
 

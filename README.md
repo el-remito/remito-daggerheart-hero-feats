@@ -113,14 +113,28 @@ tab rail. It tells you how many copies it is about to rewrite before it does any
 description, actions and effects are all replaced, so any edits made to a character's own copy are
 lost. Characters keep the Feat and the Feat Point they spent; nothing is revoked.
 
+**Telling the owners.** Changing a published Feat's Level or requirements marks it **UPDATED**, and
+every character who already owns it is asked, on their sheet and in **My Feats**, whether to keep
+it. A change to the Feature's own text or actions is invisible to the module, so after a Re-sync use
+**Mark as UPDATED** in the Feat's expanded row to ask them too. When you Save, a short **What
+changed?** dialog lists the Feats you are marking and lets you leave each one a note for its owners.
+Leave it blank to say nothing.
+
+**Player refunds.** On the Automation tab, **Player refunds** lets players hand a Feat back without
+you: within a number of hours of taking it, and/or after you have changed it, until they press
+Keep. Both are off until you switch them on. A Feat you granted for free is never refundable by a
+player. Refunding a Feat also refunds any Feat that names it as a prerequisite, and if one of those
+cannot be refunded, nothing is.
+
 Editing a Feature also refreshes the catalog for anyone who has *not* bought it, with no reload.
 
 ### GM controls in the catalog
 
 Opening a character's catalog as GM adds a **grant** button on every Feat (ignores requirements,
 and asks whether to grant it for free or to charge a Feat Point) and a **revoke** button on
-acquired ones (deletes the granted item and refunds the point). A free grant is chipped **Granted**
-rather than **Acquired**, so it is clear at a glance which Feats were paid for.
+acquired ones (deletes the granted item and refunds the point, and is listed under Recent activity).
+A free grant is chipped **Granted** rather than **Acquired**, so it is clear at a glance which Feats
+were paid for.
 
 ### Statistics
 
@@ -139,8 +153,8 @@ of three hundred Feats cannot answer by scrolling.
 - **Trait demand** — how many Feats gate on each Trait. A catalog that leans hard on one Trait
   leaves characters built any other way with little to buy, and that is invisible when you are
   reading Feats one at a time.
-- **Table adoption**: a point ledger per character, the most-taken Feats, and a log of recent
-  acquisitions.
+- **Table adoption**: a point ledger per character, the most-taken Feats, and **Recent activity**:
+  every Feat acquired, granted, refunded or revoked, newest first, with the reason for each refund.
 
 Everything on the tab is worked out on the spot from the registry and your characters' sheets —
 nothing is stored, and the figures reflect edits you have not saved yet. It costs nothing while
@@ -149,9 +163,15 @@ entirely if you would rather not have it.
 
 ## For players
 
-A badge appears next to your Level. It glows while you have Feat Points to spend. Click it for the
-catalog: filter on the left, browse on the right, click a row to read the full text, and press
-**+** to acquire. Acquiring costs 1 Feat Point and cannot be undone without your GM.
+A badge appears next to your Level. It glows gold while you have Feat Points to spend, and purple
+while a Feat you own has changed since you took it. Click it for the catalog: filter on the left,
+browse on the right, click a row to read the full text, and press **+** to acquire. Acquiring costs
+1 Feat Point. Unless your GM allows refunds, it cannot be undone without them.
+
+When your GM changes a Feat you own, **My Feats** lights up and counts how many are waiting. Open
+the row to see when it changed and your GM's note, then press **Keep**, or **Refund** if your GM
+allows it. **Newly added Feats** and **Recently updated Feats** in the filter rail show what has
+arrived or changed lately.
 
 The **My Feats** tab lists only what this character already has, so a long catalog never buries it.
 The filter rail applies to whichever tab is open.
@@ -170,6 +190,15 @@ https://raw.githubusercontent.com/el-remito/remito-daggerheart-hero-feats/main/m
 Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.7.1).
 
 ## Changelog
+
+### v1.9.0
+- **Know when a Feat you own changes.** When the GM changes the Level or requirements of a Feat a character already owns, or marks it UPDATED by hand, the owner is told and stays told until they answer. The badge beside Level pulses purple, the **My Feats** tab pulses with a count of Feats waiting, and the Feat's row reads **Changed**. Open it to see when it changed and why, then press **Keep**. It does not expire, so a player away for a month is still told, and a change made before you bought a Feat never counts
+- **"What changed?"** When a Save marks published Feats UPDATED, a short dialog lists them so you can leave each a note for its owners. A blank field says nothing, and an old note never carries over onto a new change
+- **Player refunds, if you want them.** A new **Player refunds** section on the Automation tab, with two switches, both off by default. *Refund recently acquired Feats* lets a player hand a Feat back for a number of hours after taking it (24 to start). *Refund Feats changed after purchase* lets them hand back a Feat you changed, until they press Keep, and the row then asks **Keep or refund?**. A Feat you granted for free is never refundable by a player. The point comes back with the Feat
+- **Refunds take their dependents with them, precisely.** Refunding a Feat also refunds an owned Feat that names it as a prerequisite and would no longer meet it. It never reaches further: Investment requirements are never unwound, and the dialog lists any Feat that stays but stops meeting its requirements. If anything that would have to go cannot be refunded, nothing is, and the dialog says which Feat is in the way
+- **Recent activity.** Statistics' *Recent acquisitions* now lists every Feat acquired, granted, refunded or revoked, with the reason for each refund and, for a dependent, the Feat it went with. Your own Revoke is listed too
+- **Recently updated Feats filter**, beside *Newly added Feats*, in both the catalog and the registry. Tick both to see Feats that are new and have already been changed. Such a Feat now shows both chips, NEW and UPDATED, where it used to show only UPDATED
+- Nothing lights up on upgrade: every Feat already owned is treated as seen, and only changes you make from now on are reported
 
 ### v1.8.1
 - **Fixed: *Only feats I qualify for* showed nothing once a character had spent all their Feat Points.** The filter was asking "can I buy this right now?" instead of "do I meet its requirements?". It now shows every Feat whose requirements you meet, whether or not you have a point to spend. The acquire button on those Feats stays dimmed until you do

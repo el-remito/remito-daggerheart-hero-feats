@@ -12,7 +12,7 @@
  * longer than the UPDATED window must still be told.
  */
 
-import { DEFAULT_REFUNDS } from '../constants.mjs';
+import { CHANGE_NOTICE_EPOCH, DEFAULT_REFUNDS } from '../constants.mjs';
 import { checkRequirements, sameName } from './requirements.mjs';
 
 /** Milliseconds in an hour. The refund window is stated in hours, which is how a table plays. */
@@ -28,6 +28,9 @@ const HOUR_MS = 3_600_000;
  * and a Keep answers for every change up to that moment. A Feat changed again after a
  * Keep is pending again, with no state of its own to reset.
  *
+ * CHANGE_NOTICE_EPOCH is a floor under both: nothing changed before the feature shipped
+ * is ever reported, even on a record the upgrade migration has not reached yet.
+ *
  * @param {{at?: number, seenAt?: number}|null} entry  the acquisition record
  * @param {{updatedAt?: number}|null} feat             the normalized registry entry
  * @returns {boolean}
@@ -36,7 +39,7 @@ export function isPendingChange(entry, feat) {
   if (!entry || !feat) return false;
   const changed = Number(feat.updatedAt) || 0;
   if (changed <= 0) return false;
-  return changed > Math.max(Number(entry.at) || 0, Number(entry.seenAt) || 0);
+  return changed > Math.max(Number(entry.at) || 0, Number(entry.seenAt) || 0, CHANGE_NOTICE_EPOCH);
 }
 
 /**

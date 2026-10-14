@@ -354,6 +354,30 @@ export async function acknowledgeChange(actor, uuid) {
 }
 
 /**
+ * Migration 4's write: every existing acquisition is stamped as seen NOW, so the change
+ * notice starts clean on upgrade instead of lighting up for every edit a GM made since
+ * each Feat was bought. Idempotent by its own guard — a record that already carries a
+ * `seenAt` is left alone, so a retry after a failed run cannot move anyone's Keep.
+ *
+ * @returns {Promise<number>}  how many acquisitions were stamped
+ */
+export async function markAllChangesSeen() {
+  const now = Date.now();
+  let stamped = 0;
+  for (const actor of characters()) {
+    const state = getState(actor);
+    if (!state.acquired.some(e => e.seenAt === undefined)) continue;
+    const acquired = state.acquired.map(e => {
+      if (e.seenAt !== undefined) return e;
+      stamped++;
+      return { ...e, seenAt: now };
+    });
+    await setState(actor, { ...state, acquired });
+  }
+  return stamped;
+}
+
+/**
  * Carries out a refund decided by planRefund (logic/ownership.mjs): deletes every
  * embedded Feature it hands back, forgets their acquisitions — which is what returns the
  * points, since `spent` is derived — and logs one Refunded row per Feat. One flag write,

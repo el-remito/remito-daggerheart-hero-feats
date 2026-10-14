@@ -26,6 +26,7 @@ import {
   getTypes,
   setTypes
 } from '../settings.mjs';
+import { markAllChangesSeen } from './actor-state.mjs';
 
 /**
  * Runs every migration this world has not seen yet.
@@ -41,6 +42,7 @@ export async function runMigrations() {
     if (from < 1) await migrateGeneralTypeToCategory();
     if (from < 2) await migrateSeededTypeIcons();
     if (from < 3) await migrateFiledStamps();
+    if (from < 4) await migrateChangeNotice();
     await game.settings.set(MODULE_ID, SETTINGS.MIGRATION, MIGRATION_VERSION);
     console.log(`${MODULE_ID} | Migrated world data ${from} → ${MIGRATION_VERSION}.`);
   } catch (err) {
@@ -151,4 +153,21 @@ async function migrateFiledStamps() {
   }
 
   if (stamped) await setRegistry(registry);
+}
+
+/**
+ * Migration 4 — the owner's change notice starts clean.
+ *
+ * v1.9.0 tells an owner when a Feat they hold has changed since they took it. Read
+ * literally, that would light up on day one for every edit a GM ever made to a Feat
+ * after somebody bought it — months of changes nobody was ever asked to answer for,
+ * because the question did not exist. Stamping `seenAt` on every acquisition that
+ * predates the release means only changes made from now on are reported.
+ *
+ * The first migration to write ACTOR flags rather than a world setting, which a GM may
+ * do for every character. CHANGE_NOTICE_EPOCH covers players who load the release
+ * before their GM does.
+ */
+async function migrateChangeNotice() {
+  await markAllChangesSeen();
 }

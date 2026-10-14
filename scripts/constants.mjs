@@ -70,8 +70,17 @@ export const DEFAULT_REFUNDS = {
   changed: { enabled: false }
 };
 
+/**
+ * The floor under every owner's change notice (v1.9.0): a change stamped before this
+ * moment never counts as pending. Migration 4 stamps `seenAt` on every acquisition when
+ * a GM first loads the release, which is the real "start clean" — this constant covers
+ * the window between a player loading the new code and their GM doing so, when the
+ * migration has not run yet and every read path still has to behave.
+ */
+export const CHANGE_NOTICE_EPOCH = Date.UTC(2026, 9, 14);
+
 /** Bump when a migration is added; see scripts/data/migrations.mjs. */
-export const MIGRATION_VERSION = 3;
+export const MIGRATION_VERSION = 4;
 
 export const ACTOR_TYPES = { PC: 'character' };
 
