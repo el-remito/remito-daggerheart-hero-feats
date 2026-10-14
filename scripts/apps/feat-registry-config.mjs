@@ -1651,18 +1651,18 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
-    // Player self-refund, app-level too. The hours field is dimmed — never disabled —
+    // Player self-refund, app-level too. The days field is dimmed — never disabled —
     // while its route is off, for the reason the recency fields are: the value is kept.
     if (field === 'refundRecentEnabled' || field === 'refundChangedEnabled') {
       const route = field === 'refundRecentEnabled' ? 'recent' : 'changed';
       this.#refunds[route].enabled = value === true;
       this.element
-        .querySelector(`.${PREFIX}-refund-hours`)
+        .querySelector(`.${PREFIX}-refund-days`)
         ?.classList.toggle('is-disabled', !this.#refunds.recent.enabled);
       return;
     }
-    if (field === 'refundRecentHours') {
-      this.#refunds.recent.hours = Math.max(0, Math.floor(Number(value) || 0));
+    if (field === 'refundRecentDays') {
+      this.#refunds.recent.days = Math.max(0, Math.floor(Number(value) || 0));
       return;
     }
 
@@ -2522,7 +2522,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * moves at once — the one place here where repainting would mean rebuilding the
    * markup the template declares.
    */
-  /** Both refund routes back to off, 24 hours. Still a working copy until Save. */
+  /** Both refund routes back to off, 7 days. Still a working copy until Save. */
   static _onResetRefunds(event) {
     event.preventDefault();
     this.#refunds = foundry.utils.deepClone(DEFAULT_REFUNDS);

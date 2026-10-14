@@ -121,7 +121,7 @@ changed?** dialog lists the Feats you are marking and lets you leave each one a 
 Leave it blank to say nothing.
 
 **Player refunds.** On the Automation tab, **Player refunds** lets players hand a Feat back without
-you: within a number of hours of taking it, and/or after you have changed it, until they press
+you: within a number of days of taking it, and/or after you have changed it, until they press
 Keep. Both are off until you switch them on. A Feat you granted for free is never refundable by a
 player. Refunding a Feat also refunds any Feat that names it as a prerequisite, and if one of those
 cannot be refunded, nothing is.
@@ -194,7 +194,7 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 ### v1.9.0
 - **Know when a Feat you own changes.** When the GM changes the Level or requirements of a Feat a character already owns, or marks it UPDATED by hand, the owner is told and stays told until they answer. The badge beside Level pulses purple, the **My Feats** tab pulses with a count of Feats waiting, and the Feat's row reads **Changed**. Open it to see when it changed and why, then press **Keep**. It does not expire, so a player away for a month is still told, and a change made before you bought a Feat never counts
 - **"What changed?"** When a Save marks published Feats UPDATED, a short dialog lists them so you can leave each a note for its owners. A blank field says nothing, and an old note never carries over onto a new change
-- **Player refunds, if you want them.** A new **Player refunds** section on the Automation tab, with two switches, both off by default. *Refund recently acquired Feats* lets a player hand a Feat back for a number of hours after taking it (24 to start). *Refund Feats changed after purchase* lets them hand back a Feat you changed, until they press Keep, and the row then asks **Keep or refund?**. A Feat you granted for free is never refundable by a player. The point comes back with the Feat
+- **Player refunds, if you want them.** A new **Player refunds** section on the Automation tab, with two switches, both off by default. *Refund recently acquired Feats* lets a player hand a Feat back for a number of days after taking it (7 to start). *Refund Feats changed after purchase* lets them hand back a Feat you changed, until they press Keep, and the row then asks **Keep or refund?**. A Feat you granted for free is never refundable by a player. The point comes back with the Feat
 - **Refunds take their dependents with them, precisely.** Refunding a Feat also refunds an owned Feat that names it as a prerequisite and would no longer meet it. It never reaches further: Investment requirements are never unwound, and the dialog lists any Feat that stays but stops meeting its requirements. If anything that would have to go cannot be refunded, nothing is, and the dialog says which Feat is in the way
 - **Recent activity.** Statistics' *Recent acquisitions* now lists every Feat acquired, granted, refunded or revoked, with the reason for each refund and, for a dependent, the Feat it went with. Your own Revoke is listed too
 - **Recently updated Feats filter**, beside *Newly added Feats*, in both the catalog and the registry. Tick both to see Feats that are new and have already been changed. Such a Feat now shows both chips, NEW and UPDATED, where it used to show only UPDATED

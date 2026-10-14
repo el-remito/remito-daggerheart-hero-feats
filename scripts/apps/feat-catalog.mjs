@@ -49,7 +49,13 @@ import {
 } from '../logic/filters.mjs';
 import { newestCurated, newestUpdated } from '../logic/recency.mjs';
 import { buildInvestmentSummary } from '../logic/investment.mjs';
-import { isPendingChange, planRefund, recentWindowLeft, refundRoute } from '../logic/ownership.mjs';
+import {
+  HOUR_MS,
+  isPendingChange,
+  planRefund,
+  recentWindowLeft,
+  refundRoute
+} from '../logic/ownership.mjs';
 import { chipTooltip } from './recency-text.mjs';
 import { formatDay } from './date-text.mjs';
 import { localizeCheck } from './requirement-text.mjs';
@@ -238,9 +244,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
         // `updated` route is the stronger claim and is the reason the ledger records.
         const refundChanged = route === 'updated';
         const refundRecent = route === 'recent';
-        const hoursLeft = refundRecent
-          ? Math.max(1, Math.ceil(recentWindowLeft(acquisition, refunds, now) / 3_600_000))
-          : 0;
+        const left = refundRecent ? recentWindowLeft(acquisition, refunds, now) : 0;
         const view = {
           ...feat,
           typeLabels: labels,
@@ -259,9 +263,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           updateNote: pending ? feat.updateNote : '',
           refundChanged,
           refundRecent,
-          refundTooltip: refundRecent
-            ? game.i18n.format('RDHF.refund.recentTooltip', { hours: hoursLeft })
-            : '',
+          refundTooltip: refundRecent ? refundTimeLeft(left) : '',
           // The chip asks the question the expanded row can actually answer.
           pendingLabel: game.i18n.localize(
             refundChanged ? 'RDHF.catalog.pendingChipRefund' : 'RDHF.catalog.pendingChip'
@@ -805,6 +807,19 @@ function decorateTiers(summary) {
     // reads as "you have unlocked everything", which is almost never what it means.
     showNoMore: row.tiers.length < 2
   }));
+}
+
+/**
+ * "for 3 more days" / "for 5 more hours". Whole days while a day or more is left, hours
+ * after that: rounding 5 hours UP to "1 more day" would promise a window that is not there.
+ */
+function refundTimeLeft(ms) {
+  const days = Math.floor(ms / 86_400_000);
+  return days >= 1
+    ? game.i18n.format('RDHF.refund.recentTooltipDays', { days })
+    : game.i18n.format('RDHF.refund.recentTooltipHours', {
+        hours: Math.max(1, Math.ceil(ms / HOUR_MS))
+      });
 }
 
 function levelText(levels) {

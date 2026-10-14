@@ -1085,9 +1085,9 @@
                         <input type="checkbox" data-field="refundRecentEnabled" {{#if refunds.recent.enabled}}checked{{/if}}>
                         <span>{{localize "RDHF.refunds.recent"}}</span>
                     </label>
-                    <label class="rdhf-recency-field rdhf-refund-hours {{#unless refunds.recent.enabled}}is-disabled{{/unless}}">
-                        <span>{{localize "RDHF.refunds.hours"}}</span>
-                        <input type="number" min="0" step="1" data-field="refundRecentHours" value="{{refunds.recent.hours}}">
+                    <label class="rdhf-recency-field rdhf-refund-days {{#unless refunds.recent.enabled}}is-disabled{{/unless}}">
+                        <span>{{localize "RDHF.refunds.days"}}</span>
+                        <input type="number" min="0" step="1" data-field="refundRecentDays" value="{{refunds.recent.days}}">
                     </label>
                     <p class="rdhf-hint">{{localize "RDHF.refunds.recentHint"}}</p>
                 </div>

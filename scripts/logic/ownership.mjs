@@ -15,8 +15,14 @@
 import { CHANGE_NOTICE_EPOCH, DEFAULT_REFUNDS } from '../constants.mjs';
 import { checkRequirements, sameName } from './requirements.mjs';
 
-/** Milliseconds in an hour. The refund window is stated in hours, which is how a table plays. */
-const HOUR_MS = 3_600_000;
+/**
+ * Milliseconds in a day. The refund window is stated in whole days — a table meets once
+ * a week, so a buyer's-remorse window has to outlast the session it was bought in.
+ */
+const DAY_MS = 86_400_000;
+
+/** Milliseconds in an hour, for saying how long is left once less than a day is. */
+export const HOUR_MS = 3_600_000;
 
 /* ── Changes to owned Feats ──────────────────────────────────────────────────── */
 
@@ -61,16 +67,16 @@ export function pendingChanges(acquired, featOf) {
  * partial or hand-edited value can never reach a refund decision.
  *
  * @param {object|null|undefined} stored
- * @returns {{recent: {enabled: boolean, hours: number}, changed: {enabled: boolean}}}
+ * @returns {{recent: {enabled: boolean, days: number}, changed: {enabled: boolean}}}
  */
 export function normalizeRefunds(stored) {
   const recent = stored?.recent ?? {};
   const changed = stored?.changed ?? {};
-  const hours = Math.floor(Number(recent.hours));
+  const days = Math.floor(Number(recent.days));
   return {
     recent: {
       enabled: recent.enabled === true,
-      hours: Number.isFinite(hours) && hours >= 0 ? hours : DEFAULT_REFUNDS.recent.hours
+      days: Number.isFinite(days) && days >= 0 ? days : DEFAULT_REFUNDS.recent.days
     },
     changed: { enabled: changed.enabled === true }
   };
@@ -80,7 +86,7 @@ export function normalizeRefunds(stored) {
 
 /**
  * Milliseconds left in an acquisition's buyer's-remorse window; 0 when it is shut or the
- * route is switched off. An hours value of 0 shuts it outright, like every other 0 in
+ * route is switched off. A days value of 0 shuts it outright, like every other 0 in
  * the module's windows.
  *
  * @param {object} entry   acquisition record
@@ -89,8 +95,8 @@ export function normalizeRefunds(stored) {
  * @returns {number}
  */
 export function recentWindowLeft(entry, rules, now) {
-  if (!entry || !rules?.recent?.enabled || !(rules.recent.hours > 0)) return 0;
-  const closes = (Number(entry.at) || 0) + rules.recent.hours * HOUR_MS;
+  if (!entry || !rules?.recent?.enabled || !(rules.recent.days > 0)) return 0;
+  const closes = (Number(entry.at) || 0) + rules.recent.days * DAY_MS;
   return Math.max(0, closes - now);
 }
 

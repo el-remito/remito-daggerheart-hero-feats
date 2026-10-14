@@ -179,7 +179,7 @@ of lighting up for every edit a GM ever made after somebody bought a Feat. Idemp
 player who loads the release before their GM sees nothing older than the release, and the
 migration then narrows that to "nothing older than this world's upgrade".
 
-World setting `refunds` (v1.9.0) is `{ recent: { enabled, hours }, changed: { enabled } }`, both
+World setting `refunds` (v1.9.0) is `{ recent: { enabled, days }, changed: { enabled } }`, both
 `false` by default, read through `normalizeRefunds` (`logic/ownership.mjs`) on every access — the
 defensive-reader contract `recency` and `automation` keep. **Its own key, for the reason `recency`
 is not folded into `automation`:** it is a PERMISSION, the chips are decoration, and the Automation
@@ -861,7 +861,8 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
 - **Refund routes: `updated` wins, and a row never offers two Refunds.** `refundRoute` returns
   `updated` when the changed route is on and the Feat is pending, else `recent` while the window is
   open, else `null` — and `null` outright for a free grant. A recent refund is an icon in the summary
-  controls (the GM's Revoke slot) with an hours-left tooltip; a changed one is the Refund half of
+  controls (the GM's Revoke slot) with a time-left tooltip — whole days, then hours once less than a
+  day is left, so it never rounds up to a window that is not there; a changed one is the Refund half of
   Keep / Refund, and the row chip then reads "Keep or refund?" instead of "Changed". Both are the
   OWNER's — a GM sees neither, having Revoke — and `_onRefund` re-plans from the flag at the click,
   because the window may have shut since the render.

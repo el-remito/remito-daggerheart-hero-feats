@@ -60,13 +60,13 @@ export const DEFAULT_RECENCY = {
 /**
  * Player self-refund (v1.9.0). Two independent permissions, both OFF by default so the
  * update changes nothing at an existing table until its GM opts in:
- *   recent   — buyer's remorse: a Feat may be handed back for `hours` after it was taken.
+ *   recent   — buyer's remorse: a Feat may be handed back for `days` after it was taken.
  *   changed  — a Feat the GM changed after it was taken may be handed back until the
  *              owner presses Keep.
  * A GM grant (free) is never refundable by a player, by either route.
  */
 export const DEFAULT_REFUNDS = {
-  recent: { enabled: false, hours: 24 },
+  recent: { enabled: false, days: 7 },
   changed: { enabled: false }
 };
 
