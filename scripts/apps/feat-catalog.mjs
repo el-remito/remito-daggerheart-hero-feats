@@ -29,6 +29,7 @@ import {
 } from '../data/registry.mjs';
 import { onFeatureDocumentChanged } from '../data/resync.mjs';
 import {
+  acknowledgeChange,
   acquisitionOf,
   buildActorSnapshot,
   getPointPool,
@@ -46,7 +47,9 @@ import {
 } from '../logic/filters.mjs';
 import { newestCurated, newestUpdated } from '../logic/recency.mjs';
 import { buildInvestmentSummary } from '../logic/investment.mjs';
+import { isPendingChange } from '../logic/ownership.mjs';
 import { chipTooltip } from './recency-text.mjs';
+import { formatDay } from './date-text.mjs';
 import { localizeCheck } from './requirement-text.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -108,6 +111,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       acquireFeat: FeatCatalog._onAcquire,
       grantAnyway: FeatCatalog._onGrantAnyway,
       revokeFeat: FeatCatalog._onRevoke,
+      keepFeat: FeatCatalog._onKeep,
       adjustPoints: FeatCatalog._onAdjustPoints,
       clearFilters: FeatCatalog._onClearFilters,
       selectTab: FeatCatalog._onSelectTab,
@@ -214,6 +218,11 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       .map(feat => {
         const evaluation = isEligible(feat, snapshot, pool.remaining);
         const labels = typeLabels(feat);
+        const acquisition = acquisitionOf(state, feat.uuid);
+        // Changed since this character took it, or since their last Keep. Independent of
+        // the UPDATED recency window: that one expires for everyone, this one waits for
+        // an answer, so a player away longer than the window is still told.
+        const pending = isPendingChange(acquisition, feat);
         const view = {
           ...feat,
           typeLabels: labels,
@@ -226,7 +235,10 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           qualifies: evaluation.qualifies,
           owned: evaluation.owned,
           unmetCount: evaluation.failures.length,
-          free: acquisitionOf(state, feat.uuid)?.free === true,
+          free: acquisition?.free === true,
+          pending,
+          changedOn: pending ? formatDay(feat.updatedAt) : '',
+          updateNote: pending ? feat.updateNote : '',
           hidden: feat.hidden === true,
           isNew: fresh.has(feat.uuid),
           // Both chips are drawn where both apply (v1.9.0). UPDATED cannot arise on a
@@ -247,6 +259,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const available = views.filter(v => !v.owned);
     const acquired = views.filter(v => v.owned);
+    const pendingCount = acquired.filter(v => v.pending).length;
 
     return {
       actor: this.actor,
@@ -262,6 +275,10 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       available,
       acquired,
       acquiredCount: acquired.length,
+      // Owned Feats waiting on Keep or Refund. Lights the My Feats tab and counts down
+      // as each is answered; the sheet badge reads the same rule through pendingFor.
+      pendingCount,
+      pendingChipLabel: game.i18n.localize('RDHF.catalog.pendingChip'),
       tab: this._tab,
       isAvailableTab: this._tab === 'available',
       isAcquiredTab: this._tab === 'acquired',
@@ -551,6 +568,21 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this._captureOpenRows();
     await revokeFeat(this.actor, uuid);
+    this.render();
+  }
+
+  /**
+   * Keep: the owner has seen how an owned Feat changed and keeps it. Clears the row's
+   * notice, the tab count and the sheet badge's glow — the flag write re-renders both
+   * through the module's updateActor hooks.
+   */
+  static async _onKeep(event, target) {
+    event.preventDefault();
+    if (!this.actor.isOwner) return;
+    const uuid = target.closest(`.${PREFIX}-feat`)?.dataset.uuid;
+    if (!uuid) return;
+    this._captureOpenRows();
+    await acknowledgeChange(this.actor, uuid);
     this.render();
   }
 

@@ -1086,6 +1086,27 @@ details[open] > summary .rdhf-arrow {
     }
 }
 
+/* v1.9.0: an owned Feat changed since its owner took it. Outranks both point states
+   (see applyGlow), and wears the module's "changed" hue so it reads as the same fact as
+   the UPDATED chip and the My Feats tab. */
+.rdhf-badge--pending {
+    color: var(--rdhf-changed);
+    border-color: var(--rdhf-changed);
+    animation: rdhf-pulse-changed 2.4s ease-out infinite;
+}
+
+@keyframes rdhf-pulse-changed {
+    0% {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--rdhf-changed) 45%, transparent);
+    }
+    70% {
+        box-shadow: 0 0 0 7px transparent;
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
 /* The settings-menu entry point. */
 .rdhf-open-registry {
     display: flex;
@@ -1132,6 +1153,18 @@ details[open] > summary .rdhf-arrow {
 }
 
 /* The registry's unpublished badge is a warning and reads red; a plain count is not. */
+/* Owned Feats waiting on Keep or Refund. The tab pulses with the badge's ring, and
+   stops the moment the count reaches 0, because the pill and the class leave together. */
+.rdhf-tab.is-pending {
+    color: var(--rdhf-changed);
+    animation: rdhf-pulse-changed 2.4s ease-out infinite;
+}
+
+.rdhf-tab-badge--pending {
+    background: var(--rdhf-changed);
+    color: #fff;
+}
+
 .rdhf-tab-badge--count {
     background: var(--rdhf-gold-soft);
     color: var(--rdhf-ink);
@@ -2534,6 +2567,45 @@ details[open] > summary .rdhf-arrow {
     background: color-mix(in srgb, var(--rdhf-changed) 16%, transparent);
     color: var(--rdhf-changed);
     letter-spacing: 0.04em;
+}
+
+/* "Changed since you took it" — the owner's half of the UPDATED fact, so the same hue,
+   but outlined and with an icon: it asks for an answer, where UPDATED only reports. */
+.rdhf-chip--pending {
+    border-color: var(--rdhf-changed);
+    color: var(--rdhf-changed);
+}
+
+.rdhf-feat-change {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border-left: 3px solid var(--rdhf-changed);
+    background: color-mix(in srgb, var(--rdhf-changed) 8%, transparent);
+    border-radius: 0 4px 4px 0;
+}
+
+.rdhf-feat-change-when {
+    margin: 0;
+    color: var(--rdhf-changed);
+    font-weight: 600;
+}
+
+.rdhf-feat-change-note {
+    margin: 4px 0 0;
+    white-space: pre-line;
+}
+
+.rdhf-feat-change-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.rdhf-change-btn {
+    flex: 0 0 auto;
+    gap: 6px;
+    padding: 0 12px;
 }
 
 /* Revealed is the opposite of withheld, so it reads in the module's "met" green rather

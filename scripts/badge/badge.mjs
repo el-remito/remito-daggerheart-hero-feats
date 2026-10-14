@@ -13,9 +13,12 @@
  */
 
 import { MODULE_ID, ACTOR_TYPES, PREFIX, LEVEL_ANCHOR } from '../constants.mjs';
-import { getPointPool } from '../data/actor-state.mjs';
+import { getPointPool, pendingFor } from '../data/actor-state.mjs';
 
 const BADGE_CLASS = `${PREFIX}-badge`;
+
+/** The three glow states, strongest first. Exactly one is painted at a time. */
+const GLOWS = ['pending', 'overspent', 'unspent'].map(state => `${BADGE_CLASS}--${state}`);
 
 /**
  * @param {ActorSheetV2} app   the sheet application; the actor is app.document, not app.actor
@@ -57,29 +60,66 @@ export function injectBadge(app, html) {
   applyGlow(badge, actor);
 }
 
-/** Adds the unspent/overspent state once the point pool resolves. */
-async function applyGlow(badge, actor) {
-  try {
-    const pool = await getPointPool(actor);
-    if (!badge.isConnected) return; // sheet re-rendered while we were awaiting
+/**
+ * Repaints every badge on screen in place, without re-rendering a sheet.
+ *
+ * A change to an owned Feat arrives as a REGISTRY setting write, not an actor update,
+ * so no sheet re-renders by itself — and re-rendering every open sheet to recolour one
+ * 20px circle would be the flicker the rest of this module goes out of its way to avoid.
+ * Called from the updateSetting hook in hero-feats.mjs.
+ */
+export function repaintBadges() {
+  for (const badge of document.querySelectorAll(`.${BADGE_CLASS}[data-actor-id]`)) {
+    const actor = game.actors?.get(badge.dataset.actorId);
+    if (actor) applyGlow(badge, actor);
+  }
+}
 
-    if (pool.overspent) {
-      badge.classList.add(`${BADGE_CLASS}--overspent`);
-      badge.dataset.tooltip = game.i18n.format('RDHF.badge.overspent', {
-        over: Math.abs(pool.remaining)
-      });
-    } else if (pool.remaining > 0) {
-      badge.classList.add(`${BADGE_CLASS}--unspent`);
-      badge.dataset.tooltip = game.i18n.format('RDHF.badge.unspent', {
-        remaining: pool.remaining
-      });
-    } else {
-      badge.dataset.tooltip = game.i18n.format('RDHF.badge.spent', { total: pool.total });
-    }
+/**
+ * Paints the glow once the point pool resolves.
+ *
+ * ONE ring, strongest state first: a change waiting on Keep or Refund, then overspent,
+ * then unspent. The pending decision outranks the points because it is the one with an
+ * action attached — and refunding the changed Feat is often what cures an overspend —
+ * while unspent points can wait for ever. The tooltip still states every fact that
+ * applies, so the ring hides nothing it outranks.
+ */
+async function applyGlow(badge, actor) {
+  let pending = [];
+  try {
+    pending = pendingFor(actor);
+  } catch (err) {
+    console.warn(`${MODULE_ID} | Could not read changed Feats for ${actor.name}:`, err);
+  }
+
+  let pool = null;
+  try {
+    pool = await getPointPool(actor);
   } catch (err) {
     // A malformed formula must never break the sheet — the plain badge still opens.
     console.warn(`${MODULE_ID} | Could not resolve Feat Points for ${actor.name}:`, err);
   }
+  if (!badge.isConnected) return; // sheet re-rendered while we were awaiting
+
+  const lines = [];
+  let glow = null;
+  if (pending.length) {
+    glow = 'pending';
+    lines.push(game.i18n.format('RDHF.badge.pending', { count: pending.length }));
+  }
+  if (pool?.overspent) {
+    glow ??= 'overspent';
+    lines.push(game.i18n.format('RDHF.badge.overspent', { over: Math.abs(pool.remaining) }));
+  } else if (pool && pool.remaining > 0) {
+    glow ??= 'unspent';
+    lines.push(game.i18n.format('RDHF.badge.unspent', { remaining: pool.remaining }));
+  } else if (pool) {
+    lines.push(game.i18n.format('RDHF.badge.spent', { total: pool.total }));
+  }
+
+  badge.classList.remove(...GLOWS);
+  if (glow) badge.classList.add(`${BADGE_CLASS}--${glow}`);
+  badge.dataset.tooltip = lines.length ? lines.join(' · ') : game.i18n.localize('RDHF.badge.tooltip');
 }
 
 /** Lazily imported so the badge module carries no load-time dependency on the app. */

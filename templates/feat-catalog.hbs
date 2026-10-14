@@ -136,10 +136,15 @@
                         data-action="selectTab" data-tab="available">
                     <i class="fa-solid fa-list"></i> {{localize "RDHF.catalog.tabs.available"}}
                 </button>
-                <button type="button" class="rdhf-tab {{#if isAcquiredTab}}is-active{{/if}}"
-                        data-action="selectTab" data-tab="acquired">
+                {{!-- Pulses while any owned Feat waits on Keep or Refund, and the
+                      second pill counts them down. Stops at 0: never a glow without a
+                      cause. --}}
+                <button type="button" class="rdhf-tab {{#if isAcquiredTab}}is-active{{/if}} {{#if pendingCount}}is-pending{{/if}}"
+                        data-action="selectTab" data-tab="acquired"
+                        {{#if pendingCount}}data-tooltip="{{localize 'RDHF.catalog.pendingTab'}}"{{/if}}>
                     <i class="fa-solid fa-award"></i> {{localize "RDHF.catalog.tabs.acquired"}}
                     {{#if acquiredCount}}<span class="rdhf-tab-badge rdhf-tab-badge--count">{{acquiredCount}}</span>{{/if}}
+                    {{#if pendingCount}}<span class="rdhf-tab-badge rdhf-tab-badge--pending">{{pendingCount}}</span>{{/if}}
                 </button>
                 <button type="button" class="rdhf-tab {{#if isInvestmentsTab}}is-active{{/if}}"
                         data-action="selectTab" data-tab="investments">

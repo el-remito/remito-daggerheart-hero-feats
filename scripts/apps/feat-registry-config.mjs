@@ -70,30 +70,12 @@ import {
 } from '../logic/automation.mjs';
 import { describeRequirements, localizeCheck } from './requirement-text.mjs';
 import { chipTooltip } from './recency-text.mjs';
+import { formatDay } from './date-text.mjs';
 import { byLevelThenName, matchesFilters, blankFilterState } from '../logic/filters.mjs';
 import { recencyWindow, resolveRecency } from '../logic/recency.mjs';
 import { buildCurationQueue, nextInQueue } from '../logic/curation.mjs';
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
-
-/**
- * A day, as DD/MM/YYYY.
- *
- * Built from the parts rather than through toLocaleDateString, which follows whatever
- * locale the browser happens to be in and so showed the same world two different orders
- * on two machines — with 01/02 and 02/01 indistinguishable, a reader cannot tell which
- * they are looking at. One order, stated.
- *
- * @param {number|null} at  epoch ms
- * @returns {string}
- */
-function formatDay(at) {
-  if (!at) return '—';
-  const d = new Date(at);
-  if (Number.isNaN(d.getTime())) return '—';
-  const pad = n => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
 
 /**
  * The two hosts a feat's requirement controls render into: a Feats-tab row and the

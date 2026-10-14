@@ -10,7 +10,7 @@ import { MODULE_ID, PREFIX, TEMPLATES, ACTOR_TYPES, SETTINGS } from './scripts/c
 import { registerSettings, registerRegistryMenu } from './scripts/settings.mjs';
 import { FeatRegistryConfig } from './scripts/apps/feat-registry-config.mjs';
 import { FeatCatalog, openCatalog, registerCatalogHooks } from './scripts/apps/feat-catalog.mjs';
-import { injectBadge } from './scripts/badge/badge.mjs';
+import { injectBadge, repaintBadges } from './scripts/badge/badge.mjs';
 import { grantFeat, revokeFeat, getPointPool, buildActorSnapshot } from './scripts/data/actor-state.mjs';
 import { listFeats, pruneOrphans, invalidatePackCache } from './scripts/data/registry.mjs';
 import { runMigrations } from './scripts/data/migrations.mjs';
@@ -56,6 +56,13 @@ Hooks.once('ready', async () => {
   // registration time, and wiring it there would make settings.mjs import from apps/,
   // against the module's one-way import rule.
   Hooks.on('updateSetting', setting => {
+    // A Save in the registry is how a change to an owned Feat reaches its owners, and a
+    // setting write re-renders no sheet — so the badges are repainted in place, on every
+    // client, the moment it lands.
+    if (setting?.key === `${MODULE_ID}.${SETTINGS.REGISTRY}`) {
+      repaintBadges();
+      return;
+    }
     if (setting?.key !== `${MODULE_ID}.${SETTINGS.SHOW_STATS}`) return;
     for (const app of foundry.applications.instances.values()) {
       if (app instanceof FeatRegistryConfig) app.render();

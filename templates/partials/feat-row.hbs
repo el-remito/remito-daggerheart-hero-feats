@@ -55,6 +55,15 @@
                             {{localize "RDHF.catalog.updated"}}
                         </span>
                     {{/if}}
+                    {{!-- An owned Feat changed since this character took it (or last
+                          kept it). Stays until answered in the expanded row below. --}}
+                    {{#if this.pending}}
+                        <span class="rdhf-chip rdhf-chip--pending"
+                              data-tooltip="{{localize 'RDHF.catalog.pendingTooltip'}}">
+                            <i class="fa-solid fa-code-compare"></i>
+                            {{@root.pendingChipLabel}}
+                        </span>
+                    {{/if}}
                     {{!-- Visible only because this character holds its prerequisite. Not
                           drawn once the Feat is owned, which is the whole of its expiry:
                           an acquired Feat is `owned` and this block never runs for it. --}}
@@ -152,6 +161,26 @@
                 {{/if}}
             </div>
         </summary>
+
+        {{!-- The question a change puts to an owner, asked where the Feat is read.
+              Answering it is the acknowledgement: Keep stamps seenAt and the notice
+              goes everywhere at once. --}}
+        {{#if this.pending}}
+            <div class="rdhf-feat-change">
+                <p class="rdhf-feat-change-when">
+                    <i class="fa-solid fa-code-compare"></i>
+                    {{localize "RDHF.catalog.changedOn" date=this.changedOn}}
+                </p>
+                {{#if this.updateNote}}
+                    <p class="rdhf-feat-change-note">{{this.updateNote}}</p>
+                {{/if}}
+                <div class="rdhf-feat-change-actions">
+                    <button type="button" class="rdhf-change-btn" data-action="keepFeat">
+                        <i class="fa-solid fa-check"></i> {{localize "RDHF.catalog.keep"}}
+                    </button>
+                </div>
+            </div>
+        {{/if}}
 
         <div class="rdhf-feat-description" data-loaded="false">
             <p class="rdhf-loading">{{localize "RDHF.catalog.loading"}}</p>

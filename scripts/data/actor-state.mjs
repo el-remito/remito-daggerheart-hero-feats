@@ -5,9 +5,13 @@
  *
  * Actor flag shape — actor.flags["remito-daggerheart-hero-feats"].state:
  *   {
- *     acquired: [{ uuid, itemId, free, at }],
+ *     acquired: [{ uuid, itemId, free, at, seenAt }],
  *     pointAdjustment: 0
  *   }
+ *
+ * `seenAt` (v1.9.0) is the owner's last Keep: the moment they answered for every change
+ * to the Feat made before it. Absent on every record written earlier, which reads as 0 —
+ * the acquisition time alone is then the baseline, so no migration is needed.
  *
  * `acquired` is an ARRAY, and that is load-bearing. Foundry's expandObject
  * (common/utils/helpers.mjs) recurses into every plain object and runs setProperty on
@@ -26,6 +30,7 @@ import { MODULE_ID, FLAGS, TRAITS, RESOURCE_REQS, ACTOR_TYPES } from '../constan
 import { getPointFormula, getCategories, getRegistry, taxonomyLabel } from '../settings.mjs';
 import { normalizeFeat } from './registry.mjs';
 import { computePool } from '../logic/points.mjs';
+import { pendingChanges } from '../logic/ownership.mjs';
 
 /** Every player character in the world. The one definition, shared by every caller. */
 export function characters() {
@@ -292,6 +297,40 @@ export async function revokeFeat(actor, uuid) {
   }
 
   await setState(actor, { ...state, acquired: state.acquired.filter(e => e.uuid !== uuid) });
+  return true;
+}
+
+/* ── Changes to owned Feats ────────────────────────────────────────────────── */
+
+/**
+ * The owned Feats that have changed since this character last answered for them.
+ * Read against the SAVED registry: a change reaches owners on Save, never from a GM's
+ * working copy.
+ *
+ * @param {Actor} actor
+ * @returns {string[]}  uuids
+ */
+export function pendingFor(actor) {
+  const feats = getRegistry().feats ?? {};
+  return pendingChanges(getState(actor).acquired, uuid => normalizeFeat(uuid, feats[uuid]));
+}
+
+/**
+ * Keep: the owner has seen the change and keeps the Feat. Stamps `seenAt` on that one
+ * acquisition, which answers for every change up to now and nothing after it.
+ *
+ * @param {Actor} actor
+ * @param {string} uuid
+ * @returns {Promise<boolean>}
+ */
+export async function acknowledgeChange(actor, uuid) {
+  const state = getState(actor);
+  if (!acquisitionOf(state, uuid)) return false;
+  const now = Date.now();
+  await setState(actor, {
+    ...state,
+    acquired: state.acquired.map(e => (e.uuid === uuid ? { ...e, seenAt: now } : e))
+  });
   return true;
 }
 
