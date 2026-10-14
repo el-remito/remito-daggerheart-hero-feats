@@ -555,6 +555,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       filters: this._filters,
       hiddenOnly: this._hiddenOnly,
       newOnly: this._filters.newOnly,
+      updatedOnly: this._filters.updatedOnly,
       sourceSearch: this._sourceSearch,
       railOpen: this._railOpen,
       showStats,
@@ -952,7 +953,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       const kind = input.dataset.filter;
       input.addEventListener('change', () => {
         if (kind === 'hiddenOnly') this._hiddenOnly = input.checked;
-        else if (kind === 'newOnly') this._filters.newOnly = input.checked;
+        else if (kind === 'newOnly' || kind === 'updatedOnly') this._filters[kind] = input.checked;
         else if (kind === 'levelMin' || kind === 'levelMax') {
           this._filters[kind] = input.value === '' ? null : Number(input.value);
         } else if (kind === 'category' || kind === 'type') {
@@ -1082,12 +1083,11 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     row.dataset.category = feat.category ?? '';
     row.dataset.types = (feat.types ?? []).join('|');
     row.dataset.hidden = String(feat.hidden);
-    // The filter reads this attribute, the chip below reads the same set. Repainting
-    // the chip without the attribute would leave "Newly added Feats" filtering on the
-    // answer from the last full render. UPDATED needs no counterpart: it is a chip and
-    // nothing filters on it, which is why _updatedFeats reaches the row through the
-    // context and _buildChips alone.
+    // The filters read these attributes, the chips below read the same sets. Repainting
+    // a chip without its attribute would leave the matching recency switch filtering on
+    // the answer from the last full render.
     row.dataset.new = String(this._newFeats.has(uuid));
+    row.dataset.updated = String(this._updatedFeats.has(uuid));
     row.classList.toggle('is-hidden', feat.hidden);
 
     const chips = row.querySelector(`.${PREFIX}-reg-chips`);
@@ -1216,19 +1216,20 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         })
       );
     }
-    // UPDATED wins the row: a Feat cannot be stamped updated until its curation has
-    // been committed, so where both are set it really was published once and changed
-    // afterwards, and that is the more useful of the two facts.
+    // Both chips where both apply (v1.9.0), in the template's order: each recency
+    // switch filters on its own window, so a row either one keeps has to wear the chip
+    // that kept it.
+    if (this._newFeats.has(feat.uuid)) {
+      chips.push(
+        this._chip('new', game.i18n.localize('RDHF.catalog.new'), {
+          tooltip: this._recencyTooltips.new
+        })
+      );
+    }
     if (this._updatedFeats.has(feat.uuid)) {
       chips.push(
         this._chip('updated', game.i18n.localize('RDHF.catalog.updated'), {
           tooltip: this._recencyTooltips.updated
-        })
-      );
-    } else if (this._newFeats.has(feat.uuid)) {
-      chips.push(
-        this._chip('new', game.i18n.localize('RDHF.catalog.new'), {
-          tooltip: this._recencyTooltips.new
         })
       );
     }
@@ -1606,6 +1607,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
         owned: false,
         qualifies: true,
         isNew: row.dataset.new === 'true',
+        isUpdated: row.dataset.updated === 'true',
         searchText: row.dataset.search || ''
       };
       const show =

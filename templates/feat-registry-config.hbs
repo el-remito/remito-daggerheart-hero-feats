@@ -166,6 +166,10 @@
                             <input type="checkbox" data-filter="newOnly" {{#if newOnly}}checked{{/if}}>
                             <span>{{localize "RDHF.catalog.newOnly"}}</span>
                         </label>
+                        <label class="rdhf-checkline">
+                            <input type="checkbox" data-filter="updatedOnly" {{#if updatedOnly}}checked{{/if}}>
+                            <span>{{localize "RDHF.catalog.updatedOnly"}}</span>
+                        </label>
                     </section>
 
                     {{#if filterTypes.length}}
@@ -240,6 +244,7 @@
                                          data-search="{{this.searchText}}"
                                          data-hidden="{{this.hidden}}"
                                          data-new="{{this.isNew}}"
+                                         data-updated="{{this.isUpdated}}"
                                          data-level="{{this.level}}"
                                          data-category="{{this.category}}"
                                          data-types="{{this.typesAttr}}"
@@ -274,12 +279,13 @@
                                                 {{!-- _buildChips repaints these two from
                                                       this._recencyTooltips; keep the two
                                                       in step. --}}
+                                                {{#if this.isNew}}
+                                                    <span class="rdhf-chip rdhf-chip--new"
+                                                          data-tooltip="{{@root.newChipTooltip}}">{{localize "RDHF.catalog.new"}}</span>
+                                                {{/if}}
                                                 {{#if this.isUpdated}}
                                                     <span class="rdhf-chip rdhf-chip--updated"
                                                           data-tooltip="{{@root.updatedChipTooltip}}">{{localize "RDHF.catalog.updated"}}</span>
-                                                {{else if this.isNew}}
-                                                    <span class="rdhf-chip rdhf-chip--new"
-                                                          data-tooltip="{{@root.newChipTooltip}}">{{localize "RDHF.catalog.new"}}</span>
                                                 {{/if}}
                                                 {{#if this.neverReveals}}
                                                     <span class="rdhf-chip rdhf-chip--warn"

@@ -63,6 +63,7 @@
   "RDHF.catalog.newTooltip.time": "Published within the last {days} days.",
   "RDHF.catalog.newTooltip.combined": "Published within the last {days} days, and one of the {count} most recently published.",
   "RDHF.catalog.newOnly": "Newly added Feats",
+  "RDHF.catalog.updatedOnly": "Recently updated Feats",
   "RDHF.catalog.acquireTooltip": "Spend a Feat Point on this feat",
   "RDHF.catalog.revokeTooltip": "Revoke this feat (GM)",
   "RDHF.catalog.grantTooltip": "Grant this feat, ignoring requirements (GM)",

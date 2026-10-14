@@ -9,7 +9,7 @@
  *
  * Deciding WHICH Feats are new or updated lives in logic/recency.mjs as of v1.7.1 — it
  * owns a stored rule now, which is a different job. This file only ever reads the
- * answer, as `view.isNew` in matchesFilters below.
+ * answer, as `view.isNew` / `view.isUpdated` in matchesFilters below.
  */
 
 /** The filter state a fresh catalog opens with. */
@@ -22,7 +22,8 @@ export function blankFilterState() {
     types: [], // empty = no type constraint
     eligibleOnly: false,
     hideOwned: false,
-    newOnly: false
+    newOnly: false,
+    updatedOnly: false
   };
 }
 
@@ -38,7 +39,13 @@ export function matchesFilters(view, state) {
   if (s.hideOwned && view.owned) return false;
   // Requirements only, never points: "qualify" is not "can afford" (see isEligible).
   if (s.eligibleOnly && !view.qualifies && !view.owned) return false;
+  // Each recency switch matches its OWN window, and both ticked narrow like every other
+  // switch: the Feats that are new AND updated. That set is not empty by construction —
+  // a Feat published inside the NEW window and changed since sits in both — and since
+  // v1.9.0 such a row draws both chips, so every row a filter keeps wears the chip that
+  // kept it.
   if (s.newOnly && !view.isNew) return false;
+  if (s.updatedOnly && !view.isUpdated) return false;
 
   const min = s.levelMin;
   const max = s.levelMax;

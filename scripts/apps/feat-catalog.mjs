@@ -229,9 +229,11 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           free: acquisitionOf(state, feat.uuid)?.free === true,
           hidden: feat.hidden === true,
           isNew: fresh.has(feat.uuid),
-          // UPDATED wins the row where both apply. It cannot arise on a feat still being
-          // authored — the stamp is withheld until curation is committed — so where both
-          // are set the feat really was curated once and changed later.
+          // Both chips are drawn where both apply (v1.9.0). UPDATED cannot arise on a
+          // feat still being authored — the stamp is withheld until curation is
+          // committed — so where both are set the feat really was published inside the
+          // NEW window and changed since, and each recency switch keeps the row whose
+          // chip it matches.
           isUpdated: changed.has(feat.uuid),
           // Worn until the feat is acquired, which needs no expiry of its own: an owned
           // feat is `owned`, and the chip is not drawn for one.
@@ -324,7 +326,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       input.addEventListener('change', () => {
         if (kind === 'levelMin' || kind === 'levelMax') {
           this._filters[kind] = input.value === '' ? null : Number(input.value);
-        } else if (kind === 'eligibleOnly' || kind === 'hideOwned' || kind === 'newOnly') {
+        } else if (['eligibleOnly', 'hideOwned', 'newOnly', 'updatedOnly'].includes(kind)) {
           this._filters[kind] = input.checked;
         } else if (kind === 'category' || kind === 'type') {
           const bucket = kind === 'category' ? 'categories' : 'types';
@@ -402,6 +404,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       owned: row.dataset.owned === 'true',
       qualifies: row.dataset.qualifies === 'true',
       isNew: row.dataset.new === 'true',
+      isUpdated: row.dataset.updated === 'true',
       searchText: row.dataset.search || ''
     };
   }

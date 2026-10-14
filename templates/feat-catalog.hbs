@@ -62,8 +62,8 @@
                 </div>
             </section>
 
-            {{!-- The narrowing switches, directly under Level, because all three
-                  controls answer the same question — WHICH of these Feats do I want to
+            {{!-- The narrowing switches, directly under Level, because every one of
+                  these controls answers the same question — WHICH of these Feats do I want to
                   look at — while Type and Category below describe what a Feat IS. Both
                   windows carry this section in this position; the registry has no
                   eligibility switch, which is the only way the two rails differ. --}}
@@ -75,6 +75,10 @@
                 <label class="rdhf-checkline">
                     <input type="checkbox" data-filter="newOnly" {{#if filters.newOnly}}checked{{/if}}>
                     <span>{{localize "RDHF.catalog.newOnly"}}</span>
+                </label>
+                <label class="rdhf-checkline">
+                    <input type="checkbox" data-filter="updatedOnly" {{#if filters.updatedOnly}}checked{{/if}}>
+                    <span>{{localize "RDHF.catalog.updatedOnly"}}</span>
                 </label>
             </section>
 
