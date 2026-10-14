@@ -61,7 +61,7 @@
                         <span class="rdhf-chip rdhf-chip--pending"
                               data-tooltip="{{localize 'RDHF.catalog.pendingTooltip'}}">
                             <i class="fa-solid fa-code-compare"></i>
-                            {{@root.pendingChipLabel}}
+                            {{this.pendingLabel}}
                         </span>
                     {{/if}}
                     {{!-- Visible only because this character holds its prerequisite. Not
@@ -144,6 +144,16 @@
                         <i class="fa-solid fa-plus"></i>
                     </button>
                 {{/unless}}
+                {{!-- Buyer's remorse: only while the window is open, and only for the
+                      owner — a GM has Revoke. A changed Feat answers in its expanded
+                      row instead, so a row never offers two Refunds. --}}
+                {{#if this.refundRecent}}
+                    <button type="button" class="rdhf-icon-btn rdhf-danger"
+                            data-action="refundFeat"
+                            data-tooltip="{{this.refundTooltip}}">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                {{/if}}
                 {{#if this.isGM}}
                     {{#if this.owned}}
                         <button type="button" class="rdhf-icon-btn rdhf-danger"
@@ -178,6 +188,11 @@
                     <button type="button" class="rdhf-change-btn" data-action="keepFeat">
                         <i class="fa-solid fa-check"></i> {{localize "RDHF.catalog.keep"}}
                     </button>
+                    {{#if this.refundChanged}}
+                        <button type="button" class="rdhf-change-btn rdhf-danger" data-action="refundFeat">
+                            <i class="fa-solid fa-rotate-left"></i> {{localize "RDHF.refund.button"}}
+                        </button>
+                    {{/if}}
                 </div>
             </div>
         {{/if}}

@@ -17,7 +17,8 @@ import {
   SETTINGS,
   GENERAL_CATEGORY_ID,
   DEFAULT_INVESTMENT_BY_LEVEL,
-  DEFAULT_RECENCY
+  DEFAULT_RECENCY,
+  DEFAULT_REFUNDS
 } from '../constants.mjs';
 import {
   getExcludedActors,
@@ -35,7 +36,9 @@ import {
   getAutomation,
   setAutomation,
   getRecency,
-  setRecency
+  setRecency,
+  getRefunds,
+  setRefunds
 } from '../settings.mjs';
 import {
   loadAllSourceFeatures,
@@ -135,6 +138,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   #formula = null;
   #automation = null; // working copy of the Rule Automation setting
   #recency = null; // working copy of the NEW / UPDATED chip windows
+  #refunds = null; // working copy of the player self-refund permissions
   #dragDrop = null;
   #openFeats = new Set();
   /**
@@ -229,6 +233,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       removeNarrative: FeatRegistryConfig._onRemoveNarrative,
       resetAutomation: FeatRegistryConfig._onResetAutomation,
       resetRecency: FeatRegistryConfig._onResetRecency,
+      resetRefunds: FeatRegistryConfig._onResetRefunds,
       exportRegistry: FeatRegistryConfig._onExport,
       importRegistry: FeatRegistryConfig._onImport,
       pruneOrphans: FeatRegistryConfig._onPrune,
@@ -311,6 +316,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     this.#formula ??= getPointFormula();
     this.#automation ??= foundry.utils.deepClone(getAutomation());
     this.#recency ??= foundry.utils.deepClone(getRecency());
+    this.#refunds ??= foundry.utils.deepClone(getRefunds());
     this.#baseline ??= foundry.utils.deepClone(this.#snapshot());
 
     // Absorb rows that merely restate the rule, so a GM who applied this curve by hand
@@ -486,6 +492,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       // policy a GM sets once and then forgets. Every branch the pane needs is a
       // precomputed boolean, because Handlebars has no `eq` here.
       recencyRows: ['new', 'updated'].map(chip => this.#recencyRow(chip, publishedTotal)),
+      refunds: this.#refunds,
       // Formatted once per render and read by the chips in the template; _buildChips
       // reads the same two off this._recencyTooltips when it repaints a row.
       newChipTooltip: this._recencyTooltips.new,
@@ -1632,6 +1639,21 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       return;
     }
 
+    // Player self-refund, app-level too. The hours field is dimmed — never disabled —
+    // while its route is off, for the reason the recency fields are: the value is kept.
+    if (field === 'refundRecentEnabled' || field === 'refundChangedEnabled') {
+      const route = field === 'refundRecentEnabled' ? 'recent' : 'changed';
+      this.#refunds[route].enabled = value === true;
+      this.element
+        .querySelector(`.${PREFIX}-refund-hours`)
+        ?.classList.toggle('is-disabled', !this.#refunds.recent.enabled);
+      return;
+    }
+    if (field === 'refundRecentHours') {
+      this.#refunds.recent.hours = Math.max(0, Math.floor(Number(value) || 0));
+      return;
+    }
+
     // The recency rules, likewise app-level. `data-chip` names which of the two the
     // control belongs to, exactly as automationLevel's `data-level` names its row.
     if (field.startsWith('recency')) {
@@ -2488,6 +2510,13 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
    * moves at once — the one place here where repainting would mean rebuilding the
    * markup the template declares.
    */
+  /** Both refund routes back to off, 24 hours. Still a working copy until Save. */
+  static _onResetRefunds(event) {
+    event.preventDefault();
+    this.#refunds = foundry.utils.deepClone(DEFAULT_REFUNDS);
+    this.render();
+  }
+
   static _onResetRecency(event) {
     event.preventDefault();
     this.#recency = foundry.utils.deepClone(DEFAULT_RECENCY);
@@ -2802,7 +2831,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   /* ── Unsaved work ────────────────────────────────────────────────────────── */
 
   /**
-   * The six working copies as one object. References, not a clone.
+   * The seven working copies as one object. References, not a clone.
    *
    * Everything the footer Save writes has to appear here or #isDirty cannot see it and
    * the close prompt will discard it without asking — which is why a new working copy
@@ -2815,7 +2844,8 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
       types: this.#types,
       formula: this.#formula,
       automation: this.#automation,
-      recency: this.#recency
+      recency: this.#recency,
+      refunds: this.#refunds
     };
   }
 
@@ -2879,7 +2909,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
   }
 
   /**
-   * Writes all six working copies through, and rebases so the app is clean again.
+   * Writes all seven working copies through, and rebases so the app is clean again.
    *
    * @returns {Promise<boolean>}  false when the GM went back to editing from the
    *   change-note dialog, in which case nothing was written
@@ -2893,6 +2923,7 @@ export class FeatRegistryConfig extends HandlebarsApplicationMixin(ApplicationV2
     await game.settings.set(MODULE_ID, SETTINGS.POINT_FORMULA, this.#formula);
     await setAutomation(this.#automation);
     await setRecency(this.#recency);
+    await setRefunds(this.#refunds);
     invalidatePackCache();
     this.#baseline = foundry.utils.deepClone(this.#snapshot());
     ui.notifications?.info(game.i18n.localize('RDHF.notify.saved'));

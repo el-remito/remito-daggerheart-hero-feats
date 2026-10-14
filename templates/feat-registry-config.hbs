@@ -1073,6 +1073,37 @@
                 <button type="button" class="rdhf-text-btn" data-action="resetRecency">
                     <i class="fa-solid fa-rotate-left"></i> {{localize "RDHF.recency.reset"}}
                 </button>
+
+                {{!-- A PERMISSION, stored under its own key: it sits beside the recency
+                      chips because both answer for a Feat's life after publication, not
+                      because they are the same kind of thing. Both routes ship off. --}}
+                <h4 class="rdhf-rail-heading">{{localize "RDHF.refunds.name"}}</h4>
+                <p class="rdhf-hint">{{localize "RDHF.refunds.intro"}}</p>
+
+                <div class="rdhf-recency-rule">
+                    <label class="rdhf-checkline">
+                        <input type="checkbox" data-field="refundRecentEnabled" {{#if refunds.recent.enabled}}checked{{/if}}>
+                        <span>{{localize "RDHF.refunds.recent"}}</span>
+                    </label>
+                    <label class="rdhf-recency-field rdhf-refund-hours {{#unless refunds.recent.enabled}}is-disabled{{/unless}}">
+                        <span>{{localize "RDHF.refunds.hours"}}</span>
+                        <input type="number" min="0" step="1" data-field="refundRecentHours" value="{{refunds.recent.hours}}">
+                    </label>
+                    <p class="rdhf-hint">{{localize "RDHF.refunds.recentHint"}}</p>
+                </div>
+
+                <div class="rdhf-recency-rule">
+                    <label class="rdhf-checkline">
+                        <input type="checkbox" data-field="refundChangedEnabled" {{#if refunds.changed.enabled}}checked{{/if}}>
+                        <span>{{localize "RDHF.refunds.changed"}}</span>
+                    </label>
+                    <p class="rdhf-hint">{{localize "RDHF.refunds.changedHint"}}</p>
+                </div>
+
+                <p class="rdhf-hint">{{localize "RDHF.refunds.common"}}</p>
+                <button type="button" class="rdhf-text-btn" data-action="resetRefunds">
+                    <i class="fa-solid fa-rotate-left"></i> {{localize "RDHF.recency.reset"}}
+                </button>
             </section>
         {{/if}}
 

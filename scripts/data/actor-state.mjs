@@ -6,8 +6,15 @@
  * Actor flag shape — actor.flags["remito-daggerheart-hero-feats"].state:
  *   {
  *     acquired: [{ uuid, itemId, free, at, seenAt }],
+ *     ledger: [{ uuid, name, at, action, reason, cascadeOf }],
  *     pointAdjustment: 0
  *   }
+ *
+ * `ledger` (v1.9.0) records the decisions that REMOVE an acquisition — a player's
+ * Refund and a GM's Revoke — which would otherwise leave no trace at all, because the
+ * acquisition record they remove is the only place the purchase was written. `name` is
+ * kept on the row because the registry entry may be gone by the time Statistics reads
+ * it. Also an array, for the reason below.
  *
  * `seenAt` (v1.9.0) is the owner's last Keep: the moment they answered for every change
  * to the Feat made before it. Absent on every record written earlier, which reads as 0 —
@@ -39,7 +46,7 @@ export function characters() {
 
 /* ── Flag access ───────────────────────────────────────────────────────────── */
 
-const BLANK_STATE = { acquired: [], pointAdjustment: 0 };
+const BLANK_STATE = { acquired: [], ledger: [], pointAdjustment: 0 };
 
 /**
  * Rebuilds the acquisition list from the mangled nested object that the pre-array
@@ -78,7 +85,11 @@ export function getState(actor) {
     ? foundry.utils.deepClone(raw).filter(e => e?.uuid)
     : recoverLegacyAcquired(raw);
 
-  return { acquired, pointAdjustment: Number(stored.pointAdjustment) || 0 };
+  const ledger = Array.isArray(stored.ledger)
+    ? foundry.utils.deepClone(stored.ledger).filter(e => e?.uuid)
+    : [];
+
+  return { acquired, ledger, pointAdjustment: Number(stored.pointAdjustment) || 0 };
 }
 
 /** The acquisition entry for one feat, or undefined. */
@@ -332,6 +343,53 @@ export async function acknowledgeChange(actor, uuid) {
     acquired: state.acquired.map(e => (e.uuid === uuid ? { ...e, seenAt: now } : e))
   });
   return true;
+}
+
+/**
+ * Carries out a refund decided by planRefund (logic/ownership.mjs): deletes every
+ * embedded Feature it hands back, forgets their acquisitions — which is what returns the
+ * points, since `spent` is derived — and logs one Refunded row per Feat. One flag write,
+ * so the sheet and the catalog re-render once.
+ *
+ * @param {Actor} actor
+ * @param {Array<{uuid: string, reason: string, cascadeOf: string|null}>} refunds
+ * @param {(uuid: string) => string} nameOf
+ * @returns {Promise<number>}  how many Feats were handed back
+ */
+export async function refundFeats(actor, refunds, nameOf) {
+  const state = getState(actor);
+  const wanted = new Set(refunds.map(r => r.uuid));
+  const entries = state.acquired.filter(e => wanted.has(e.uuid));
+  if (!entries.length) return 0;
+
+  const itemIds = entries.map(e => e.itemId).filter(id => id && actor.items.get(id));
+  if (itemIds.length) {
+    try {
+      await actor.deleteEmbeddedDocuments('Item', itemIds);
+    } catch (err) {
+      console.warn(`${MODULE_ID} | Could not delete refunded items:`, err);
+    }
+  }
+
+  const at = Date.now();
+  await setState(actor, {
+    ...state,
+    acquired: state.acquired.filter(e => !wanted.has(e.uuid)),
+    ledger: [
+      ...state.ledger,
+      ...refunds
+        .filter(r => entries.some(e => e.uuid === r.uuid))
+        .map(r => ({
+          uuid: r.uuid,
+          name: nameOf(r.uuid) ?? r.uuid,
+          at,
+          action: 'refunded',
+          reason: r.reason,
+          cascadeOf: r.cascadeOf ?? null
+        }))
+    ]
+  });
+  return entries.length;
 }
 
 /**

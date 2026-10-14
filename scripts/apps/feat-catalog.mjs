@@ -16,6 +16,7 @@ import {
   getCategories,
   getInvestmentsLayout,
   getRecency,
+  getRefunds,
   getRegistry,
   getTypes,
   setInvestmentsLayout,
@@ -35,6 +36,7 @@ import {
   getPointPool,
   getState,
   grantFeat,
+  refundFeats,
   revokeFeat,
   setPointAdjustment
 } from '../data/actor-state.mjs';
@@ -47,7 +49,7 @@ import {
 } from '../logic/filters.mjs';
 import { newestCurated, newestUpdated } from '../logic/recency.mjs';
 import { buildInvestmentSummary } from '../logic/investment.mjs';
-import { isPendingChange } from '../logic/ownership.mjs';
+import { isPendingChange, planRefund, recentWindowLeft, refundRoute } from '../logic/ownership.mjs';
 import { chipTooltip } from './recency-text.mjs';
 import { formatDay } from './date-text.mjs';
 import { localizeCheck } from './requirement-text.mjs';
@@ -112,6 +114,7 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       grantAnyway: FeatCatalog._onGrantAnyway,
       revokeFeat: FeatCatalog._onRevoke,
       keepFeat: FeatCatalog._onKeep,
+      refundFeat: FeatCatalog._onRefund,
       adjustPoints: FeatCatalog._onAdjustPoints,
       clearFilters: FeatCatalog._onClearFilters,
       selectTab: FeatCatalog._onSelectTab,
@@ -214,6 +217,13 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     // lifetimes.
     const changed = newestUpdated(feats, recency.updated, { total });
 
+    // Refund controls are the OWNER's: a GM has Revoke, which needs no window. Decided
+    // once per render; a window that shuts while the catalog is open is caught again at
+    // the click, which re-plans from the flag rather than trusting the button.
+    const refunds = getRefunds();
+    const now = Date.now();
+    const playerOwner = this.actor.isOwner && !isGM;
+
     const views = feats
       .map(feat => {
         const evaluation = isEligible(feat, snapshot, pool.remaining);
@@ -223,6 +233,14 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
         // the UPDATED recency window: that one expires for everyone, this one waits for
         // an answer, so a player away longer than the window is still told.
         const pending = isPendingChange(acquisition, feat);
+        const route = playerOwner ? refundRoute(acquisition, feat, refunds, now) : null;
+        // A Feat both recent and changed gets ONE control, the change block's: the
+        // `updated` route is the stronger claim and is the reason the ledger records.
+        const refundChanged = route === 'updated';
+        const refundRecent = route === 'recent';
+        const hoursLeft = refundRecent
+          ? Math.max(1, Math.ceil(recentWindowLeft(acquisition, refunds, now) / 3_600_000))
+          : 0;
         const view = {
           ...feat,
           typeLabels: labels,
@@ -239,6 +257,15 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
           pending,
           changedOn: pending ? formatDay(feat.updatedAt) : '',
           updateNote: pending ? feat.updateNote : '',
+          refundChanged,
+          refundRecent,
+          refundTooltip: refundRecent
+            ? game.i18n.format('RDHF.refund.recentTooltip', { hours: hoursLeft })
+            : '',
+          // The chip asks the question the expanded row can actually answer.
+          pendingLabel: game.i18n.localize(
+            refundChanged ? 'RDHF.catalog.pendingChipRefund' : 'RDHF.catalog.pendingChip'
+          ),
           hidden: feat.hidden === true,
           isNew: fresh.has(feat.uuid),
           // Both chips are drawn where both apply (v1.9.0). UPDATED cannot arise on a
@@ -278,7 +305,6 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
       // Owned Feats waiting on Keep or Refund. Lights the My Feats tab and counts down
       // as each is answered; the sheet badge reads the same rule through pendingFor.
       pendingCount,
-      pendingChipLabel: game.i18n.localize('RDHF.catalog.pendingChip'),
       tab: this._tab,
       isAvailableTab: this._tab === 'available',
       isAcquiredTab: this._tab === 'acquired',
@@ -583,6 +609,84 @@ export class FeatCatalog extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!uuid) return;
     this._captureOpenRows();
     await acknowledgeChange(this.actor, uuid);
+    this.render();
+  }
+
+  /**
+   * The owner hands a Feat back. Re-plans from the actor flag rather than trusting the
+   * button, because the window may have shut since the render, and asks before writing.
+   *
+   * planRefund decides everything first: the Feats that go with this one (only those
+   * that name it as a prerequisite and stop meeting it), whether any of them blocks the
+   * whole refund, and which Feats stay owned but stop qualifying. Nothing is written
+   * unless the plan is whole.
+   */
+  static async _onRefund(event, target) {
+    event.preventDefault();
+    if (!this.actor.isOwner || game.user.isGM) return;
+    const uuid = target.closest(`.${PREFIX}-feat`)?.dataset.uuid;
+    if (!uuid) return;
+
+    const state = getState(this.actor);
+    const snapshot = buildActorSnapshot(this.actor);
+    // forGM + keepUuids: every Feat this character owns, withheld or not, with Rule
+    // Automation already applied — the same requirements the catalog shows them.
+    const records = await listFeats({
+      forGM: true,
+      keepUuids: state.acquired.map(e => e.uuid),
+      snapshot
+    });
+    const byUuid = new Map(records.map(f => [f.uuid, f]));
+    const nameOf = u =>
+      this.actor.items.get(acquisitionOf(state, u)?.itemId ?? '')?.name ?? byUuid.get(u)?.name ?? u;
+
+    const plan = planRefund({
+      uuid,
+      acquired: state.acquired,
+      featOf: u => byUuid.get(u) ?? null,
+      nameOf,
+      snapshot,
+      rules: getRefunds(),
+      now: Date.now()
+    });
+
+    const escape = foundry.utils.escapeHTML;
+    const list = uuids => `<ul class="${PREFIX}-reasons">${uuids.map(u => `<li>${escape(nameOf(u))}</li>`).join('')}</ul>`;
+    const name = escape(nameOf(uuid));
+
+    if (!plan.ok) {
+      // The Feat itself can no longer go back: its window shut since the render.
+      if (plan.blockedBy.includes(uuid)) {
+        ui.notifications?.warn(game.i18n.format('RDHF.refund.closed', { name: nameOf(uuid) }));
+        this.render();
+        return;
+      }
+      await foundry.applications.api.DialogV2.prompt({
+        window: { title: game.i18n.localize('RDHF.refund.blockedTitle') },
+        content:
+          `<p>${game.i18n.format('RDHF.refund.blockedBody', { name })}</p>` + list(plan.blockedBy),
+        ok: { label: game.i18n.localize('RDHF.dialog.close') }
+      });
+      return;
+    }
+
+    const cascaded = plan.refunds.filter(r => r.uuid !== uuid).map(r => r.uuid);
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: game.i18n.localize('RDHF.refund.title') },
+      content:
+        `<p>${game.i18n.format('RDHF.refund.body', { name, count: plan.refunds.length })}</p>` +
+        (cascaded.length
+          ? `<p>${game.i18n.localize('RDHF.refund.cascade')}</p>` + list(cascaded)
+          : '') +
+        (plan.warnings.length
+          ? `<p class="${PREFIX}-warning">${game.i18n.localize('RDHF.refund.warnings')}</p>` +
+            list(plan.warnings)
+          : '')
+    });
+    if (!confirmed) return;
+
+    this._captureOpenRows();
+    await refundFeats(this.actor, plan.refunds, nameOf);
     this.render();
   }
 

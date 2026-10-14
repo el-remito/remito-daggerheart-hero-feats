@@ -71,7 +71,7 @@ export function normalizeRequirements(reqs) {
 }
 
 /** Case- and whitespace-insensitive comparison, used for every name match. */
-function sameName(a, b) {
+export function sameName(a, b) {
   return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 }
 

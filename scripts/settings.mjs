@@ -16,11 +16,13 @@ import {
   DEFAULT_INVESTMENT_BY_LEVEL,
   GENERAL_CATEGORY_ID,
   INVEST_LAYOUTS,
-  DEFAULT_RECENCY
+  DEFAULT_RECENCY,
+  DEFAULT_REFUNDS
 } from './constants.mjs';
 import { invalidatePackCache } from './data/registry.mjs';
 import { normalizeAutomation, withUntrackedCategories } from './logic/automation.mjs';
 import { normalizeRecency } from './logic/recency.mjs';
+import { normalizeRefunds } from './logic/ownership.mjs';
 
 /**
  * The source list as it stood at the last invalidation, so a registry write that did
@@ -160,6 +162,16 @@ export function registerSettings() {
     type: Object,
     default: foundry.utils.deepClone(DEFAULT_RECENCY)
   });
+
+  // Player self-refund (v1.9.0). Its own key for the reason RECENCY is not folded into
+  // AUTOMATION: this is a PERMISSION, the chips are decoration, and the Automation tab
+  // that edits all three is only the surface. Both routes default off.
+  game.settings.register(MODULE_ID, SETTINGS.REFUNDS, {
+    scope: 'world',
+    config: false,
+    type: Object,
+    default: foundry.utils.deepClone(DEFAULT_REFUNDS)
+  });
 }
 
 /**
@@ -223,6 +235,15 @@ export function getRecency() {
 
 export async function setRecency(recency) {
   return game.settings.set(MODULE_ID, SETTINGS.RECENCY, normalizeRecency(recency));
+}
+
+/** Which refund routes a player has, normalized on every read like getRecency. */
+export function getRefunds() {
+  return normalizeRefunds(game.settings.get(MODULE_ID, SETTINGS.REFUNDS));
+}
+
+export async function setRefunds(refunds) {
+  return game.settings.set(MODULE_ID, SETTINGS.REFUNDS, normalizeRefunds(refunds));
 }
 
 /**
