@@ -191,6 +191,9 @@ Requires Foundry VTT v14 and the Daggerheart system (2.5.0+, verified against 2.
 
 ## Changelog
 
+### v1.9.1
+- **The UPDATED chip says what changed.** Hovering it now shows the date the Feat changed and the note you wrote in *What changed?*, above the usual explanation. Every player sees it, owner or not. In the registry, a Feat you have changed but not yet saved says its note is still to come
+
 ### v1.9.0
 - **Know when a Feat you own changes.** When the GM changes the Level or requirements of a Feat a character already owns, or marks it UPDATED by hand, the owner is told and stays told until they answer. The badge beside Level pulses purple, the **My Feats** tab pulses with a count of Feats waiting, and the Feat's row reads **Changed**. Open it to see when it changed and why, then press **Keep**. It does not expire, so a player away for a month is still told, and a change made before you bought a Feat never counts
 - **"What changed?"** When a Save marks published Feats UPDATED, a short dialog lists them so you can leave each a note for its owners. A blank field says nothing, and an old note never carries over onto a new change

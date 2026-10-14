@@ -866,6 +866,16 @@ that is why the registry may key `feats` by UUID and the actor flag may not.
   Keep / Refund, and the row chip then reads "Keep or refund?" instead of "Changed". Both are the
   OWNER's — a GM sees neither, having Revoke — and `_onRefund` re-plans from the flag at the click,
   because the window may have shut since the render.
+- **UPDATED's tooltip is per Feat; NEW's is still per render** (v1.9.1). `chipTooltip` writes
+  the window sentence once, and `updatedChipTooltip` (`apps/recency-text.mjs`) builds each chip's
+  HTML on top of it: the change date, the GM's `updateNote`, then that sentence. It travels as
+  `data-tooltip-html` — core runs it through `cleanHTML` — so the note, GM prose, is escaped in
+  that one function and nowhere else. The note is shown to **every** reader, owner or not: it says
+  what the chip says changed, and the "What changed?" dialog tells the GM so. The registry reads
+  the working copy, where a stamp can move before its note exists, so `#updatedTooltip` compares
+  the stamp against `#baseline` and, if it has moved, withholds the stored note (it belongs to the
+  previous change) and says the note will be asked for on Save. `_buildChips` and the template
+  both read it, the same keep-in-step pair as the rest of the row.
 - **Recent activity: a refund removes the purchase it undoes, so only the refund row is left.**
   `buildAdoptionStats` reads `history` (the ledger) beside `acquired` and labels every row with one
   `action` vocabulary — acquired / granted / refunded / revoked — so the app has one switch to

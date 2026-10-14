@@ -39,10 +39,11 @@
                           filters on its own window, so a row kept by either must wear
                           the chip that kept it. The pair means the Feat was published
                           recently AND changed since. --}}
-                    {{!-- The tooltip is resolved once per render, not localized here:
-                          it has to name the mode the GM chose and the number that mode
-                          actually resolves to. @root because this partial is invoked
-                          per row. --}}
+                    {{!-- The tooltips are resolved in _prepareContext, not localized
+                          here: they have to name the mode the GM chose and the number
+                          that mode actually resolves to. NEW's is one per render (@root,
+                          because this partial is invoked per row); UPDATED's is per Feat,
+                          carrying its date and the GM's note, and is HTML. --}}
                     {{#if this.isNew}}
                         <span class="rdhf-chip rdhf-chip--new"
                               data-tooltip="{{@root.newChipTooltip}}">
@@ -51,7 +52,7 @@
                     {{/if}}
                     {{#if this.isUpdated}}
                         <span class="rdhf-chip rdhf-chip--updated"
-                              data-tooltip="{{@root.updatedChipTooltip}}">
+                              data-tooltip-html="{{this.updatedTooltip}}">
                             {{localize "RDHF.catalog.updated"}}
                         </span>
                     {{/if}}

@@ -2587,6 +2587,32 @@ details[open] > summary .rdhf-arrow {
     letter-spacing: 0.04em;
 }
 
+/* v1.9.1: the UPDATED tooltip — date, the GM's note, then the window sentence. It
+   renders inside core's #tooltip, outside every module window, so these classes are
+   prefixed and nothing else reaches them. The note is the reason for hovering, so it is
+   set apart; the window sentence is background and steps back. */
+.rdhf-tooltip-updated {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    max-width: 22rem;
+    text-align: left;
+}
+.rdhf-tooltip-note {
+    padding-left: 0.5em;
+    border-left: 2px solid var(--rdhf-changed);
+    font-style: italic;
+    white-space: pre-line;
+}
+.rdhf-tooltip-note.is-pending {
+    border-left-style: dashed;
+    opacity: 0.8;
+}
+.rdhf-tooltip-window {
+    opacity: 0.75;
+    font-size: 0.9em;
+}
+
 /* "Changed since you took it" — the owner's half of the UPDATED fact, so the same hue,
    but outlined and with an icon: it asks for an answer, where UPDATED only reports. */
 .rdhf-chip--pending {
